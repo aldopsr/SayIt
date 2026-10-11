@@ -168,6 +168,43 @@ lisensi dataset B belum dicatat.
 Yang hanya bisa diuji pengguna sendiri: kamera dan mikrofon di peramban (panel uji memblokir akses perangkat),
 kualitas suara gTTS, dan seluruh alur `scripts/demo_voice.py`.
 
+## Aplikasi web (11 Oktober 2026)
+
+Keluaran untuk pengguna sekarang **PWA Next.js + API FastAPI**, bukan hanya Streamlit.
+Streamlit `app.py` tetap ada sebagai panel uji internal.
+
+```
+web/      Next.js App Router (JS biasa, tanpa TypeScript) -> Vercel
+server/   FastAPI membungkus Pipeline                      -> Hugging Face Spaces (Docker, port 7860)
+```
+
+- `next.config.mjs` me-rewrite `/api/*` ke `API_ORIGIN`, jadi frontend dan backend
+  satu origin - **CORS tidak dibutuhkan sama sekali**, dan jalurnya sama di panel uji maupun produksi.
+- Satu `Pipeline` dibagi di belakang `threading.Lock`: modelnya 2,5 GB, jadi permintaan
+  **diantre, bukan diparalelkan**.
+- `MediaRecorder` menghasilkan webm/opus yang **tidak terbaca `soundfile`**. Didecode di
+  peramban lewat `decodeAudioData` lalu dikemas ulang jadi WAV 16-bit (~25 baris, tanpa dependensi).
+- Uji asap: `python server\smoke.py` (bukan pytest - memuat model sungguhan).
+- Unggah berkas: gambar, PDF, DOCX. PDF/DOCX **berteks tidak di-OCR** sama sekali;
+  OCR hanya untuk PDF hasil pindai. Hanya halaman pertama. Tanpa dependensi baru
+  (`pypdfium2` sudah ikut paddlex, DOCX hanya zip berisi XML).
+
+**Aksesibilitas - aturan yang tidak boleh dilanggar lagi:**
+setiap peringatan wajib (a) **berbunyi**, bukan hanya tampil, dan (b) menyebut
+**tindakan berikutnya**, bukan hanya kesalahannya. Galat dari server memakai klip gTTS
+yang dikirim bersama responsnya; peringatan sisi klien memakai `speechSynthesis`
+bawaan peramban, karena sebagian di antaranya muncul justru ketika servernya tidak
+terjangkau. Tabel lengkapnya di `docs/deploy.md`.
+
+**`Turn.diterima` wajib dipakai untuk menilai penerimaan foto, JANGAN disimpulkan dari
+`intent`.** `set_photo()` mengembalikan intent `"FOTO"` untuk foto layak maupun foto
+yang ditolak quality gate. Empat tempat pernah menyimpulkannya dari intent dan
+keempatnya salah; akibatnya pengguna diminta bertanya tentang foto yang tidak pernah
+tersimpan. Ada tesnya di `tests/test_pipeline.py`.
+
+**Belum di-push ke GitHub** - butuh `git config --global user.name "aldopsr"` dulu
+(identitas Git tidak boleh saya ubah). Langkahnya di `docs/deploy.md`.
+
 ## Titik sambung (2 Oktober 2026)
 
 566 tes lulus. Seluruh metrik PRD Bagian 11 kini sudah pernah diukur.

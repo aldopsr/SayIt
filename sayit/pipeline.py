@@ -28,7 +28,8 @@ from sayit.intent import keywords as K
 from sayit.intent.router import IntentRouter
 from sayit.response.templates import Utterance, fixed, to_plain_text
 from sayit.vision import quality_gate as qg
-from sayit.vision.document import DocumentReader, chunk_utterance
+from sayit.vision.document import (DocumentReader, chunk_utterance,
+                                   result_dari_teks as document_dari_teks)
 from sayit.vision.expiry import ExpiryReader, expiry_utterance
 from sayit.vision.money import MoneyDetector, money_utterance
 
@@ -40,6 +41,10 @@ class Turn:
     intent: str = ""
     reason: str = ""                                    # penjelasan untuk layar dan log
     notes: dict[str, Any] = field(default_factory=dict)
+    # Foto yang ditolak quality gate tetap ber-intent "FOTO", jadi penerimaannya
+    # TIDAK bisa disimpulkan dari intent. Dulu disimpulkan begitu, dan akibatnya
+    # pengguna diminta bertanya tentang foto yang tidak pernah tersimpan.
+    diterima: bool = True
 
     @property
     def text(self) -> str:
@@ -133,7 +138,8 @@ class Pipeline:
             masalah = laporan.main_issue
             return self._jawab(qg.quality_response(laporan), "FOTO",
                                f"foto ditolak: {masalah.kind}",
-                               {"quality": laporan.metrics, "issues": laporan.kinds})
+                               {"quality": laporan.metrics, "issues": laporan.kinds},
+                               diterima=False)
 
         self.photo = image
         self.document = None                            # foto baru membatalkan bacaan lama
@@ -241,6 +247,20 @@ class Pipeline:
         alasan = hasil.reason or f"{hasil.sheets} lembar, total {hasil.total}"
         return self._jawab(money_utterance(hasil), K.UANG, alasan, catatan)
 
+    def set_document_text(self, teks: str, sumber: str = "berkas") -> Turn:
+        """Pasang teks yang sudah jadi (PDF/DOCX) sebagai bacaan, lalu bacakan potongan pertama.
+
+        Fotonya sengaja dibuang: pertanyaan uang atau kedaluwarsa tidak masuk akal
+        atas berkas teks, dan menyisakan foto lama membuat jawabannya menyesatkan.
+        """
+        self.photo = None
+        self.document = document_dari_teks(teks, self.cfg, sumber)
+        self.chunk_index = 0
+        alasan = (f"{self.document.total_chunks} potongan dari {sumber}"
+                  if self.document.found else f"{sumber} tidak memuat teks")
+        return self._jawab(chunk_utterance(self.document, 0), K.BACA, alasan,
+                           dict(self.document.notes))
+
     def _baca(self, catatan: dict) -> Turn:
         if not self._ready("ocr"):
             return self._jawab(fixed("modul_belum_siap"), K.BACA, self.status.get("ocr", ""), catatan)
@@ -269,6 +289,7 @@ class Pipeline:
 
     # ------------------------------------------------------------------ utilitas
 
-    def _jawab(self, utt: Utterance, intent: str, reason: str = "", catatan: dict | None = None) -> Turn:
+    def _jawab(self, utt: Utterance, intent: str, reason: str = "", catatan: dict | None = None,
+               diterima: bool = True) -> Turn:
         self.last_utterance = utt
-        return Turn(utt, intent, reason, catatan or {})
+        return Turn(utt, intent, reason, catatan or {}, diterima)

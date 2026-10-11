@@ -119,7 +119,7 @@ def main() -> int:
         for jalur in berkas:
             if jalur is not None:
                 giliran_foto = p.set_photo(baca(jalur))
-                if giliran_foto.intent != "FOTO":
+                if not giliran_foto.diterima:
                     # quality gate menolak foto ini; latensinya tidak mewakili
                     print(f"{nama:<13} {jalur.stem[:22]:<22} ditolak quality gate "
                           f"({giliran_foto.reason})", flush=True)

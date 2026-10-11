@@ -119,6 +119,7 @@ def test_foto_layak_diterima(cfg):
     giliran = p.set_photo(foto_layak())
     assert p.has_photo
     assert giliran.utterance == [T.Clip("foto_diambil")]
+    assert giliran.diterima
     assert "quality" in giliran.notes
 
 
@@ -128,6 +129,11 @@ def test_foto_buram_ditolak_dan_tidak_disimpan(cfg):
     assert not p.has_photo
     assert giliran.utterance == [T.Clip("foto_buram")]
     assert giliran.notes["issues"] == ["buram"]
+    # Intent-nya tetap "FOTO" walau ditolak, jadi penerimaan HARUS dibaca dari
+    # `diterima`. Klien web dulu menyimpulkannya dari intent dan akibatnya
+    # meminta pengguna bertanya tentang foto yang tidak pernah tersimpan.
+    assert giliran.intent == "FOTO"
+    assert not giliran.diterima
 
 
 def test_quality_gate_bisa_dimatikan(cfg):

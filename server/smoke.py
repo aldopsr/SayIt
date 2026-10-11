@@ -52,3 +52,44 @@ with TestClient(app) as c:
     for nama in ("sambutan", "sedang_memproses"):
         assert c.get(f"/klip/{nama}.mp3").status_code == 200, nama
     print("OK  klip sambutan dan sedang_memproses tersedia")
+
+    # ---------------------------------------------------------------- unggah berkas
+    # gambar: jalur sama dengan kamera
+    r = c.post("/berkas", files={"berkas": (FOTO.name, FOTO.read_bytes(), "image/jpeg")})
+    j = r.json()
+    assert j["diterima"] and j["intent"] == "FOTO", j
+    print(f"OK  /berkas gambar -> {j['teks']}")
+
+    # DOCX: dibaca tanpa OCR sama sekali
+    import zipfile
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w") as z:
+        z.writestr("word/document.xml",
+                   '<?xml version="1.0"?><w:document '
+                   'xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">'
+                   "<w:body><w:p><w:r><w:t>Surat keterangan domisili.</w:t></w:r></w:p>"
+                   "</w:body></w:document>")
+    j = c.post("/berkas", files={"berkas": ("surat.docx", buf.getvalue(), "application/octet-stream")}).json()
+    assert j["intent"] == "BACA" and "domisili" in j["teks"].lower(), j
+    print(f"OK  /berkas docx -> {j['teks'][:60]}")
+
+    # Jenis tak didukung dan berkas rusak: pesan, bukan 500 - DAN pesannya
+    # harus ikut berbunyi, karena pengguna tunanetra tidak melihat layar.
+    for nama, isi, cari in (("lagu.mp3", b"x", "tidak didukung"),
+                            ("rusak.pdf", b"bukan pdf", "rusak"),
+                            ("rusak.docx", b"bukan zip", "rusak")):
+        j = c.post("/berkas", files={"berkas": (nama, isi, "application/octet-stream")}).json()
+        assert cari in j.get("error", ""), j
+        assert durasi(j["audio"]) > 1.0, f"{nama}: galat tanpa audio"
+        # tiap peringatan wajib menyebut jalan keluarnya
+        assert any(k in j["error"].lower() for k in ("pilih", "coba")), j["error"]
+    print("OK  /berkas menolak dengan pesan yang berbunyi dan menyebut jalan keluar")
+
+    # Berkas sah tetapi mutunya ditolak quality gate: klipnya menyuruh "foto ulang",
+    # jadi jalan keluar yang cocok untuk pengunggah harus disambung - dan `diterima`
+    # harus False supaya klien tidak memindahkan pengguna ke tahap bertanya.
+    kecil = Path("web/public/logo.png")
+    j = c.post("/berkas", files={"berkas": (kecil.name, kecil.read_bytes(), "image/png")}).json()
+    assert j["diterima"] is False, j
+    assert "memilih berkas lain" in j["teks"], j["teks"]
+    print(f"OK  /berkas mutu ditolak -> {j['teks']}")

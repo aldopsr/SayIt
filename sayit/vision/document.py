@@ -163,6 +163,19 @@ def build_result(boxes: Sequence[TextBox], cfg: dict) -> DocumentResult:
     return DocumentResult(text=teks, chunks=potongan, boxes=kuat, notes=catatan)
 
 
+def result_dari_teks(teks: str, cfg: dict, sumber: str = "teks") -> DocumentResult:
+    """DocumentResult dari teks yang SUDAH ada, tanpa OCR.
+
+    Dipakai PDF dan DOCX yang punya lapisan teks: teksnya sudah akurat, jadi
+    yang dibutuhkan hanya pemotongan 40 kata yang sama dengan jalur OCR.
+    """
+    d = cfg["vision"]["document"]
+    teks = (teks or "").strip()
+    potongan = split_chunks(teks, max_words=int(d["max_words_per_chunk"])) if teks else []
+    return DocumentResult(text=teks, chunks=potongan,
+                          notes={"sumber": sumber, "chunks": len(potongan)})
+
+
 # --------------------------------------------------------------------------- ujaran
 
 def chunk_utterance(hasil: DocumentResult, index: int = 0) -> Utterance:

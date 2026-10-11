@@ -39,8 +39,10 @@ Utterance = list  # list[Part]
 # --------------------------------------------------------------------------- kosakata klip
 
 FIXED_PHRASES: dict[str, str] = {
-    "sambutan": ("Selamat datang di SayIt. Aplikasi ini bisa membantu kamu membaca nominal uang, "
-                 "tanggal kedaluwarsa, dan dokumen. Sentuh layar di mana saja untuk mengambil foto."),
+    "sambutan": ("Selamat datang di SayIt. Aplikasi ini bisa membacakan nominal uang, "
+                 "tanggal kedaluwarsa, dan tulisan dokumen. Sentuh layar di mana saja untuk "
+                 "mengambil foto. Kalau berkasnya sudah ada di penyimpanan, pakai tombol "
+                 "pilih berkas di bagian bawah layar."),
     "tindak_lanjut": "Mau saya ulangi, foto lagi, atau keluar?",
     "sampai_jumpa": "Sampai jumpa.",
     "foto_diambil": "Foto berhasil diambil. Apa yang ingin kamu tanyakan?",
@@ -52,6 +54,8 @@ FIXED_PHRASES: dict[str, str] = {
                        "membacakan tulisan, atau tanggal kedaluwarsa."),
     "menu_bantuan": ("Saya bisa membantu tiga hal: menyebutkan nominal uang kertas, membacakan tulisan, "
                      "dan membacakan tanggal kedaluwarsa. Ambil foto, lalu ajukan pertanyaanmu. "
+                     "Selain memotret, kamu juga bisa memilih berkas gambar, PDF, atau dokumen Word "
+                     "dari penyimpanan lewat tombol pilih berkas. "
                      "Saya tidak bisa memeriksa keaslian uang."),
     "foto_buram": "Foto terlihat buram. Coba pegang kamera lebih diam, lalu foto ulang.",
     "foto_gelap": "Foto terlalu gelap. Coba dekatkan ke lampu, lalu foto ulang.",
@@ -60,6 +64,13 @@ FIXED_PHRASES: dict[str, str] = {
     "tidak_ada_uang": "Saya tidak menemukan uang kertas di foto. Pastikan uang berada di tengah dan tidak tertutup jari.",
     "tidak_yakin_uang": "Saya tidak yakin dengan nominal uang ini. Coba foto ulang dengan uang terbuka penuh.",
     "tidak_ada_tulisan": "Saya tidak menemukan tulisan yang bisa dibaca. Coba foto ulang lebih dekat dan lebih terang.",
+    # Galat unggahan berkas: nama berkasnya sengaja tidak disebut supaya kalimatnya
+    # tetap bisa jadi klip tersimpan. Pengguna sudah tahu berkas mana yang dipilihnya.
+    "berkas_tidak_didukung": ("Jenis berkas itu tidak didukung. Pilih berkas gambar, PDF, "
+                              "atau dokumen Word, lalu coba lagi."),
+    "berkas_rusak": "Berkas itu tidak bisa dibaca atau rusak. Coba pilih berkas yang lain.",
+    "berkas_lain": ("Kamu bisa memilih berkas lain yang lebih jelas, "
+                    "atau memotret langsung dengan menyentuh layar."),
     "tidak_ada_tanggal": "Saya tidak menemukan tanggal kedaluwarsa. Coba foto bagian kemasan yang lain.",
     "tulisan_bukan_tanggal": ("Saya menemukan tulisan, tetapi tidak yakin itu tanggal kedaluwarsa. "
                               "Tulisannya:"),

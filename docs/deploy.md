@@ -127,8 +127,70 @@ dan mendengar alasannya.
 
 ## Jebakan saat mengembangkan
 
+- **Endpoint baru butuh server API dijalankan ulang.** Uji asap `TestClient` membuat
+  app baru di dalam proses, jadi ia LULUS sementara proses uvicorn yang hidup masih
+  404 untuk rute baru. Gejalanya di klien dulu muncul sebagai "gagal menghubungi
+  server" - pesan yang salah, karena servernya terjangkau dan hanya rutenya belum ada.
 - **Jangan jalankan `npm run build` selagi `next dev` hidup.** Keduanya memakai `.next/`,
   dan build menimpa manifes chunk milik dev server. Gejalanya halus: halaman tetap
   tampil tetapi React tidak pernah hydrate, jadi tidak ada tombol yang bereaksi dan
   konsol hanya menunjukkan 404. Perbaikannya `rm -rf .next` lalu jalankan ulang.
 - Uji asap API: `python server\smoke.py` — menjalankan alur lengkap dengan model sungguhan.
+
+## Unggah berkas
+
+Selain kamera, pengguna bisa memilih berkas dari penyimpanan (`POST /berkas`).
+
+| Jenis | Perlakuan |
+|---|---|
+| Gambar (jpg, png, heic, webp, bmp) | Sama persis dengan foto kamera: quality gate lalu jalur visi |
+| PDF **berteks** | Teks diambil langsung dari lapisan teksnya, **tanpa OCR** |
+| PDF **hasil pindai** | Halaman pertama dirender (skala 2x, ~144 dpi) lalu di-OCR |
+| DOCX | Teks diambil dari `word/document.xml`, **tanpa OCR** |
+
+Alasan PDF dan DOCX berteks tidak di-OCR: teksnya sudah akurat, dan meng-OCR hasil
+render justru lebih lambat sekaligus lebih banyak salah baca. OCR dipakai hanya
+ketika memang tidak ada pilihan lain.
+
+Hanya **halaman pertama** yang dibaca. Modul dokumen sudah membacakan per potongan
+40 kata; membaca seluruh PDF sekaligus membuat pengguna menunggu tanpa guna.
+
+Tidak ada dependensi baru: `pypdfium2` sudah ikut terpasang bersama paddlex, dan
+DOCX hanya zip berisi XML sehingga cukup ditangani pustaka standar.
+
+Berkas rusak, `.doc` lama, dan jenis yang tidak didukung dijawab dengan pesan dalam
+bahasa pengguna, bukan galat 500 — pesannya langsung bisa dibacakan.
+
+Berkas gambar yang sah tetapi mutunya ditolak quality gate **tidak** memindahkan
+pengguna ke tahap bertanya, dan klip mutunya disambung `berkas_lain` karena
+"coba foto ulang" adalah saran yang salah bagi orang yang baru memilih berkas.
+
+## Peringatan: semuanya diucapkan, semuanya menyebut jalan keluar
+
+Penggunanya tunanetra, jadi peringatan yang hanya tampil di layar sama saja dengan
+tidak terkirim. Dua mekanisme, dipilih berdasarkan **siapa yang tahu masalahnya**:
+
+| Sumber | Mekanisme | Alasan |
+|---|---|---|
+| Server (berkas tak didukung, berkas rusak, mutu foto) | klip gTTS, dikirim sebagai `audio` di badan respons yang sama | kualitas suaranya sudah dipilih tim, dan tidak ada perjalanan jaringan tambahan |
+| Klien (kamera/mikrofon ditolak, server tak terjangkau, rekaman terlalu pendek) | `speechSynthesis` bawaan peramban, `lang="id-ID"` | sebagian peringatan ini muncul **justru ketika servernya tidak terjangkau**, jadi klip tidak bisa diandalkan |
+
+Klip dipakai bila ada; `speechSynthesis` hanya cadangan, jadi satu peringatan tidak
+pernah berbunyi dua kali. Teks yang sama tetap masuk wilayah `aria-live` untuk
+pembaca layar.
+
+Tiap kalimat wajib menyebut **tindakan berikutnya**, bukan hanya kesalahannya:
+
+| Keadaan | Jalan keluar yang diucapkan |
+|---|---|
+| Kamera ditolak | buka pengaturan izin, muat ulang — **dan** sementara itu pakai tombol pilih berkas |
+| Mikrofon ditolak | buka pengaturan izin — **atau** ketik pertanyaan di kotak teks |
+| Kamera belum siap | tunggu lalu sentuh lagi; kalau tetap gagal, pilih berkas |
+| Server tak terjangkau | periksa koneksi, lalu coba lagi |
+| Server menjawab galat | coba sekali lagi, atau pilih berkas lain (**bukan** disuruh periksa internet) |
+| Rekaman terlalu pendek | tahan tombolnya sampai selesai bicara, baru lepas |
+| Suara tak terbaca | bicara lebih dekat ke mikrofon, atau ketik pertanyaan |
+
+Kamera gagal sebelum ada gestur pengguna, dan iOS memblokir `speechSynthesis`
+sebelum gestur — jadi peringatan kamera **menunggu sentuhan pertama**, lalu
+diucapkan menggantikan sambutan (sambutan akan menyesatkan karena menyuruh memotret).

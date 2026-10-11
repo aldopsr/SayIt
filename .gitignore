@@ -15,8 +15,13 @@ runs/
 # PRIVASI: fase0/fase0_hasil/rekaman/ berisi suara orang. Jangan pernah di-commit.
 fase0/fase0_hasil/
 
-# Klip TTS bisa dibuat ulang: python scripts\build_tts_cache.py
-assets/tts/*.mp3
+# assets/tts/*.mp3 SENGAJA DI-COMMIT (2,2 MB, 75 klip).
+# Server butuh klip ini saat jalan, dan `COPY assets/` di Dockerfile akan
+# menyalin folder kosong kalau klipnya tidak ada di repo. Membangunnya saat
+# build Docker juga bisa, tetapi itu menggantungkan build pada gTTS yang bisa
+# membatasi laju - dan suara klip ini sudah lolos uji dengar tim, jadi lebih
+# baik tidak dibuat ulang diam-diam setiap build.
+# Suara ORANG tetap dilarang: lihat aturan fase0 di atas.
 
 # Skill pihak ketiga hasil `npx skills add`
 .agents/
