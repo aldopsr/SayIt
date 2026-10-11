@@ -1,0 +1,36 @@
+:root {
+  --jingga: #fe7300;
+  --hitam: #050809;
+  --putih: #fafafa;
+  --abu: #8b9196;
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+html, body {
+  height: 100%;
+  background: var(--hitam);
+  color: var(--putih);
+  font: 400 17px/1.45 -apple-system, BlinkMacSystemFont, "Segoe UI", Inter, system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  overscroll-behavior: none;
+}
+
+/* Teks hanya untuk pembaca layar. Jawaban masuk ke sini supaya diumumkan
+   walau layarnya tidak dilihat. */
+.sr {
+  position: absolute;
+  width: 1px; height: 1px;
+  clip: rect(0 0 0 0);
+  clip-path: inset(50%);
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+/* Gerak dimatikan bila pengguna memintanya di setelan sistem. */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}

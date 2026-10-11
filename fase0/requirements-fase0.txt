@@ -1,0 +1,9 @@
+# SayIt Fase 0 - uji STT dan TTS (Windows, Python 3.10/3.11)
+# PyTorch versi CPU dipasang TERPISAH sebelum file ini, lihat README_fase0.md
+faster-whisper
+sounddevice
+soundfile
+numpy
+pyttsx3
+gTTS
+transformers>=4.33

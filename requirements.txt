@@ -1,0 +1,40 @@
+# SayIt - dependensi Python 3.11 (Windows)
+# PyTorch versi CPU dipasang terpisah bila belum ada:
+#   pip install torch --index-url https://download.pytorch.org/whl/cpu
+
+# Suara (Fase 2)
+faster-whisper>=1.0
+gTTS>=2.5
+sounddevice
+soundfile>=0.12
+numpy
+rapidfuzz>=3.0
+PyYAML
+
+# Citra (Fase 3)
+opencv-python>=4.9
+ultralytics>=8.3
+easyocr>=1.7
+pillow-heif>=1.0   # foto iPhone berformat HEIC, tidak terbaca cv2 maupun PIL
+
+# OCR pembanding (ablasi PRD Bagian 11 nomor 2), dipilih lewat vision.document.engine
+#
+# PERINGATAN pemasangan (tercatat 30-09): paddleocr menarik `opencv-contrib-python`,
+# yang MENIMPA paket `cv2` milik `opencv-python`. Akibatnya OpenCV turun dari 5.0.0
+# ke 4.10.0. Paddle juga menurunkan numpy 2.4.6 -> 2.3.5 dan PyYAML 6.0.3 -> 6.0.2.
+# Seluruh tes tetap lulus, tetapi angka pengukuran yang diambil sebelum 30-09 dihitung
+# dengan OpenCV 5.0.0, jadi tidak sepenuhnya sebanding. Pasang paddle di venv terpisah
+# bila ingin membandingkan tanpa mengubah lingkungan kerja.
+paddlepaddle>=3.3     # versi CPU
+paddleocr>=3.7        # model dipaksa PP-OCRv5; v6 menabrak bug oneDNN, lihat config
+
+# API web (server/app.py), dibungkus Docker untuk Hugging Face Spaces
+fastapi
+uvicorn[standard]
+python-multipart
+
+# Antarmuka (Fase 5)
+streamlit>=1.40      # st.audio_input butuh versi baru
+
+# Pengujian
+pytest

@@ -1,0 +1,9 @@
+{
+  "name": "SayIt",
+  "short_name": "SayIt",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#050809",
+  "theme_color": "#050809",
+  "icons": [{ "src": "/logo.png", "sizes": "260x256", "type": "image/png", "purpose": "any" }]
+}

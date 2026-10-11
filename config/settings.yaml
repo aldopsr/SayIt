@@ -1,0 +1,285 @@
+# Konfigurasi SayIt. Ubah nilai di sini, bukan di kode.
+
+audio:
+  sample_rate: 16000
+  record_seconds: 5.0
+  beep_before_record: true      # penanda mulai merekam, mencegah suku kata pertama terpotong
+  beep_hz: 880
+  beep_ms: 150
+  gap_after_beep_ms: 150
+
+stt:
+  model_size: small             # hasil Fase 0: small + prompt, WER 7-8% (1 penutur)
+  device: cpu                   # "cuda" bila ingin memakai GPU NVIDIA
+  compute_type: int8
+  language: id
+  beam_size: 5
+  vad_filter: true
+  use_prompt: true              # tanpa prompt WER naik ke 27,5% pada Fase 0
+  initial_prompt: >-
+    uang, rupiah, nominal, kembalian, baca, bacakan, tulisan, dokumen, surat,
+    kedaluwarsa, expired, tanggal, ulangi, lanjut, foto lagi
+  min_chars: 2                  # transkrip lebih pendek dari ini dianggap kosong
+  max_no_speech_prob: 0.6       # segmen dengan peluang "tidak ada suara" di atas ini diabaikan
+
+tts:
+  engine: gtts                  # keputusan tim setelah uji dengar Fase 0
+  lang: id
+  tld: com
+  timeout_s: 8
+  cache_dir: assets/tts         # klip tetap dan kata angka (dibuat oleh scripts/build_tts_cache.py)
+  cache_dynamic_text: false     # teks dinamis (isi dokumen) TIDAK disimpan ke disk demi privasi
+  word_gap_ms: 40               # jeda antar-klip kata
+  pause_short_ms: 250           # jeda pengganti koma
+  pause_long_ms: 450            # jeda pengganti titik
+
+router:
+  min_score: 2
+  fuzzy_min_len: 6              # fuzzy matching hanya untuk kata kunci >= 6 huruf
+  fuzzy_threshold: 85
+
+vision:
+  # Ambang di bawah ini masih berupa NILAI AWAL PRD 8.2, BELUM dikalibrasi dengan foto tim.
+  # Jangan diklaim sebagai hasil kalibrasi. Kalibrasi ulang cukup mengubah angka di sini.
+  quality_gate:
+    enabled: true
+    blur:
+      enabled: true
+      min_variance: 100.0       # variance of Laplacian, di bawah ini dianggap buram
+      resize_short_side: 720    # gambar dinormalisasi dulu agar ambang tidak ikut berubah saat resolusi kamera berbeda
+    dark:
+      enabled: true
+      max_mean: 60.0            # rata-rata intensitas grayscale
+    bright:
+      enabled: true
+      # PRD 8.2 menulis 220, tetapi itu menolak foto dokumen yang sah: halaman putih
+      # berlatar 230-240 punya mean 226-236 dengan piksel jenuh 0,00 dan tulisan tajam.
+      # Penjaga silau yang sebenarnya adalah proporsi piksel jenuh di bawah ini;
+      # mean hanya menangkap kasus ekstrem. Angka 245 belum dikalibrasi dengan foto HP.
+      min_mean: 245.0
+      saturated_level: 250      # piksel >= nilai ini dihitung jenuh
+      max_saturated_ratio: 0.25 # silau lokal: mean masih wajar tapi sebagian besar frame jenuh
+    resolution:
+      enabled: true
+      min_short_side: 480       # sisi terpendek dalam piksel
+
+  # Pra-pemrosesan PRD 8.3. Setiap langkah bisa dimatikan sendiri untuk uji ablasi Fase 4.
+  # "chains" menentukan urutan langkah per modul; nama langkah harus ada di "steps".
+  preprocess:
+    enabled: true
+    steps:
+      resize:                   # normalisasi ukuran, rasio dipertahankan, hanya memperkecil
+        enabled: true
+        max_side: 1600
+      clahe:                    # perbaikan kontras pada kanal L (ruang warna LAB)
+        enabled: true
+        clip_limit: 2.0
+        tile_grid: 8
+      denoise:
+        enabled: true
+        method: bilateral       # "bilateral" (cepat, default tim) atau "nlm" (lebih bersih, jauh lebih lambat)
+        bilateral:
+          diameter: 9
+          sigma_color: 75
+          sigma_space: 75
+        nlm:
+          h: 18                 # disetel pada derau sintetis sigma 25 (h=10 kurang kuat); cek ulang dengan foto asli
+          template_window: 7
+          search_window: 21
+      perspective:              # deteksi kontur kertas (Canny + approxPolyDP) lalu warp
+        enabled: true
+        blur_ksize: 5
+        canny_low: 50
+        canny_high: 150
+        approx_epsilon_ratio: 0.02
+        # Dinaikkan dari 0,25 (29-09) setelah ablasi pada 13 dokumen. Pada 0,25 langkah ini
+        # menyala di 1 dari 13 foto dan ketiganya salah: `r (5).JPG` dikira memuat kertas
+        # seluas 26,2% bidang, lalu dipotong dari 1200x1600 menjadi 793x649 sehingga sebagian
+        # besar halaman hilang (CER foto itu 42,7%, padahal tanpa pra-pemrosesan 3,1%).
+        # Nol deteksi benar, satu deteksi salah. Pada 0,50 salah kenal itu hilang dan CER
+        # rerata turun 20,2% -> 17,2%.
+        min_area_ratio: 0.50    # kandidat kertas minimal 50% luas gambar, agar objek kecil tidak ikut
+        max_area_ratio: 0.95    # di atas ini yang "ditemukan" adalah bingkai gambar, bukan kertas (terbukti pada citra acak: 0,977)
+      deskew:                   # koreksi kemiringan dari minAreaRect
+        enabled: true
+        max_angle_deg: 15.0     # di atas ini dianggap salah ukur, rotasi dibatalkan
+        min_angle_deg: 0.3      # di bawah ini tidak usah diputar, rotasi hanya menambah blur
+      upscale:                  # pembesaran crop kedaluwarsa
+        enabled: true
+        factor: 2.0
+        interpolation: cubic
+      threshold:                # adaptive thresholding (Gaussian)
+        enabled: true
+        block_size: 31          # wajib ganjil
+        c: 10
+      morphology:               # menyambung titik cetakan dot-matrix
+        enabled: true
+        op: close               # "close" atau "dilate"
+        kernel: 3
+        iterations: 1
+    chains:
+      uang: [resize, clahe]
+      # `denoise` dibuang dari rangkaian dokumen (29-09): pada 13 dokumen ia menaikkan CER
+      # 2,0-2,2%. Bilateral mengaburkan huruf halus, dan foto dokumen yang tajam memang tidak
+      # punya derau yang perlu dibuang. Langkahnya tetap ada dan tetap dipakai rangkaian
+      # kedaluwarsa, tempat cetakan dot-matrix memang berderau.
+      dokumen: [resize, perspective, deskew, clahe]
+      # Binarisasi dan morfologi DIBUANG 30-09. Diuji lima rangkaian pada 9 potongan zona
+      # dari foto kemasan sungguhan: `kedaluwarsa` lama (upscale+clahe+denoise+threshold+
+      # morphology) memberi 0 benar dan hampir selalu menghasilkan teks kosong atau nyaris
+      # kosong ('', '4 95.', '(,', 'IU.', '{.', 'EX.'). `upscale+clahe` memberi 2 benar.
+      # Threshold menghapus cetakan dot-matrix alih-alih menyambungnya - kebalikan dari
+      # dugaan PRD 8.8 langkah 3. Langkahnya tetap ada di `steps` bila mau dicoba lagi.
+      kedaluwarsa: [upscale, clahe]
+      # Hanya normalisasi ukuran, tanpa perbaikan citra apa pun. Dibuat 02-10 setelah
+      # pengukuran NFR-01: mematikan pra-pemrosesan kedaluwarsa demi akurasi ternyata
+      # juga mematikan `resize`, sehingga foto 3024x4032 utuh masuk ke PaddleOCR dan
+      # latensinya meledak sampai 116 detik. Langkah `resize` bukan hanya perbaikan
+      # citra - ia pengendali latensi, dan harus tetap ada.
+      hanya_resize: [resize]
+
+  # Modul uang (PRD 8.6). Bobot tidak ikut Git; lihat models/README.md.
+  money:
+    weights: models/best_money.pt
+    device: cpu                 # "cuda" bila ingin memakai GPU NVIDIA
+    imgsz: 640
+    max_det: 50
+    augment: false              # test-time augmentation; lihat sapuan 06-10 di keputusan-teknis
+    # PRD 8.9 menulis 0,5. Diturunkan ke 0,40 setelah disapu pada 35 foto sendiri:
+    # 0,35-0,45 memberi 25 benar / 4 salah, sedangkan 0,50 memberi 24 benar / 4 salah.
+    # Selisihnya hanya satu foto, tetapi arah yang sama juga mengurangi jumlah foto
+    # yang tidak dijawab (6 lawan 7). Di bawah 0,35 jumlah jawaban SALAH bertambah,
+    # dan untuk pengguna tunanetra jawaban salah lebih berbahaya daripada menolak.
+    score_min: 0.40
+    nested_area_ratio: 0.85     # kotak yang >= 85% luasnya di dalam kotak sekelas dianggap uang yang sama
+    # Kotak sekelas yang tumpang tindih >= ambang ini digabung (NMS per kelas).
+    # DIMATIKAN (0) secara bawaan. Mekanismenya ada dan ada tesnya, tetapi sapuan
+    # 06-10 pada 35 foto menunjukkan **nol efek** pada ambang 0,20 sampai 0,70:
+    # salah hitung lembar yang ditemukan ternyata BUKAN kotak ganda atas lembar yang
+    # sama, melainkan deteksi di wilayah foto yang berbeda (IoU hanya 0,198), jadi
+    # penggabungan IoU tidak menyentuhnya. Dibiarkan mati karena risikonya pada foto
+    # BANYAK LEMBAR belum bisa diuji - dua lembar bertumpuk bisa tergabung menjadi
+    # satu, dan kita belum punya foto banyak lembar untuk membuktikannya aman.
+    same_class_iou: 0.0
+    conflict_iou: 0.5           # dua kelas berbeda tumpang tindih di atas ini -> hasil ditandai tidak yakin
+    preprocess_chain: uang      # kosongkan (null) bila citra sudah diproses oleh pemanggil
+
+  # Parser tanggal kedaluwarsa (PRD 8.8.1).
+  date_parser:
+    day_first: true             # asumsi urutan Indonesia: hari sebelum bulan
+    years_back: 5               # tanggal lebih tua dari ini ditolak sebagai salah baca
+    years_forward: 10
+    two_digit_year_base: 2000   # "27" dibaca 2027
+    marker_window: 24           # jarak maksimum (karakter) antara penanda dan tanggal
+    # Tanggal rapat tanpa pemisah (210829) wajib punya penanda di dekatnya, sebab enam
+    # angka berderet juga bisa nomor bets atau kode produksi.
+    #
+    # DIMATIKAN 30-09 setelah diukur pada 21 foto (16 utuh + 5 potongan), dengan OCR
+    # dijalankan sekali lalu teksnya diurai pada kedua kondisi:
+    #   wajib penanda  -> BENAR 3, SALAH 1, DIAM 17
+    #   dilonggarkan   -> BENAR 8, SALAH 1, DIAM 12
+    # Lima jawaban benar bertambah dan jumlah jawaban SALAH sama sekali tidak bergerak.
+    #
+    # PERINGATAN: nol tambahan jawaban salah itu mungkin ARTEFAK. EasyOCR membaca sangat
+    # sedikit teks pada kemasan ini (beberapa foto kosong sama sekali), jadi hampir tidak
+    # ada kode bets yang bisa disalahbaca. `tests/test_date_parser.py` membuktikan
+    # bahayanya nyata: "NO BETS 210829 ISI 250 G" lolos menjadi tanggal saat dilonggarkan.
+    # ULANGI PENGUKURAN INI setiap kali mesin OCR diganti (mis. ke PaddleOCR).
+    require_marker_for_compact: false
+    # Tanggal berpemisah SPASI (`EXP 08 10 26`), pola `dmy_spasi`, ditambahkan 01-10.
+    # Spasi sengaja TIDAK dimasukkan ke daftar pemisah biasa: pola ini mewajibkan
+    # ketiga kelompok angka ada, sehingga "01/01/2026 12/12/2027" tetap terurai
+    # menjadi dua tanggal (ada tes regresinya).
+    # Saklarnya dipisah dari `require_marker_for_compact` karena risikonya berbeda
+    # dan keduanya terbukti harus diukur sendiri-sendiri.
+    require_marker_for_spaced: true
+    markers:                    # penanda yang menaikkan prioritas sebuah tanggal
+      - exp
+      - expired
+      - exp date
+      - expiry
+      - ed
+      - bb
+      - bbe
+      - best before
+      - use by
+      - kedaluwarsa
+      - kadaluwarsa
+      - kadaluarsa
+      - baik digunakan sebelum
+      - sebaiknya digunakan sebelum
+
+  # Modul dokumen (PRD 8.7). Bobot EasyOCR diunduh otomatis saat pertama dipakai.
+  document:
+    engine: easyocr             # "easyocr" atau "paddleocr"; lihat ablasi PRD nomor 2
+    paddle:                     # hanya dipakai bila engine = paddleocr
+      # PERINGATAN (07-10): begitu `text_detection_model_name` diisi, PaddleOCR
+      # MENGABAIKAN `lang` dan `ocr_version` - lognya menyebut itu sendiri, dan
+      # pengenal yang dipakai jadi PP-OCRv6_medium_rec, bukan latin_PP-OCRv5.
+      # Angka 81% diukur dengan konfigurasi ini apa adanya, jadi tetap sah; yang
+      # salah hanya anggapan bahwa pengenal Bahasa Indonesia yang dipakai.
+      lang: id                  # DIABAIKAN selama text_detection_model_name diisi
+      # PP-OCRv6 (bawaan paddleocr 3.7) menabrak NotImplementedError di oneDNN pada
+      # paddlepaddle 3.3.1, jadi versi model dipaksa v5 dan oneDNN dimatikan.
+      ocr_version: PP-OCRv5
+      enable_mkldnn: false
+      # Model deteksi bawaan adalah versi `server` yang berat. Terukur 02-10 pada
+      # kecapasin: server 10,9 s (800 px) / 18,5 s (1200 px); mobile 2,5 s pada kedua
+      # ukuran, dan tanggalnya tetap terbaca. Kosongkan untuk memakai bawaan.
+      text_detection_model_name: PP-OCRv5_mobile_det
+    languages: [id, en]
+    gpu: false                  # kode harus tetap jalan di laptop tanpa GPU
+    model_dir: models/easyocr   # disimpan di dalam proyek, diabaikan Git
+    download_enabled: true      # false = hanya pakai bobot yang sudah ada, tidak menyentuh internet
+    text_score_min: 0.4         # PRD 8.9. Catatan: EasyOCR mengembalikan kotak setingkat BARIS,
+                                # jadi yang dibuang adalah satu baris utuh, bukan satu kata
+    line_tolerance_ratio: 0.6   # dua kata sebaris bila beda pusat vertikalnya < rasio ini x tinggi huruf
+    paragraph_gap_ratio: 1.6    # jarak antar-baris di atas rasio ini dianggap ganti paragraf
+    max_words_per_chunk: 40     # PRD 8.7, potongan yang dibacakan sekali jalan
+    preprocess_chain: dokumen   # kosongkan (null) bila citra sudah diproses pemanggil
+
+  # Modul kedaluwarsa (PRD 8.8).
+  # PERINGATAN: bobot deteksi zona BELUM ADA (datasetnya belum dibuat). Selama file
+  # zone_weights tidak ditemukan, modul otomatis memakai jalur cadangan FR-12:
+  # OCR seluruh gambar, dan hasilnya selalu ditandai kurang yakin.
+  expiry:
+    # Mesin OCR khusus modul ini; kosongkan untuk memakai mesin yang sama dengan
+    # modul dokumen. Dipisah 02-10 setelah ablasi pada 16 kemasan dan 13 dokumen:
+    #   kedaluwarsa  EasyOCR 44%  ->  PaddleOCR 81%   (target PRD >= 70% terlampaui)
+    #   dokumen      EasyOCR 7,3 s/halaman  ->  PaddleOCR 41,8 s/halaman
+    # PRD NFR-01 membatasi latensi end-to-end 8 detik, jadi modul dokumen tetap
+    # EasyOCR sementara modul kedaluwarsa memakai PaddleOCR. Dua mesin dalam satu
+    # proses sudah diuji dan aman dengan mobile_det (crash 01-10 disebabkan
+    # server_det pada foto 3024x4032, bukan oleh koeksistensi mesin).
+    engine: paddleocr
+    zone_weights: models/best_zone.pt
+    device: cpu
+    imgsz: 640
+    max_det: 10
+    zone_score_min: 0.40        # PRD 8.9, di bawah ini jalur cadangan yang dipakai
+    crop_margin_ratio: 0.10     # PRD 8.8 langkah 2
+    # Hanya `resize`, tanpa perbaikan citra. Dua alasan terukur yang berbeda:
+    #   akurasi - dengan PaddleOCR, CLAHE dan upscale MERUGIKAN modul ini
+    #             (69% lawan 81% pada 16 kemasan); dengan EasyOCR justru membantu +6%.
+    #   latensi - tanpa `resize` sama sekali, foto 3024x4032 utuh masuk ke PaddleOCR
+    #             dan latensinya mencapai 116 detik (NFR-01 membatasi 8 detik).
+    # Isi kembali dengan `kedaluwarsa` bila mesinnya dikembalikan ke EasyOCR.
+    preprocess_chain: hanya_resize
+    retry_without_steps: [threshold, morphology]  # PRD 8.8 langkah 4: ulangi tanpa binarisasi
+    fallback_preprocess_chain: hanya_resize       # lihat catatan preprocess_chain di atas
+    # Bila potongan zona tidak menghasilkan tanggal, ulangi pada SELURUH gambar sebelum
+    # menyerah. Zona adalah petunjuk letak, bukan komitmen: ajinomoto terdeteksi zonanya
+    # dengan skor 0,76, gagal dibaca lewat potongan, padahal OCR seluruh gambar membaca
+    # `110426` dengan benar. Tanpa saklar ini sistem membuang jawaban yang sudah di tangan.
+    full_image_fallback: true
+    text_score_min: 0.4         # ambang kotak OCR, sama dasarnya dengan modul dokumen
+    # Dicoba berurutan HANYA bila alur biasa tidak menemukan tanggal. Rotasi EXIF
+    # sudah ditangani sayit/gambar.py; ini untuk foto yang EXIF-nya hilang atau
+    # salah, misalnya tangkapan layar dan hasil potong. Kosongkan untuk mematikan.
+    rotate_retry: [180, 90, 270]
+
+# Perangkaian seluruh modul (PRD 7).
+pipeline:
+  quality_gate_on_photo: true   # periksa foto saat diambil, bukan saat pertanyaan datang,
+                                # agar pengguna bisa langsung foto ulang
+  slow_intents: [BACA, KEDALUWARSA]   # intent yang perlu penanda suara "sedang saya proses"

@@ -1,0 +1,30 @@
+# Python
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+
+# Bobot model: 130 MB, tidak ikut Git. Lihat models/README.md.
+models/*.pt
+models/easyocr/
+
+# Foto uji dan hasil latihan: 400 MB.
+data/
+runs/
+
+# PRIVASI: fase0/fase0_hasil/rekaman/ berisi suara orang. Jangan pernah di-commit.
+fase0/fase0_hasil/
+
+# Klip TTS bisa dibuat ulang: python scripts\build_tts_cache.py
+assets/tts/*.mp3
+
+# Skill pihak ketiga hasil `npx skills add`
+.agents/
+
+# Web
+node_modules/
+.next/
+out/
+.vercel/
+*.tsbuildinfo
+.env*.local
