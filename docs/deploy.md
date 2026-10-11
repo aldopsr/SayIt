@@ -1,15 +1,24 @@
 # Deploy SayIt — langkah dan posisi sekarang
 
-Arsitektur: **frontend di Vercel, backend di Hugging Face Spaces.**
+Arsitektur: **frontend di Vercel, backend di laptop sendiri lewat tunnel ngrok.**
+
 Vercel tidak bisa memuat backend-nya — torch 531 MB + paddle 400 MB + cv2 158 MB,
-sedangkan batas serverless function Vercel 250 MB, dan timeout-nya 10 detik
-sementara pipeline kedaluwarsa median 11,4 detik.
+sedangkan batas serverless function Vercel 250 MB, dan timeout-nya jauh di bawah
+median pipeline kedaluwarsa 11,4 detik.
 
 ```
-web/        Next.js PWA   -> Vercel
-server/     FastAPI        -> Hugging Face Spaces (Dockerfile di root)
+web/        Next.js PWA    -> Vercel (gratis, Hobby, non-komersial)
+server/     FastAPI         -> laptop sendiri, dibuka lewat `ngrok http 8000`
 sayit/      Pipeline yang dibungkus server
 ```
+
+**Hugging Face Spaces DICORET (diperiksa 11-10).** Halaman harga resmi HF kini
+mencantumkan "Host ZeroGPU, Gradio & Docker Spaces" sebagai keuntungan **PRO
+9 dolar/bulan**. Perangkat kerasnya masih gratis (`CPU Basic — 2 vCPU, 16 GB,
+FREE`) tetapi SDK Docker-nya digerbangi langganan. Alasan kedua yang berdiri
+sendiri: 2 vCPU lawan i7-13650HX 14 inti akan **memperburuk** latensi 11,4 detik
+yang sudah kita catat menyimpang dari NFR-01. `Dockerfile` dibiarkan di repo
+untuk kalau nanti pindah host, tetapi tidak dipakai.
 
 ---
 
@@ -17,12 +26,13 @@ sayit/      Pipeline yang dibungkus server
 
 - [x] `server/app.py` — diuji end-to-end lewat `python server\smoke.py`
 - [x] `web/` — Next.js, build lolos, jalur teks terverifikasi di peramban
-- [x] `Dockerfile` untuk HF Spaces
+- [x] `Dockerfile` — ADA tetapi TIDAK DIPAKAI (lihat catatan HF di atas)
 - [x] `.gitignore` — 98 berkas / 1,1 MB; `.venv`, `data/`, `models/*.pt`,
       dan `fase0/fase0_hasil/` (suara orang) tidak ikut
-- [ ] **push ke GitHub** — lihat Langkah 1
-- [ ] deploy backend ke HF Spaces — Langkah 2
+- [x] **push ke GitHub** — https://github.com/aldopsr/SayIt
+- [x] basis API bisa diganti saat jalan lewat `?api=` (diuji lewat tunnel sungguhan)
 - [ ] deploy frontend ke Vercel — Langkah 3
+- [ ] uji dari HP sendiri — hanya kamu yang bisa
 
 Jalankan lokal: `.claude/launch.json` punya `api` (port 8000) dan `web` (port 3000).
 
@@ -57,37 +67,65 @@ git log -1 --format='%an <%ae>'
 
 ---
 
-## Langkah 2 — Backend di Hugging Face Spaces
+## Langkah 2 — Backend: laptop sendiri + tunnel
 
-1. Buat Space baru: SDK **Docker**, visibility bebas.
-2. Push isi repo ini ke Space (atau hubungkan dari GitHub).
-3. **Bobot model tidak ikut Git** (`models/*.pt`, 130 MB). Unggah manual ke repo
-   Space lewat antarmuka web atau `git lfs`:
-   - `models/best_money.pt`
-   - `models/best_zone.pt`
-4. Space akan jalan di port 7860. Catat URL-nya, misalnya
-   `https://aldopsr-sayit.hf.space`.
+`ngrok` **sudah terpasang** (3.35.0) dan authtoken-nya sudah diset, jadi tidak ada
+yang perlu dipasang atau didaftarkan.
 
-Pemuatan model ~10 detik saat Space pertama bangun. Free tier tidur setelah tidak
-dipakai, jadi permintaan pertama setelah tidur akan lambat.
-
----
-
-## Langkah 3 — Frontend di Vercel
+Tiga perintah, tiga jendela:
 
 ```bash
-cd web
-npx vercel --prod
+.venv\Scriptsctivate && uvicorn server.app:app --port 8000
 ```
 
-Set satu environment variable di Vercel:
+```bash
+ngrok http 8000
+```
 
-| Nama | Nilai |
+```bash
+cd web && npm run dev
+```
+
+ngrok mencetak URL seperti `https://expansive-surely-iodine.ngrok-free.dev`.
+**URL itu berganti setiap kali ngrok dijalankan ulang.**
+
+### Kenapa URL-nya tidak lagi menjadi masalah
+
+`API_ORIGIN` ikut dibangun saat deploy Vercel, jadi dulu setiap URL baru berarti
+deploy ulang. Sekarang basis API bisa diganti **saat jalan**:
+
+```
+https://sayit.vercel.app/?api=https://expansive-surely-iodine.ngrok-free.dev
+```
+
+Basis itu diingat di `localStorage`, jadi cukup sekali per perangkat.
+`?api=` kosong mengembalikannya ke bawaan.
+
+**Hanya host tunnel yang diterima** (`ngrok-free.dev`, `ngrok-free.app`,
+`ngrok.app`, `trycloudflare.com`). Ini daftar putih, bukan kenyamanan: tautan
+berisi `?api=` bisa dikirim siapa saja, dan foto serta rekaman suara pengguna
+akan dikirim ke host itu. Sudah diuji — `?api=https://jahat.example.com`
+diabaikan dan tidak disimpan.
+
+### Jebakan ngrok gratis yang sudah menggigit
+
+ngrok gratis membalas **halaman peringatan `ERR_NGROK_6024`** untuk GET yang
+tampak datang dari peramban. Terbukti saat diuji:
+
+| Permintaan | Hasil |
 |---|---|
-| `API_ORIGIN` | URL Space dari Langkah 2 |
+| UA peramban, tanpa header (persis elemen `<audio>`) | `ERR_NGROK_6024`, 236 bita teks |
+| dengan `ngrok-skip-browser-warning` lewat `fetch` | MP3 asli, 165.696 bita |
+| POST (semua endpoint) | lolos, tidak kena |
 
-`next.config.mjs` me-rewrite `/api/*` ke `API_ORIGIN`, jadi frontend dan backend
-satu origin — tidak perlu CORS sama sekali.
+Elemen `<audio>` **tidak bisa** mengirim header, hanya `fetch` yang bisa. Jadi
+klip `sambutan` dan `sedang_memproses` diambil lewat `fetch` berheader lalu
+diputar sebagai blob URL. Diambil saat halaman dibuka, **bukan** saat disentuh:
+memanggil `fetch` di dalam penangan gestur membuat `play()` kehilangan konteks
+gestur, dan iOS memblokirnya.
+
+Kalau ini tidak diperbaiki, gejalanya tepat yang paling buruk: **klip sambutan
+bisu**, yaitu satu-satunya pintu masuk pengguna tunanetra.
 
 ---
 

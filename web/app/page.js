@@ -10,6 +10,48 @@ import { motion } from "motion/react";
    jawab  -> audio memuat jawaban + "mau saya ulangi, foto lagi, atau keluar?"
              lalu kembali ke tanya untuk mendengar jawabannya          */
 
+/* Basis API bisa diganti saat jalan lewat ?api=https://xxxx.ngrok-free.app, lalu
+   diingat di localStorage. Alasannya: URL tunnel BERGANTI setiap kali dijalankan
+   ulang, sedangkan API_ORIGIN di Vercel ikut dibangun saat deploy - tanpa ini
+   setiap demo butuh deploy ulang. Bawaannya "/api" (rewrite di next.config.mjs),
+   jadi jalur lokal dan deploy sungguhan tidak berubah sama sekali.
+
+   DAFTAR PUTIH, bukan kenyamanan: tautan berisi ?api= bisa dikirim siapa saja,
+   dan foto serta rekaman suara pengguna akan dikirim ke host itu. Hanya host
+   tunnel yang diterima. */
+const API_DIIZINKAN = /^https:\/\/[a-z0-9][a-z0-9-]*\.(ngrok-free\.dev|ngrok-free\.app|ngrok\.app|trycloudflare\.com)$/i;
+
+function basisApi() {
+  let simpan = null;
+  try { simpan = localStorage.getItem("sayit.api"); } catch {}
+  const minta = new URLSearchParams(location.search).get("api");
+  if (minta === null) return simpan || "/api";
+
+  const bersih = minta.replace(/\/+$/, "");
+  if (!bersih) {                                   // ?api= kosong: kembali ke bawaan
+    try { localStorage.removeItem("sayit.api"); } catch {}
+    return "/api";
+  }
+  if (!API_DIIZINKAN.test(bersih)) return simpan || "/api";
+  try { localStorage.setItem("sayit.api", bersih); } catch {}
+  return bersih;
+}
+
+let _basis;
+/** Jalur penuh ke API. Dihitung saat dipakai, bukan saat render, supaya hasil
+ *  server dan klien tidak berbeda saat hydrate. */
+function api(jalur) {
+  if (_basis === undefined) _basis = typeof window === "undefined" ? "/api" : basisApi();
+  return _basis + jalur;
+}
+
+/** ngrok gratis menyelipkan halaman peringatan untuk permintaan yang tampak dari
+ *  peramban. Header ini melewatinya. Tidak dikirim saat memakai rewrite sendiri. */
+function kepalaApi() {
+  api("");                                     // pastikan _basis sudah dihitung
+  return _basis !== "/api" ? { "ngrok-skip-browser-warning": "1" } : undefined;
+}
+
 /** webm/opus dari MediaRecorder tidak terbaca soundfile di server.
  *  Browser sudah punya decodernya, jadi didecode di sini lalu dikemas jadi WAV 16-bit. */
 async function keWav(blob) {
@@ -59,6 +101,7 @@ export default function Page() {
   const potonganRef = useRef([]);
   const audioRef = useRef(null);
   const tungguRef = useRef(null);
+  const klipRef = useRef({});                  // nama klip -> blob URL, lihat efek di bawah
 
   const [fase, setFase] = useState("mulai");   // mulai | foto | proses | tanya | merekam
   const [pesan, setPesan] = useState("");
@@ -72,6 +115,34 @@ export default function Page() {
     const a = new Audio(src);
     audioRef.current = a;
     a.play().catch(() => {});
+  }, []);
+
+  /** Klip statis: pakai salinan blob kalau ada, kalau tidak URL biasa. */
+  const klip = (nama) => klipRef.current[nama] || api(`/klip/${nama}.mp3`);
+
+  /* Lewat tunnel ngrok gratis, GET dari peramban dibalas halaman peringatan -
+     terbukti saat diuji: /klip/sambutan.mp3 pulang sebagai text/plain 236 bita,
+     bukan MP3. Header pelewatnya tidak bisa dikirim oleh elemen <audio>, hanya
+     oleh fetch. Jadi klipnya diambil lewat fetch lalu diputar sebagai blob.
+
+     Diambil SEKARANG, bukan saat disentuh: memanggil fetch di dalam penangan
+     gestur membuat play() kehilangan konteks gestur, dan iOS memblokirnya. */
+  useEffect(() => {
+    const h = kepalaApi();
+    if (!h) return;                      // satu origin: <audio> sudah bisa langsung
+    const dibuat = [];
+    for (const nama of ["sambutan", "sedang_memproses"]) {
+      fetch(api(`/klip/${nama}.mp3`), { headers: h })
+        .then((r) => (r.ok ? r.blob() : null))
+        .then((b) => {
+          if (!b || !b.size) return;
+          const u = URL.createObjectURL(b);
+          klipRef.current[nama] = u;
+          dibuat.push(u);
+        })
+        .catch(() => {});                 // gagal ambil: jatuh ke URL biasa
+    }
+    return () => dibuat.forEach(URL.revokeObjectURL);
   }, []);
 
   /** Peringatan harus DIDENGAR, bukan hanya tampil, dan tiap kalimatnya menyebut
@@ -106,7 +177,7 @@ export default function Page() {
   // Langkah 4 dan 7: kalau prosesnya lama, beri tahu dengan suara.
   const mulaiTunggu = () => {
     clearTimeout(tungguRef.current);
-    tungguRef.current = setTimeout(() => bunyikan("/api/klip/sedang_memproses.mp3"), 2000);
+    tungguRef.current = setTimeout(() => bunyikan(klip("sedang_memproses")), 2000);
   };
   const selesaiTunggu = () => clearTimeout(tungguRef.current);
 
@@ -125,7 +196,7 @@ export default function Page() {
     setGalat("");
     mulaiTunggu();
     try {
-      const r = await fetch(url, { method: "POST", body: form });
+      const r = await fetch(url, { method: "POST", body: form, headers: kepalaApi() });
       if (!r.ok) throw new Error(`status-${r.status}`);
       const j = await r.json();
       selesaiTunggu();
@@ -170,7 +241,7 @@ export default function Page() {
       // fase tetap pindah supaya tombol "pilih berkas" muncul sebagai jalan keluar.
       if (galat) { peringatkan(galat); setFase("foto"); return; }
       // Browser memblokir autoplay sampai ada gestur, jadi sambutan menunggu sentuhan pertama.
-      bunyikan("/api/klip/sambutan.mp3");
+      bunyikan(klip("sambutan"));
       setPesan("Sentuh layar di mana saja untuk mengambil foto.");
       setFase("foto");
       return;
@@ -184,7 +255,7 @@ export default function Page() {
     }
     const form = new FormData();
     form.append("foto", foto, "foto.jpg");
-    kirim("/api/foto", form);
+    kirim(api("/foto"), form);
   }
 
   function pilihBerkas(e) {
@@ -193,7 +264,7 @@ export default function Page() {
     if (!f) return;
     const form = new FormData();
     form.append("berkas", f, f.name);
-    kirim("/api/berkas", form);
+    kirim(api("/berkas"), form);
   }
 
   async function mulaiRekam() {
@@ -209,7 +280,7 @@ export default function Page() {
           const form = new FormData();
           const mentah = new Blob(potonganRef.current, { type: mr.mimeType });
           form.append("suara", await keWav(mentah), "tanya.wav");
-          kirim("/api/tanya", form);
+          kirim(api("/tanya"), form);
         } catch (e) {
           setFase("tanya");
           peringatkan(
@@ -241,7 +312,7 @@ export default function Page() {
     const form = new FormData();
     form.append("teks", teks);
     e.target.reset();
-    kirim("/api/tanya", form);
+    kirim(api("/tanya"), form);
   }
 
   const judul = {

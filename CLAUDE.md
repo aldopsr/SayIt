@@ -202,8 +202,27 @@ yang ditolak quality gate. Empat tempat pernah menyimpulkannya dari intent dan
 keempatnya salah; akibatnya pengguna diminta bertanya tentang foto yang tidak pernah
 tersimpan. Ada tesnya di `tests/test_pipeline.py`.
 
-**Belum di-push ke GitHub** - butuh `git config --global user.name "aldopsr"` dulu
-(identitas Git tidak boleh saya ubah). Langkahnya di `docs/deploy.md`.
+Sudah di-push: https://github.com/aldopsr/SayIt
+
+**Hosting backend: laptop sendiri + `ngrok http 8000`, BUKAN Hugging Face Spaces.**
+HF kini menggerbangi SDK Docker di balik PRO 9 dolar/bulan (diperiksa 11-10), dan
+2 vCPU-nya akan memperburuk latensi 11,4 detik yang sudah menyimpang dari NFR-01.
+ngrok 3.35.0 sudah terpasang dan authtoken-nya sudah diset - tidak ada yang perlu
+dipasang. `Dockerfile` dibiarkan di repo tetapi tidak dipakai.
+
+**Dua jebakan tunnel yang sudah menggigit dan sudah diperbaiki:**
+1. URL ngrok berganti tiap restart, sedangkan `API_ORIGIN` ikut dibangun saat deploy.
+   Basis API karena itu bisa diganti saat jalan lewat `?api=`, diingat di localStorage,
+   dengan **daftar putih host** - foto dan rekaman suara pengguna dikirim ke host itu,
+   jadi tautan sembarangan tidak boleh mengarahkannya.
+2. ngrok gratis membalas `ERR_NGROK_6024` untuk GET yang tampak dari peramban, dan
+   elemen `<audio>` tidak bisa mengirim header pelewatnya. Akibatnya klip `sambutan`
+   bisu - pintu masuk satu-satunya pengguna tunanetra. Klip karena itu diambil lewat
+   `fetch` berheader lalu diputar sebagai blob, dan **diambil saat halaman dibuka**,
+   bukan saat disentuh (fetch dalam penangan gestur membuat `play()` kehilangan
+   konteks gestur; iOS memblokirnya).
+
+Langkah lengkapnya di `docs/deploy.md`.
 
 ## Titik sambung (2 Oktober 2026)
 
