@@ -1,56 +1,186 @@
 # SayIt
 
 Teknologi asistif berbasis Computer Vision dan suara untuk penyandang disabilitas netra.
-Dokumen persyaratan: `docs/PRD_SayIt_v2_1.md`. Catatan keputusan: `docs/keputusan-teknis.md`.
-Konteks untuk Claude Code: `CLAUDE.md`.
+Pengguna memotret, bertanya dengan suara, lalu mendengar jawabannya.
 
-## Status modul
+Tiga kemampuan: **nominal uang Rupiah** (termasuk total beberapa lembar),
+**membacakan tulisan dokumen**, dan **membacakan tanggal kedaluwarsa kemasan**.
 
-| Modul | File | Status |
-| :--- | :--- | :--- |
-| Konfigurasi | `config/settings.yaml`, `sayit/config.py` | Siap |
-| Rekam/putar audio | `sayit/audio/io.py` | Siap (bip sebelum rekam) |
-| Speech-to-Text | `sayit/audio/stt.py` | Siap (faster-whisper small + prompt, penjaga halusinasi prompt) |
-| Text-to-Speech | `sayit/audio/tts.py` | Siap (gTTS hibrida, klip offline untuk uang dan tanggal) |
-| Intent router | `sayit/intent/router.py` | Siap |
-| Templat respons & angka ke kata | `sayit/response/` | Siap |
-| Quality gate, pra-pemrosesan, uang, dokumen, kedaluwarsa | `sayit/vision/` | Belum |
-| Pipeline & Streamlit | `sayit/pipeline.py`, `app.py` | Belum |
+- Persyaratan: `docs/PRD_SayIt_v2_1.md`
+- Catatan keputusan beserta angkanya: `docs/keputusan-teknis.md`
+- Langkah deploy: `docs/deploy.md`
+- Konteks untuk Claude Code: `CLAUDE.md`
 
-## Struktur
+---
 
-```
-sayit/
-├── .venv/                  lingkungan Python (tidak ikut Git)
-├── assets/tts/             klip suara hasil scripts/build_tts_cache.py
-├── config/settings.yaml    semua parameter
-├── CLAUDE.md               konteks proyek untuk Claude Code
-├── docs/                   PRD dan catatan keputusan
-├── notebooks/              notebook Colab training model uang
-├── fase0/                  skrip dan hasil uji Fase 0
-├── models/                 bobot YOLO (tidak ikut Git)
-├── sayit/                  kode utama
-├── scripts/                build_tts_cache.py, demo_voice.py
-└── tests/                  pytest
+## Mau ubah UI saja? Tidak perlu Python.
+
+Ini jalur untuk anggota tim yang mengerjakan tampilan. Cuma butuh **Node.js**.
+
+```bash
+cd web
+npm ci
+npm run dev
 ```
 
-## Menjalankan (Windows, Command Prompt di folder `sayit`)
+Buka `http://localhost:3000`. Halaman langsung tampil dan bisa diubah-ubah
+(simpan berkas, halaman menyegarkan sendiri).
+
+Yang diubah hampir semuanya ada di dua berkas:
+
+| Berkas | Isi |
+| :--- | :--- |
+| `web/app/page.js` | seluruh tampilan dan alurnya, satu komponen |
+| `web/app/globals.css` | warna merek (`--jingga`, `--hitam`), kelas `.sr`, mode gerak-dikurangi |
+
+**Tanpa backend, tombol-tombolnya akan menjawab "Tidak bisa menghubungi server
+SayIt".** Itu normal dan memang begitu seharusnya — tata letak, warna, animasi,
+dan ukuran sentuh semuanya tetap bisa dikerjakan. Untuk melihat jawaban
+sungguhan, ada dua pilihan:
+
+**Pilihan A — pakai backend orang lain (paling cepat).** Minta URL ngrok dari
+anggota tim yang sedang menjalankan servernya, lalu buka:
+
+```
+http://localhost:3000/?api=https://xxxx.ngrok-free.dev
+```
+
+URL itu diingat di `localStorage`, jadi cukup sekali. `?api=` kosong
+mengembalikannya ke bawaan. Hanya host tunnel yang diterima — lihat
+`docs/deploy.md` untuk alasannya.
+
+**Pilihan B — jalankan backend sendiri.** Lihat bagian berikutnya. Butuh
+Python 3.11, ~2,5 GB dependensi, dan bobot model yang tidak ikut Git.
+
+### Aturan tampilan yang tidak boleh dilanggar
+
+Penggunanya tunanetra, jadi ini bukan selera:
+
+1. **Setiap peringatan wajib berbunyi**, bukan hanya tampil, dan wajib menyebut
+   **tindakan berikutnya** — bukan hanya kesalahannya. Pakai `peringatkan()`,
+   jangan `setGalat()` langsung.
+2. Setiap jawaban masuk wilayah `aria-live` (elemen `<p className="sr">`).
+   Jangan hapus elemen itu walau tidak terlihat.
+3. Area sentuh utama adalah **seluruh layar**, bukan tombol kecil.
+4. Hormati `prefers-reduced-motion` (sudah ada di `globals.css`).
+
+---
+
+## Menjalankan seluruh sistem
+
+### Backend (Python)
+
+Windows, Python **3.11**, Command Prompt di folder `sayit`:
 
 ```bat
+py -V:3.11 -m venv .venv
 .venv\Scripts\activate
 pip install -r requirements.txt
-pip install -U gTTS
 python -m pytest -q
-python scripts\build_tts_cache.py
-python scripts\demo_voice.py
 ```
 
-- `pytest` harus lulus semua sebelum kode diubah atau di-commit.
-- `build_tts_cache.py` butuh internet dan cukup dijalankan sekali (juga setiap kali kalimat di `sayit/response/templates.py` diubah; pakai `--force` untuk membuat ulang semuanya).
-- `demo_voice.py` menguji alur suara tanpa kamera: bicara setelah bip, sistem menampilkan transkrip, intent, dan memutar jawaban **contoh**. Tambahkan `--offline` untuk menguji perilaku tanpa internet.
+Yang **tidak ikut Git** dan harus diminta ke anggota tim:
+
+| Berkas | Isi |
+| :--- | :--- |
+| `models/best_money.pt` | bobot YOLO nominal uang |
+| `models/best_zone.pt` | bobot YOLO zona tanggal |
+| `data/` | foto uji |
+
+Bobot EasyOCR dan PaddleOCR terunduh sendiri saat pertama dipakai (butuh internet).
+Klip suara `assets/tts/` **sudah ikut Git**, jadi tidak perlu dibuat ulang —
+kecuali kalau kamu menambah kalimat baru di `sayit/response/templates.py`,
+lalu jalankan `python scripts\build_tts_cache.py`.
+
+### Tiga jendela untuk alur lengkap
+
+```bash
+.venv\Scripts\activate && uvicorn server.app:app --port 8000
+```
+
+```bash
+ngrok http 8000
+```
+
+```bash
+cd web && npm run dev
+```
+
+Kamera dan mikrofon **hanya jalan di HTTPS**, jadi untuk mengujinya dari HP
+pakai URL ngrok, bukan `localhost`.
+
+### Panel uji Streamlit (internal)
+
+```bat
+streamlit run app.py
+```
+
+Berguna untuk memeriksa modul satu per satu tanpa peramban dan tanpa suara.
+
+---
+
+## Status
+
+| Modul | Berkas | Status |
+| :--- | :--- | :--- |
+| Konfigurasi | `config/settings.yaml`, `sayit/config.py` | Siap |
+| Rekam/putar audio | `sayit/audio/io.py` | Siap |
+| Speech-to-Text | `sayit/audio/stt.py` | Siap (faster-whisper small + prompt) |
+| Text-to-Speech | `sayit/audio/tts.py` | Siap (gTTS hibrida, klip offline) |
+| Intent router | `sayit/intent/` | Siap |
+| Templat respons & angka ke kata | `sayit/response/` | Siap |
+| Quality gate, pra-pemrosesan, uang, dokumen, kedaluwarsa | `sayit/vision/` | Siap |
+| Pipeline | `sayit/pipeline.py` | Siap |
+| Panel uji Streamlit | `app.py` | Siap |
+| API web | `server/app.py` | Siap |
+| PWA | `web/` | Siap |
+
+Hasil ukur terakhir terhadap target PRD Bagian 11:
+
+| Metrik | Hasil | Target | |
+| :--- | :--- | :--- | :--- |
+| Akurasi kedaluwarsa | 81% | >= 70% | tercapai |
+| Akurasi uang (total diucapkan) | 82,8% | >= 85% | meleset 2,2 poin |
+| CER dokumen | 15,3% | <= 15% | meleset 0,3 poin |
+| Latensi uang / kendali | 1,4 s / 1,3 s | <= 8 s | lolos |
+| Latensi dokumen / kedaluwarsa | 11,5 s / 11,4 s | <= 8 s | penyimpangan diterima |
+
+Angka akurasi **wajib dilaporkan terpisah** sebagai benar / salah / diam, bukan
+satu persentase. Bagi pengguna tunanetra, tanggal atau nominal yang **salah**
+jauh lebih berbahaya daripada sistem yang diam. Alasan lengkap dan riwayat tiap
+angka ada di `docs/keputusan-teknis.md`.
+
+---
+
+## Aturan kerja
+
+- `python -m pytest -q` harus lulus **sebelum dan sesudah** setiap perubahan.
+  Saat ini 593 tes.
+- Uji asap API: `python server\smoke.py` — memuat model sungguhan, jadi bukan
+  bagian dari pytest.
+- Semua parameter di `config/settings.yaml`, dibaca lewat `sayit/config.py`.
+  Hindari angka ajaib di kode.
+- Kalimat suara baru wajib didaftarkan di `sayit/response/templates.py` lalu
+  cache dibuat ulang.
+- Kata kunci intent baru wajib disertai kasus uji di `tests/test_router.py`.
+
+### Jebakan yang sudah pernah menggigit
+
+- **Jangan jalankan `npm run build` selagi `npm run dev` hidup.** Keduanya memakai
+  `.next/`, dan build menimpa manifes chunk milik dev server. Gejalanya halus:
+  halaman tetap tampil tetapi React tidak pernah hydrate, jadi tidak ada tombol
+  yang bereaksi. Perbaikannya hapus `.next/` lalu jalankan ulang.
+- **Endpoint API baru butuh uvicorn dijalankan ulang.** `server\smoke.py` memakai
+  app baru di dalam proses, jadi ia lulus sementara server yang hidup masih 404.
+
+---
 
 ## Aturan privasi
 
-- Teks yang dibacakan dengan gTTS dikirim ke server Google. Jangan memakai dokumen pribadi asli saat pengujian.
+- Teks yang dibacakan gTTS **dikirim ke server Google**. Jangan memakai dokumen
+  pribadi asli saat pengujian.
 - Audio teks dinamis tidak disimpan ke disk (`tts.cache_dynamic_text: false`).
-- Rekaman suara anggota tim di `fase0/fase0_hasil/rekaman/` tidak boleh diunggah ke repositori publik.
+- Rekaman suara anggota tim di `fase0/fase0_hasil/rekaman/` **tidak boleh**
+  di-commit maupun diunggah. Sudah dijaga `.gitignore`.
+- `?api=` hanya menerima host tunnel. Ini daftar putih, bukan kenyamanan: foto
+  dan rekaman suara pengguna dikirim ke host itu.

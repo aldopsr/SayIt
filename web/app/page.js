@@ -197,9 +197,16 @@ export default function Page() {
     mulaiTunggu();
     try {
       const r = await fetch(url, { method: "POST", body: form, headers: kepalaApi() });
-      if (!r.ok) throw new Error(`status-${r.status}`);
-      const j = await r.json();
+      // Penandanya bukan status HTTP, melainkan apakah badannya JSON SayIt.
+      // Alasannya terukur: rewrite Next membalas 500 "Internal Server Error" teks
+      // biasa ketika backend-nya mati, jadi status 500 tidak bisa dibedakan dari
+      // galat server sungguhan. Yang pasti: SayIt selalu menjawab JSON.
+      let j = null;
+      try { j = await r.json(); } catch {}
       selesaiTunggu();
+      if (!j || (j.teks === undefined && j.error === undefined)) {
+        throw new Error("bukan-sayit");     // mati, rute tak ada, atau proxy gagal
+      }
       if (j.error) {
         // Pesan dari server sudah dalam bahasa pengguna dan sudah membawa audionya,
         // jadi jangan ditimpa - cukup bunyikan.
@@ -220,16 +227,14 @@ export default function Page() {
       else if (j.intent === "FOTO_BARU") setFase("foto");
       else if (j.intent === "KELUAR") setFase("mulai");
       else setFase("tanya");
-    } catch (e) {
+    } catch {
       selesaiTunggu();
-      // Server yang MENJAWAB galat tidak sama dengan server yang tidak terjangkau.
-      // Menyuruh pengguna tunanetra memeriksa internetnya padahal internetnya baik
-      // membuatnya mengejar masalah yang salah.
-      peringatkan(
-        String(e.message).startsWith("status-")
-          ? "Server menolak permintaan ini. Coba sekali lagi, atau pilih berkas yang lain."
-          : "Tidak bisa menghubungi server. Periksa koneksi internetmu, lalu coba lagi."
-      );
+      // Satu pesan untuk semua kegagalan jaringan, karena jalan keluarnya satu dan
+      // sama: server mati, rute tidak ada, proxy gagal, atau internet putus. Dua
+      // pesan terpisah pernah dicoba dan justru SALAH - tanpa backend, pesannya
+      // berbunyi "server menolak permintaan ini", yang mengarahkan ke masalah lain.
+      peringatkan("Tidak bisa menghubungi server SayIt. Periksa koneksi internetmu, "
+                  + "atau pastikan server-nya sudah jalan, lalu coba lagi.");
       setFase(url.endsWith("/foto") ? "foto" : "tanya");
     }
   }
