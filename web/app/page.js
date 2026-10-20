@@ -268,7 +268,7 @@ export default function SayItPage() {
   const isQuestionScreen = appState === 'PROMPTING_Q' || appState === 'LISTENING_Q';
   const isResultScreen = appState === 'SHOWING_RESULT' || appState === 'PROMPTING_MENU' || appState === 'LISTENING_MENU';
 
-  // Kalkulasi Posisi AI Orb Berdasarkan State Layar
+  // Posisi Orb untuk layar pemrosesan dan layar pertanyaan
   let orbPosStyle = {
     position: 'absolute',
     left: '50%',
@@ -294,32 +294,43 @@ export default function SayItPage() {
   } else if (isQuestionScreen) {
     orbPosStyle = {
       ...orbPosStyle,
-      top: '74%', 
+      top: '85%', 
       transform: 'translate(-50%, -50%) scale(0.9)',
       opacity: 1,
     };
   } else if (isResultScreen) {
     orbPosStyle = {
       ...orbPosStyle,
-      top: '50%', 
-      transform: 'translate(-50%, -50%) scale(0.8)',
-      opacity: 0,
+      top: '59%', 
+      transform: 'translate(-50%, -50%) scale(0.9)',
+      opacity: 1,
     };
   }
 
-  const RenderCapturedPhoto = () => (
-    <div style={{ width: '100%', display: 'flex', justifyContent: 'center', flexShrink: 0 }}>
-      <img 
-        src={capturedImage} 
-        alt="Hasil Foto" 
-        style={{ 
-          maxWidth: '100%', 
-          maxHeight: '44vh', 
-          objectFit: 'contain', 
+  // Foto hasil jepretan: posisi (top) & tinggi dalam persen layar, sesuai desain Canva
+  const renderPhoto = (topPct, heightPct) => capturedImage && (
+    <div style={{
+      position: 'absolute',
+      top: `${topPct}%`,
+      height: `${heightPct}%`,
+      left: 0,
+      right: 0,
+      display: 'flex',
+      justifyContent: 'center',
+      transition: 'top 0.6s ease-in-out, height 0.6s ease-in-out'
+    }}>
+      <img
+        src={capturedImage}
+        alt="Hasil Foto"
+        style={{
+          height: '100%',
+          width: 'auto',
+          maxWidth: '80%',
+          objectFit: 'contain',
           borderRadius: '16px',
-          transform: 'scaleX(-1)', 
-          boxShadow: '0 10px 30px rgba(0,0,0,0.1)' 
-        }} 
+          transform: 'scaleX(-1)',
+          boxShadow: '0 10px 30px rgba(0,0,0,0.1)'
+        }}
       />
     </div>
   );
@@ -338,14 +349,15 @@ export default function SayItPage() {
         userSelect: 'none'
       }}
     >
+      {/* CSS TOMBOL ICON */}
       <style dangerouslySetInnerHTML={{__html: `
         .btn-icon {
           display: flex;
           align-items: center;
           justify-content: center;
-          width: 60px;
-          height: 60px;
-          background-color: rgba(249, 115, 22, 0.2);
+          flex: 1;
+          height: 52px;
+          background-color: rgba(249, 115, 22, 0.18);
           color: #ea580c;
           border: none; 
           border-radius: 16px;
@@ -360,15 +372,17 @@ export default function SayItPage() {
           transform: scale(0.92); 
         }
         .btn-icon svg {
-          width: 28px;
-          height: 28px;
+          width: 26px;
+          height: 26px;
         }
       `}} />
 
+      {/* Pembaca Layar Wajib (SR) */}
       <div aria-live="assertive" aria-atomic="true">
         <p className="sr">{srText}</p>
       </div>
 
+      {/* Layer Kamera */}
       <video 
         ref={videoRef} 
         autoPlay 
@@ -386,6 +400,7 @@ export default function SayItPage() {
         }}
       />
 
+      {/* === SCREEN 1: UI KAMERA === */}
       {appState === 'CAMERA_READY' && (
         <div style={{ position: 'absolute', inset: 0, zIndex: 20, pointerEvents: 'none', overflow: 'hidden' }}>
           <div style={{ 
@@ -406,10 +421,12 @@ export default function SayItPage() {
         </div>
       )}
 
+      {/* === PERSISTENT AI VOICE ORB (Untuk Screen Loading/Pertanyaan) === */}
       <div style={orbPosStyle}>
         <AiParticleOrb width={180} height={180} isActive={true} />
       </div>
 
+      {/* === OVERLAY PUTIH UTAMA DENGAN TRANSISI HALUS === */}
       <div 
         style={{
           position: 'absolute',
@@ -422,15 +439,11 @@ export default function SayItPage() {
           overflow: 'hidden'
         }}
       >
-        {/* === SCREEN 3: PERTANYAAN === */}
+        {/* === SCREEN 3: HASIL FOTO & PERTANYAAN === */}
         <div 
           style={{
             position: 'absolute',
             inset: 0,
-            display: 'flex',
-            flexDirection: 'column',
-            alignItems: 'center',
-            padding: '30px 24px 24px 24px', 
             opacity: isQuestionScreen ? 1 : 0,
             pointerEvents: isQuestionScreen ? 'auto' : 'none',
             transition: 'opacity 0.6s ease-in-out, transform 0.6s ease-in-out',
@@ -438,23 +451,20 @@ export default function SayItPage() {
             zIndex: 31
           }}
         >
-          {capturedImage && <RenderCapturedPhoto />}
+          {/* Foto besar di atas (10% - 62% layar) */}
+          {renderPhoto(10, 52)}
           
-          <h2 style={{ fontSize: '19px', fontWeight: '800', textAlign: 'center', color: 'black', marginTop: '20px' }}>
+          {/* Teks pertanyaan di bawah foto, orb ada di bawah teks (85%) */}
+          <h2 style={{ position: 'absolute', top: '68%', left: '24px', right: '24px', margin: 0, fontSize: '19px', fontWeight: '800', textAlign: 'center', color: 'black', lineHeight: 1.3 }}>
             Apa yang ingin anda tanyakan<br/>dari foto ini?
           </h2>
         </div>
 
-        {/* === SCREEN 5: HASIL AKHIR (Jarak Flexbox Disamakan) === */}
+        {/* === SCREEN 5: LAYAR HASIL AKHIR (foto -> orb -> output -> 3 tombol) === */}
         <div 
           style={{
             position: 'absolute',
             inset: 0,
-            display: 'flex',
-            flexDirection: 'column',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            padding: '24px 24px 28px 24px',
             opacity: isResultScreen ? 1 : 0,
             pointerEvents: isResultScreen ? 'auto' : 'none',
             transition: 'opacity 0.6s ease-in-out, transform 0.6s ease-in-out',
@@ -463,72 +473,77 @@ export default function SayItPage() {
           }}
           onClick={(e) => e.stopPropagation()} 
         >
-          {capturedImage && <RenderCapturedPhoto />}
+          {/* 1. FOTO (5.5% - 47.5% layar) */}
+          {renderPhoto(5.5, 42)}
 
-          {/* AI Orb di tengah dengan ukuran flex yang memberikan jarak seragam atas dan bawah */}
-          <div style={{ 
-            flex: 1, 
-            display: 'flex', 
-            alignItems: 'center', 
+          {/* 2. AI ORB: memakai orb global yang berhenti di 59% layar */}
+
+          {/* 3. TEKS OUTPUT (mulai 71.5% layar, lebar 75%) */}
+          <div style={{
+            position: 'absolute',
+            top: '71.5%',
+            left: '12.5%',
+            width: '75%',
+            minHeight: '10%',
+            boxSizing: 'border-box',
+            display: 'flex',
+            alignItems: 'center',
             justifyContent: 'center',
-            transform: 'scale(0.75)',
-            margin: '4px 0'
+            padding: '14px 18px',
+            backgroundColor: 'var(--jingga, #f97316)',
+            borderRadius: '16px',
+            boxShadow: '0 4px 20px rgba(249,115,22,0.2)'
           }}>
-             <AiParticleOrb width={180} height={180} isActive={true} />
+            <h2 style={{ fontSize: '15px', fontWeight: '700', textAlign: 'center', color: 'white', margin: 0, lineHeight: '1.5' }}>
+              {resultText}
+            </h2>
           </div>
 
-          {/* TEKS OUTPUT & TOMBOL ICON */}
-          <div style={{ width: '100%', maxWidth: '600px', display: 'flex', flexDirection: 'column', gap: '14px', flexShrink: 0 }}>
-            
-            {/* Teks Output (Solid Orange) */}
-            <div style={{ backgroundColor: 'var(--jingga, #f97316)', padding: '18px 20px', borderRadius: '16px', boxShadow: '0 4px 20px rgba(249,115,22,0.2)' }}>
-              <h2 style={{ fontSize: '15px', fontWeight: '700', textAlign: 'center', color: 'white', margin: 0, lineHeight: '1.5' }}>
-                {resultText}
-              </h2>
-            </div>
-            
-            {/* Tombol Icon Action (Horizontal) */}
-            <div style={{ display: 'flex', justifyContent: 'space-evenly', alignItems: 'center', padding: '0 10px' }}>
-              
-              <button 
-                className="btn-icon"
-                onClick={() => setAppState('SHOWING_RESULT')}
-                aria-label="Ulangi Pembacaan"
-              >
-                <svg fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.92-12.28l5.07 5.07"/>
-                </svg>
-              </button>
-              
-              <button 
-                className="btn-icon"
-                onClick={() => setAppState('INIT')}
-                aria-label="Foto Lagi"
-              >
-                <svg fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/>
-                  <circle cx="12" cy="13" r="4"/>
-                </svg>
-              </button>
-              
-              <button 
-                className="btn-icon"
-                onClick={() => {
-                  playSystemAudio("Terima kasih sudah memakai aplikasi kami.");
-                  setAppState('IDLE');
-                }}
-                aria-label="Keluar Aplikasi"
-              >
-                <svg fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/>
-                  <polyline points="16 17 21 12 16 7"/>
-                  <line x1="21" y1="12" x2="9" y2="12"/>
-                </svg>
-              </button>
+          {/* 4. TIGA TOMBOL ICON (mulai 85% layar, selebar kotak output) */}
+          <div style={{
+            position: 'absolute',
+            top: '85%',
+            left: '12.5%',
+            width: '75%',
+            display: 'flex',
+            gap: '12px'
+          }}>
+            <button 
+              className="btn-icon"
+              onClick={() => setAppState('SHOWING_RESULT')}
+              aria-label="Ulangi Pembacaan"
+            >
+              <svg fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.92-12.28l5.07 5.07"/>
+              </svg>
+            </button>
 
-            </div>
+            <button 
+              className="btn-icon"
+              onClick={() => setAppState('INIT')}
+              aria-label="Foto Lagi"
+            >
+              <svg fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/>
+                <circle cx="12" cy="13" r="4"/>
+              </svg>
+            </button>
+
+            <button 
+              className="btn-icon"
+              onClick={() => {
+                playSystemAudio("Terima kasih sudah memakai aplikasi kami.");
+                setAppState('IDLE');
+              }}
+              aria-label="Keluar Aplikasi"
+            >
+              <svg fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/>
+                <polyline points="16 17 21 12 16 7"/>
+                <line x1="21" y1="12" x2="9" y2="12"/>
+              </svg>
+            </button>
           </div>
-
         </div>
       </div>
     </main>
