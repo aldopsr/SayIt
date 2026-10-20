@@ -1,431 +1,535 @@
-"use client";
+'use client';
 
-import { useCallback, useEffect, useRef, useState } from "react";
-import { motion } from "motion/react";
+import { useState, useEffect, useRef } from 'react';
 
-/* Alur (lihat docs/deploy.md):
-   mulai  -> sentuh layar: sambutan diputar
-   foto   -> sentuh layar DI MANA SAJA: ambil foto, mutunya diperiksa
-   tanya  -> tahan tombol: rekam pertanyaan, lepas: kirim
-   jawab  -> audio memuat jawaban + "mau saya ulangi, foto lagi, atau keluar?"
-             lalu kembali ke tanya untuk mendengar jawabannya          */
+// === KOMPONEN BOLA PARTIKEL 3D REAKSIF SUARA (CANVAS AI ORB) ===
+function AiParticleOrb({ width = 160, height = 160, isActive = true }) {
+  const canvasRef = useRef(null);
 
-/* Basis API bisa diganti saat jalan lewat ?api=https://xxxx.ngrok-free.app, lalu
-   diingat di localStorage. Alasannya: URL tunnel BERGANTI setiap kali dijalankan
-   ulang, sedangkan API_ORIGIN di Vercel ikut dibangun saat deploy - tanpa ini
-   setiap demo butuh deploy ulang. Bawaannya "/api" (rewrite di next.config.mjs),
-   jadi jalur lokal dan deploy sungguhan tidak berubah sama sekali.
-
-   DAFTAR PUTIH, bukan kenyamanan: tautan berisi ?api= bisa dikirim siapa saja,
-   dan foto serta rekaman suara pengguna akan dikirim ke host itu. Hanya host
-   tunnel yang diterima. */
-const API_DIIZINKAN = /^https:\/\/[a-z0-9][a-z0-9-]*\.(ngrok-free\.dev|ngrok-free\.app|ngrok\.app|trycloudflare\.com)$/i;
-
-function basisApi() {
-  let simpan = null;
-  try { simpan = localStorage.getItem("sayit.api"); } catch {}
-  const minta = new URLSearchParams(location.search).get("api");
-  if (minta === null) return simpan || "/api";
-
-  const bersih = minta.replace(/\/+$/, "");
-  if (!bersih) {                                   // ?api= kosong: kembali ke bawaan
-    try { localStorage.removeItem("sayit.api"); } catch {}
-    return "/api";
-  }
-  if (!API_DIIZINKAN.test(bersih)) return simpan || "/api";
-  try { localStorage.setItem("sayit.api", bersih); } catch {}
-  return bersih;
-}
-
-let _basis;
-/** Jalur penuh ke API. Dihitung saat dipakai, bukan saat render, supaya hasil
- *  server dan klien tidak berbeda saat hydrate. */
-function api(jalur) {
-  if (_basis === undefined) _basis = typeof window === "undefined" ? "/api" : basisApi();
-  return _basis + jalur;
-}
-
-/** ngrok gratis menyelipkan halaman peringatan untuk permintaan yang tampak dari
- *  peramban. Header ini melewatinya. Tidak dikirim saat memakai rewrite sendiri. */
-function kepalaApi() {
-  api("");                                     // pastikan _basis sudah dihitung
-  return _basis !== "/api" ? { "ngrok-skip-browser-warning": "1" } : undefined;
-}
-
-/** webm/opus dari MediaRecorder tidak terbaca soundfile di server.
- *  Browser sudah punya decodernya, jadi didecode di sini lalu dikemas jadi WAV 16-bit. */
-async function keWav(blob) {
-  // Tekan sekejap -> potongan belum keluar -> blob kosong -> decodeAudioData
-  // melempar EncodingError. Dijaga supaya pengguna dapat pesan, bukan layar galat.
-  if (blob.size < 1024) throw new Error("terlalu-pendek");
-
-  const ctx = new (window.AudioContext || window.webkitAudioContext)();
-  let buf;
-  try {
-    buf = await ctx.decodeAudioData(await blob.arrayBuffer());
-  } catch {
-    ctx.close();
-    throw new Error("terlalu-pendek");
-  }
-  if (buf.duration < 0.3) {
-    ctx.close();
-    throw new Error("terlalu-pendek");
-  }
-  const pcm = buf.getChannelData(0);
-  const out = new DataView(new ArrayBuffer(44 + pcm.length * 2));
-  const tulis = (o, s) => [...s].forEach((c, i) => out.setUint8(o + i, c.charCodeAt(0)));
-
-  tulis(0, "RIFF");
-  out.setUint32(4, 36 + pcm.length * 2, true);
-  tulis(8, "WAVEfmt ");
-  out.setUint32(16, 16, true);
-  out.setUint16(20, 1, true);
-  out.setUint16(22, 1, true);
-  out.setUint32(24, buf.sampleRate, true);
-  out.setUint32(28, buf.sampleRate * 2, true);
-  out.setUint16(32, 2, true);
-  out.setUint16(34, 16, true);
-  tulis(36, "data");
-  out.setUint32(40, pcm.length * 2, true);
-  for (let i = 0; i < pcm.length; i++) {
-    const v = Math.max(-1, Math.min(1, pcm[i]));
-    out.setInt16(44 + i * 2, v * 0x7fff, true);
-  }
-  ctx.close();
-  return new Blob([out], { type: "audio/wav" });
-}
-
-export default function Page() {
-  const video = useRef(null);
-  const rekamanRef = useRef(null);
-  const potonganRef = useRef([]);
-  const audioRef = useRef(null);
-  const tungguRef = useRef(null);
-  const klipRef = useRef({});                  // nama klip -> blob URL, lihat efek di bawah
-
-  const [fase, setFase] = useState("mulai");   // mulai | foto | proses | tanya | merekam
-  const [pesan, setPesan] = useState("");
-  const [galat, setGalat] = useState("");
-
-  /** Satu elemen audio dipakai ulang: klip baru memotong yang lama, jadi
-   *  pengguna tidak pernah mendengar dua suara bertumpuk. */
-  const bunyikan = useCallback((src) => {
-    window.speechSynthesis?.cancel();
-    audioRef.current?.pause();
-    const a = new Audio(src);
-    audioRef.current = a;
-    a.play().catch(() => {});
-  }, []);
-
-  /** Klip statis: pakai salinan blob kalau ada, kalau tidak URL biasa. */
-  const klip = (nama) => klipRef.current[nama] || api(`/klip/${nama}.mp3`);
-
-  /* Lewat tunnel ngrok gratis, GET dari peramban dibalas halaman peringatan -
-     terbukti saat diuji: /klip/sambutan.mp3 pulang sebagai text/plain 236 bita,
-     bukan MP3. Header pelewatnya tidak bisa dikirim oleh elemen <audio>, hanya
-     oleh fetch. Jadi klipnya diambil lewat fetch lalu diputar sebagai blob.
-
-     Diambil SEKARANG, bukan saat disentuh: memanggil fetch di dalam penangan
-     gestur membuat play() kehilangan konteks gestur, dan iOS memblokirnya. */
   useEffect(() => {
-    const h = kepalaApi();
-    if (!h) return;                      // satu origin: <audio> sudah bisa langsung
-    const dibuat = [];
-    for (const nama of ["sambutan", "sedang_memproses"]) {
-      fetch(api(`/klip/${nama}.mp3`), { headers: h })
-        .then((r) => (r.ok ? r.blob() : null))
-        .then((b) => {
-          if (!b || !b.size) return;
-          const u = URL.createObjectURL(b);
-          klipRef.current[nama] = u;
-          dibuat.push(u);
-        })
-        .catch(() => {});                 // gagal ambil: jatuh ke URL biasa
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    let animationFrameId;
+
+    const numParticles = 350;
+    const particles = [];
+    for (let i = 0; i < numParticles; i++) {
+      const phi = Math.acos(-1 + (2 * i) / numParticles);
+      const theta = Math.sqrt(numParticles * Math.PI) * phi;
+      particles.push({
+        x0: Math.cos(theta) * Math.sin(phi),
+        y0: Math.sin(theta) * Math.sin(phi),
+        z0: Math.cos(phi),
+        phi,
+        theta
+      });
     }
-    return () => dibuat.forEach(URL.revokeObjectURL);
-  }, []);
 
-  /** Peringatan harus DIDENGAR, bukan hanya tampil, dan tiap kalimatnya menyebut
-   *  jalan keluarnya - penggunanya tunanetra dan tidak melihat layar.
-   *
-   *  Dipakai speechSynthesis bawaan peramban, bukan klip dari server, karena
-   *  sebagian peringatan ini justru muncul KETIKA servernya tidak terjangkau.
-   *  Galat yang datang dari server tetap memakai klip gTTS lewat bunyikan(). */
-  const peringatkan = useCallback((teks) => {
-    setGalat(teks);
-    audioRef.current?.pause();
-    const s = window.speechSynthesis;
-    if (!s) return;                       // pembaca layar masih dapat lewat aria-live
-    s.cancel();
-    const u = new SpeechSynthesisUtterance(teks);
-    u.lang = "id-ID";
-    s.speak(u);
-  }, []);
+    const baseRadius = width * 0.32;
+    const cx = width / 2;
+    const cy = height / 2;
 
-  useEffect(() => {
-    navigator.mediaDevices
-      ?.getUserMedia({ video: { facingMode: "environment" } })
-      .then((s) => { if (video.current) video.current.srcObject = s; })
-      // Belum ada gestur pengguna di sini, dan iOS memblokir speechSynthesis
-      // sebelum gestur. Jadi hanya dicatat; sentuhan pertama yang membunyikannya.
-      .catch(() => setGalat(
-        "Kamera belum diizinkan. Buka pengaturan izin situs di peramban, nyalakan kamera, " +
-        "lalu muat ulang halaman. Sementara itu kamu masih bisa memilih berkas dari penyimpanan."
-      ));
-  }, []);
+    const render = (time) => {
+      const t = time * 0.0006;
+      ctx.clearRect(0, 0, width, height);
 
-  // Langkah 4 dan 7: kalau prosesnya lama, beri tahu dengan suara.
-  const mulaiTunggu = () => {
-    clearTimeout(tungguRef.current);
-    tungguRef.current = setTimeout(() => bunyikan(klip("sedang_memproses")), 2000);
+      const pitchModulation = isActive 
+        ? Math.sin(t * 8) * 0.35 + Math.sin(t * 12) * 0.25 + Math.cos(t * 4.5) * 0.4 
+        : Math.sin(t * 1.5) * 0.08;
+
+      const currentAmp = baseRadius * (0.12 + Math.abs(pitchModulation) * 0.25);
+
+      const projected = particles.map((p) => {
+        const wave = Math.sin(p.phi * 4 + t * 5) * Math.cos(p.theta * 3 + t * 3.5);
+        const pitchDisplacement = wave * currentAmp * (0.8 + Math.abs(p.y0 * 1.5));
+
+        const r = baseRadius + pitchDisplacement;
+
+        let x = p.x0 * r;
+        let y = p.y0 * r;
+        let z = p.z0 * r;
+
+        const cosY = Math.cos(t * 0.5);
+        const sinY = Math.sin(t * 0.5);
+        let x1 = x * cosY - z * sinY;
+        let z1 = x * sinY + z * cosY;
+
+        const cosX = Math.cos(t * 0.3);
+        const sinX = Math.sin(t * 0.3);
+        let y2 = y * cosX - z1 * sinX;
+        let z2 = y * sinX + z1 * cosX;
+
+        const fov = 250;
+        const scale = fov / (fov + z2 + baseRadius);
+        const px = cx + x1 * scale;
+        const py = cy + y2 * scale;
+
+        return { px, py, z: z2, scale };
+      });
+
+      projected.sort((a, b) => a.z - b.z);
+
+      projected.forEach((p) => {
+        const alpha = Math.max(0.25, (p.z + baseRadius) / (baseRadius * 2.2));
+        const particleSize = Math.max(0.7, p.scale * 1.6);
+
+        if (p.z > 0) {
+          ctx.fillStyle = `rgba(255, 255, 255, ${Math.min(1, alpha + 0.4)})`;
+        } else {
+          ctx.fillStyle = `rgba(249, 115, 22, ${alpha + 0.1})`;
+        }
+
+        ctx.beginPath();
+        ctx.arc(p.px, p.py, particleSize, 0, Math.PI * 2);
+        ctx.fill();
+      });
+
+      animationFrameId = requestAnimationFrame(render);
+    };
+
+    animationFrameId = requestAnimationFrame(render);
+    return () => cancelAnimationFrame(animationFrameId);
+  }, [width, height, isActive]);
+
+  return <canvas ref={canvasRef} width={width} height={height} style={{ display: 'block' }} />;
+}
+
+export default function SayItPage() {
+  // === STATE MANAGEMENT ===
+  const [appState, setAppState] = useState('INIT');
+  const [srText, setSrText] = useState('');
+  const [resultText, setResultText] = useState('');
+  const [capturedImage, setCapturedImage] = useState(null);
+
+  // === REFS ===
+  const videoRef = useRef(null);
+  const isSpeechSynthesisSpeaking = useRef(false);
+
+  // === FUNGSI UTILITAS: AUDIO & AKSESIBILITAS ===
+  const playSystemAudio = (textUtama, nextStateDelay = null) => {
+    setSrText(textUtama);
+    
+    window.speechSynthesis.cancel();
+    isSpeechSynthesisSpeaking.current = true;
+
+    const utterance = new SpeechSynthesisUtterance(textUtama);
+    utterance.lang = 'id-ID';
+    
+    utterance.onend = () => {
+      isSpeechSynthesisSpeaking.current = false;
+      if (nextStateDelay) {
+        setTimeout(() => {
+          setAppState(nextStateDelay);
+        }, 1000); 
+      }
+    };
+    
+    utterance.onerror = () => {
+        isSpeechSynthesisSpeaking.current = false;
+    }
+
+    window.speechSynthesis.speak(utterance);
   };
-  const selesaiTunggu = () => clearTimeout(tungguRef.current);
 
-  function fotoSekarang() {
-    const v = video.current;
-    if (!v?.videoWidth) return Promise.resolve(null);
-    const c = document.createElement("canvas");
-    c.width = v.videoWidth;
-    c.height = v.videoHeight;
-    c.getContext("2d").drawImage(v, 0, 0);
-    return new Promise((r) => c.toBlob(r, "image/jpeg", 0.92));
-  }
+  const peringatkan = (pesan, aksiBerikutnya) => {
+    const teksPeringatan = `${pesan}. ${aksiBerikutnya}`;
+    playSystemAudio(teksPeringatan);
+  };
 
-  async function kirim(url, form) {
-    setFase("proses");
-    setGalat("");
-    mulaiTunggu();
-    try {
-      const r = await fetch(url, { method: "POST", body: form, headers: kepalaApi() });
-      // Penandanya bukan status HTTP, melainkan apakah badannya JSON SayIt.
-      // Alasannya terukur: rewrite Next membalas 500 "Internal Server Error" teks
-      // biasa ketika backend-nya mati, jadi status 500 tidak bisa dibedakan dari
-      // galat server sungguhan. Yang pasti: SayIt selalu menjawab JSON.
-      let j = null;
-      try { j = await r.json(); } catch {}
-      selesaiTunggu();
-      if (!j || (j.teks === undefined && j.error === undefined)) {
-        throw new Error("bukan-sayit");     // mati, rute tak ada, atau proxy gagal
-      }
-      if (j.error) {
-        // Pesan dari server sudah dalam bahasa pengguna dan sudah membawa audionya,
-        // jadi jangan ditimpa - cukup bunyikan.
-        setGalat(j.error);
-        if (j.audio) bunyikan(`data:audio/wav;base64,${j.audio}`);
-        else peringatkan(j.error);
-        setFase(url.endsWith("/tanya") ? "tanya" : "foto");
-        return;
-      }
-      setPesan(j.teks);
-      bunyikan(`data:audio/wav;base64,${j.audio}`);
+  // === MEKANISME SIMULASI MENDENGARKAN (UI MOCK MODE) ===
+  const startListening = (onSilenceCallback) => {
+    setTimeout(() => {
+      onSilenceCallback();
+    }, 3000);
+  };
 
-      // Mutu ditolak -> tetap di langkah foto, alasannya sudah dibacakan. Diperiksa
-      // lewat `diterima`, bukan lewat URL: /berkas juga bisa ditolak quality gate,
-      // dan menyuruh bertanya tentang foto yang tidak pernah diterima membuat
-      // pengguna tunanetra bicara ke ruang kosong.
-      if (j.diterima !== undefined) setFase(j.diterima ? "tanya" : "foto");
-      else if (j.intent === "FOTO_BARU") setFase("foto");
-      else if (j.intent === "KELUAR") setFase("mulai");
-      else setFase("tanya");
-    } catch {
-      selesaiTunggu();
-      // Satu pesan untuk semua kegagalan jaringan, karena jalan keluarnya satu dan
-      // sama: server mati, rute tidak ada, proxy gagal, atau internet putus. Dua
-      // pesan terpisah pernah dicoba dan justru SALAH - tanpa backend, pesannya
-      // berbunyi "server menolak permintaan ini", yang mengarahkan ke masalah lain.
-      peringatkan("Tidak bisa menghubungi server SayIt. Periksa koneksi internetmu, "
-                  + "atau pastikan server-nya sudah jalan, lalu coba lagi.");
-      setFase(url.endsWith("/foto") ? "foto" : "tanya");
-    }
-  }
-
-  async function sentuhLayar() {
-    if (fase === "mulai") {
-      // Kamera gagal sebelum ada gestur, jadi peringatannya belum bisa berbunyi tadi.
-      // Sambutannya pun akan menyesatkan karena menyuruh memotret. Peringatan dulu;
-      // fase tetap pindah supaya tombol "pilih berkas" muncul sebagai jalan keluar.
-      if (galat) { peringatkan(galat); setFase("foto"); return; }
-      // Browser memblokir autoplay sampai ada gestur, jadi sambutan menunggu sentuhan pertama.
-      bunyikan(klip("sambutan"));
-      setPesan("Sentuh layar di mana saja untuk mengambil foto.");
-      setFase("foto");
-      return;
-    }
-    if (fase !== "foto") return;
-    const foto = await fotoSekarang();
-    if (!foto) {
-      peringatkan("Kamera belum siap. Tunggu sebentar, lalu sentuh layar lagi. "
-                  + "Kalau tetap gagal, pilih berkas dari penyimpanan.");
-      return;
-    }
-    const form = new FormData();
-    form.append("foto", foto, "foto.jpg");
-    kirim(api("/foto"), form);
-  }
-
-  function pilihBerkas(e) {
-    const f = e.target.files?.[0];
-    e.target.value = "";                 // berkas yang sama bisa dipilih lagi
-    if (!f) return;
-    const form = new FormData();
-    form.append("berkas", f, f.name);
-    kirim(api("/berkas"), form);
-  }
-
-  async function mulaiRekam() {
-    if (fase !== "tanya") return;
-    try {
-      const s = await navigator.mediaDevices.getUserMedia({ audio: true });
-      potonganRef.current = [];
-      const mr = new MediaRecorder(s);
-      mr.ondataavailable = (e) => e.data.size && potonganRef.current.push(e.data);
-      mr.onstop = async () => {
-        s.getTracks().forEach((t) => t.stop());
-        try {
-          const form = new FormData();
-          const mentah = new Blob(potonganRef.current, { type: mr.mimeType });
-          form.append("suara", await keWav(mentah), "tanya.wav");
-          kirim(api("/tanya"), form);
-        } catch (e) {
-          setFase("tanya");
-          peringatkan(
-            e.message === "terlalu-pendek"
-              ? "Rekamannya terlalu pendek. Tahan tombolnya sampai selesai bicara, baru lepas."
-              : "Suaramu tidak bisa dibaca. Tahan tombolnya lalu bicara lebih dekat ke mikrofon, "
-                + "atau ketik pertanyaanmu di kotak teks."
-          );
+  // === EFFECTS BERDASARKAN STATE ===
+  useEffect(() => {
+    if (appState === 'INIT') {
+      let isMounted = true;
+      setCapturedImage(null);
+      
+      const constraints = {
+        video: {
+          facingMode: 'user', 
+          width: { ideal: 1920 },
+          height: { ideal: 1080 }
         }
       };
-      mr.start(250);               // potongan tiap 250 ms, jadi tekanan singkat pun berisi
-      rekamanRef.current = mr;
-      setFase("merekam");
-    } catch {
-      peringatkan("Mikrofon belum diizinkan. Buka pengaturan izin situs di peramban, "
-                  + "nyalakan mikrofon, lalu tahan tombolnya lagi. "
-                  + "Kamu juga bisa mengetik pertanyaanmu di kotak teks di bawah tombol.");
+
+      navigator.mediaDevices.getUserMedia(constraints)
+        .then(stream => {
+          if (isMounted && videoRef.current) {
+            videoRef.current.srcObject = stream;
+            setAppState('CAMERA_READY');
+            playSystemAudio("Selamat datang di SayIt. Silakan arahkan kamera, lalu ketuk layar untuk memotret.");
+          }
+        })
+        .catch(err => {
+            console.error(err);
+            peringatkan("Kamera tidak ditemukan", "Periksa izin kamera.");
+        });
+        
+        return () => { isMounted = false; };
     }
+  }, [appState]);
+
+  useEffect(() => {
+    if (appState === 'LISTENING_Q') {
+      startListening(() => {
+        setAppState('PROCESSING_Q');
+      });
+    }
+  }, [appState]);
+
+  useEffect(() => {
+    if (appState === 'PROCESSING_Q') {
+      playSystemAudio("Sedang memproses pertanyaan Anda.");
+      setTimeout(() => {
+        setResultText("Nominal uang ini adalah dua ribu rupiah.");
+        setAppState('SHOWING_RESULT');
+      }, 3000); 
+    }
+  }, [appState]);
+
+  useEffect(() => {
+    if (appState === 'SHOWING_RESULT') {
+      playSystemAudio(resultText, 'PROMPTING_MENU');
+    }
+  }, [appState, resultText]);
+
+  useEffect(() => {
+    if (appState === 'PROMPTING_MENU') {
+      playSystemAudio("Katakan Ulangi untuk pembacaan ulang, Foto Lagi untuk memotret kembali, atau Keluar untuk menutup aplikasi.", 'LISTENING_MENU');
+    }
+  }, [appState]);
+
+  useEffect(() => {
+    if (appState === 'LISTENING_MENU') {
+      startListening(() => {
+        setAppState('INIT'); 
+      });
+    }
+  }, [appState]);
+
+  // === HANDLER KLIK ===
+  const handleScreenClick = () => {
+    if (isSpeechSynthesisSpeaking.current) return;
+
+    if (appState === 'CAMERA_READY') {
+      if (videoRef.current) {
+        const video = videoRef.current;
+        const vw = video.videoWidth;
+        const vh = video.videoHeight;
+        const W = window.innerWidth;
+        const H = window.innerHeight;
+        
+        const scale = Math.max(W / vw, H / vh);
+        const drawW = vw * scale;
+        const drawH = vh * scale;
+        const dx = (W - drawW) / 2;
+        const dy = (H - drawH) / 2;
+
+        const frameX = 24;
+        const frameY = 60;
+        const frameW = W - 48; 
+        const frameH = H - 210; 
+
+        const cropX = Math.max(0, (frameX - dx) / scale);
+        const cropY = Math.max(0, (frameY - dy) / scale);
+        const cropW = Math.min(vw - cropX, frameW / scale);
+        const cropH = Math.min(vh - cropY, frameH / scale);
+
+        const canvas = document.createElement('canvas');
+        canvas.width = frameW;
+        canvas.height = frameH;
+        const ctx = canvas.getContext('2d');
+        
+        ctx.drawImage(video, cropX, cropY, cropW, cropH, 0, 0, frameW, frameH);
+        
+        const imageUrl = canvas.toDataURL('image/jpeg');
+        setCapturedImage(imageUrl);
+      }
+
+      setAppState('PROCESSING_VISION');
+      playSystemAudio("Sedang membaca foto.");
+      
+      setTimeout(() => {
+        setAppState('PROMPTING_Q');
+        playSystemAudio("Apa yang ingin anda tanyakan dari foto ini?", 'LISTENING_Q');
+      }, 3000);
+    }
+  };
+
+  // === LOGIKA POSISI DAN VISIBILITAS TRANSISI KELOMPOK SCREEN ===
+  const isCamera = appState === 'INIT' || appState === 'CAMERA_READY';
+  const isProcessing = appState === 'PROCESSING_VISION' || appState === 'PROCESSING_Q';
+  const isQuestionScreen = appState === 'PROMPTING_Q' || appState === 'LISTENING_Q';
+  const isResultScreen = appState === 'SHOWING_RESULT' || appState === 'PROMPTING_MENU' || appState === 'LISTENING_MENU';
+
+  // Kalkulasi Posisi AI Orb Berdasarkan State Layar
+  let orbPosStyle = {
+    position: 'absolute',
+    left: '50%',
+    transition: 'top 0.8s cubic-bezier(0.4, 0, 0.2, 1), transform 0.8s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.6s ease-in-out',
+    zIndex: 35,
+    pointerEvents: 'none'
+  };
+
+  if (isCamera) {
+    orbPosStyle = {
+      ...orbPosStyle,
+      top: '50%',
+      transform: 'translate(-50%, -50%) scale(0.3)',
+      opacity: 0,
+    };
+  } else if (isProcessing) {
+    orbPosStyle = {
+      ...orbPosStyle,
+      top: '50%',
+      transform: 'translate(-50%, -50%) scale(1.1)',
+      opacity: 1,
+    };
+  } else if (isQuestionScreen) {
+    orbPosStyle = {
+      ...orbPosStyle,
+      top: '74%', 
+      transform: 'translate(-50%, -50%) scale(0.9)',
+      opacity: 1,
+    };
+  } else if (isResultScreen) {
+    orbPosStyle = {
+      ...orbPosStyle,
+      top: '50%', 
+      transform: 'translate(-50%, -50%) scale(0.8)',
+      opacity: 0,
+    };
   }
 
-  function selesaiRekam() {
-    if (rekamanRef.current?.state === "recording") rekamanRef.current.stop();
-  }
-
-  function kirimTeks(e) {
-    e.preventDefault();
-    const teks = new FormData(e.target).get("teks")?.toString().trim();
-    if (!teks || fase !== "tanya") return;
-    const form = new FormData();
-    form.append("teks", teks);
-    e.target.reset();
-    kirim(api("/tanya"), form);
-  }
-
-  const judul = {
-    mulai: "Sentuh layar untuk mulai",
-    foto: "Sentuh layar untuk memotret",
-    proses: "Sedang saya proses",
-    tanya: "Tahan tombol lalu bertanya",
-    merekam: "Lepas untuk mengirim",
-  }[fase];
-
-  const bolehSentuh = fase === "mulai" || fase === "foto";
+  const RenderCapturedPhoto = () => (
+    <div style={{ width: '100%', display: 'flex', justifyContent: 'center', flexShrink: 0 }}>
+      <img 
+        src={capturedImage} 
+        alt="Hasil Foto" 
+        style={{ 
+          maxWidth: '100%', 
+          maxHeight: '44vh', 
+          objectFit: 'contain', 
+          borderRadius: '16px',
+          transform: 'scaleX(-1)', 
+          boxShadow: '0 10px 30px rgba(0,0,0,0.1)' 
+        }} 
+      />
+    </div>
+  );
 
   return (
-    <main style={{ height: "100dvh", display: "flex", flexDirection: "column" }}>
-      <video
-        ref={video}
-        autoPlay
-        muted
+    <main 
+      onClick={handleScreenClick}
+      style={{
+        position: 'fixed',
+        top: 0,
+        left: 0,
+        width: '100vw',
+        height: '100vh',
+        backgroundColor: 'white', 
+        overflow: 'hidden',
+        userSelect: 'none'
+      }}
+    >
+      <style dangerouslySetInnerHTML={{__html: `
+        .btn-icon {
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          width: 60px;
+          height: 60px;
+          background-color: rgba(249, 115, 22, 0.2);
+          color: #ea580c;
+          border: none; 
+          border-radius: 16px;
+          cursor: pointer;
+          transition: all 0.2s ease;
+        }
+        .btn-icon:hover {
+          background-color: var(--jingga, #f97316); 
+          color: white; 
+        }
+        .btn-icon:active {
+          transform: scale(0.92); 
+        }
+        .btn-icon svg {
+          width: 28px;
+          height: 28px;
+        }
+      `}} />
+
+      <div aria-live="assertive" aria-atomic="true">
+        <p className="sr">{srText}</p>
+      </div>
+
+      <video 
+        ref={videoRef} 
+        autoPlay 
         playsInline
-        aria-hidden="true"
-        style={{ position: "fixed", inset: 0, width: "100%", height: "100%", objectFit: "cover", opacity: 0.45 }}
+        muted 
+        style={{
+          position: 'absolute',
+          top: 0,
+          left: 0,
+          width: '100%',
+          height: '100%',
+          objectFit: 'cover', 
+          transform: 'scaleX(-1)', 
+          zIndex: 0
+        }}
       />
 
-      {/* Sentuh di MANA SAJA untuk memotret. Hanya hidup di fase foto, jadi tombol
-          rekam dan kotak teks tidak pernah tertutup olehnya. */}
-      {bolehSentuh && (
-        <button
-          onPointerDown={sentuhLayar}
-          aria-label={judul}
-          style={{
-            position: "fixed", inset: 0, zIndex: 1,
-            background: "transparent", border: "none", cursor: "pointer",
-            WebkitTapHighlightColor: "transparent",
-          }}
-        />
+      {appState === 'CAMERA_READY' && (
+        <div style={{ position: 'absolute', inset: 0, zIndex: 20, pointerEvents: 'none', overflow: 'hidden' }}>
+          <div style={{ 
+            position: 'absolute', top: '60px', bottom: '150px', left: '24px', right: '24px', 
+            boxShadow: '0 0 0 9999px rgba(0,0,0,0.3)' 
+          }}>
+            <div style={{ position: 'absolute', top: 0, left: 0, width: '40px', height: '40px', borderTop: '6px solid var(--jingga, #f97316)', borderLeft: '6px solid var(--jingga, #f97316)' }}></div>
+            <div style={{ position: 'absolute', top: 0, right: 0, width: '40px', height: '40px', borderTop: '6px solid var(--jingga, #f97316)', borderRight: '6px solid var(--jingga, #f97316)' }}></div>
+            <div style={{ position: 'absolute', bottom: 0, left: 0, width: '40px', height: '40px', borderBottom: '6px solid var(--jingga, #f97316)', borderLeft: '6px solid var(--jingga, #f97316)' }}></div>
+            <div style={{ position: 'absolute', bottom: 0, right: 0, width: '40px', height: '40px', borderBottom: '6px solid var(--jingga, #f97316)', borderRight: '6px solid var(--jingga, #f97316)' }}></div>
+          </div>
+
+          <div style={{ position: 'absolute', bottom: '40px', left: '50%', transform: 'translateX(-50%)', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+            <div style={{ width: '76px', height: '76px', backgroundColor: 'white', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 4px 10px rgba(0,0,0,0.5)' }}>
+              <div style={{ width: '60px', height: '60px', backgroundColor: 'var(--jingga, #f97316)', borderRadius: '50%' }}></div>
+            </div>
+          </div>
+        </div>
       )}
 
-      <div style={{ position: "relative", zIndex: 2, padding: "28px 24px 0", pointerEvents: "none" }}>
-        <img src="/logo.png" alt="SayIt" width={88} height={87} />
+      <div style={orbPosStyle}>
+        <AiParticleOrb width={180} height={180} isActive={true} />
       </div>
 
-      <div style={{ position: "relative", zIndex: 2, flex: 1, display: "grid", placeItems: "center", padding: "0 24px", textAlign: "center", pointerEvents: "none" }}>
-        <p style={{ fontSize: 22, lineHeight: 1.35, color: galat ? "#ff6b6b" : "var(--putih)" }}>
-          {galat || pesan || judul}
-        </p>
-      </div>
+      <div 
+        style={{
+          position: 'absolute',
+          inset: 0,
+          backgroundColor: 'white',
+          zIndex: 30,
+          opacity: isCamera ? 0 : 1,
+          pointerEvents: isCamera ? 'none' : 'auto',
+          transition: 'opacity 0.8s ease-in-out',
+          overflow: 'hidden'
+        }}
+      >
+        {/* === SCREEN 3: PERTANYAAN === */}
+        <div 
+          style={{
+            position: 'absolute',
+            inset: 0,
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            padding: '30px 24px 24px 24px', 
+            opacity: isQuestionScreen ? 1 : 0,
+            pointerEvents: isQuestionScreen ? 'auto' : 'none',
+            transition: 'opacity 0.6s ease-in-out, transform 0.6s ease-in-out',
+            transform: isQuestionScreen ? 'scale(1)' : 'scale(0.96)',
+            zIndex: 31
+          }}
+        >
+          {capturedImage && <RenderCapturedPhoto />}
+          
+          <h2 style={{ fontSize: '19px', fontWeight: '800', textAlign: 'center', color: 'black', marginTop: '20px' }}>
+            Apa yang ingin anda tanyakan<br/>dari foto ini?
+          </h2>
+        </div>
 
-      {/* Jawaban diumumkan pembaca layar walau layarnya tidak dilihat. */}
-      <p className="sr" role="status" aria-live="assertive">{galat || pesan}</p>
+        {/* === SCREEN 5: HASIL AKHIR (Jarak Flexbox Disamakan) === */}
+        <div 
+          style={{
+            position: 'absolute',
+            inset: 0,
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            padding: '24px 24px 28px 24px',
+            opacity: isResultScreen ? 1 : 0,
+            pointerEvents: isResultScreen ? 'auto' : 'none',
+            transition: 'opacity 0.6s ease-in-out, transform 0.6s ease-in-out',
+            transform: isResultScreen ? 'scale(1)' : 'scale(0.96)',
+            zIndex: 31
+          }}
+          onClick={(e) => e.stopPropagation()} 
+        >
+          {capturedImage && <RenderCapturedPhoto />}
 
-      <div style={{ position: "relative", zIndex: 2, display: "grid", placeItems: "center", gap: 18, padding: "0 24px 42px", paddingBottom: "max(42px, env(safe-area-inset-bottom))" }}>
-        {fase === "foto" && (
-          <label
-            style={{
-              display: "inline-block", padding: "15px 26px", borderRadius: 14,
-              background: "#11161a", color: "var(--jingga)", fontSize: 17, fontWeight: 600,
-              cursor: "pointer", border: "1px solid #2a2f33",
-            }}
-          >
-            Pilih berkas dari penyimpanan
-            <input
-              type="file"
-              accept="image/*,.pdf,.docx"
-              onChange={pilihBerkas}
-              aria-label="Pilih gambar, PDF, atau DOCX dari penyimpanan"
-              style={{ position: "absolute", width: 1, height: 1, opacity: 0 }}
-            />
-          </label>
-        )}
+          {/* AI Orb di tengah dengan ukuran flex yang memberikan jarak seragam atas dan bawah */}
+          <div style={{ 
+            flex: 1, 
+            display: 'flex', 
+            alignItems: 'center', 
+            justifyContent: 'center',
+            transform: 'scale(0.75)',
+            margin: '4px 0'
+          }}>
+             <AiParticleOrb width={180} height={180} isActive={true} />
+          </div>
 
-        {!bolehSentuh && (
-          <>
-            <motion.button
-              onPointerDown={(e) => { e.currentTarget.setPointerCapture(e.pointerId); mulaiRekam(); }}
-              onPointerUp={selesaiRekam}
-              onPointerCancel={selesaiRekam}
-              disabled={fase === "proses"}
-              aria-label={judul}
-              animate={{ scale: fase === "merekam" ? 1.08 : 1 }}
-              whileTap={{ scale: 0.97 }}
-              transition={{ type: "spring", bounce: fase === "merekam" ? 0.35 : 0, duration: 0.4 }}
-              style={{
-                width: 184, height: 184, borderRadius: "50%", border: "none",
-                background: fase === "proses" ? "var(--abu)" : "var(--jingga)",
-                color: "#fff", fontSize: 19, fontWeight: 600, cursor: "pointer",
-                touchAction: "none", WebkitTapHighlightColor: "transparent",
-                boxShadow: fase === "merekam" ? "0 0 0 14px rgba(254,115,0,.22)" : "0 10px 34px rgba(254,115,0,.3)",
-              }}
-            >
-              {judul}
-            </motion.button>
-
-            <form onSubmit={kirimTeks} style={{ display: "flex", gap: 8, width: "100%", maxWidth: 420 }}>
-              <input
-                name="teks"
-                placeholder="atau ketik pertanyaan"
-                aria-label="Ketik pertanyaan"
-                style={{ flex: 1, padding: "13px 16px", borderRadius: 13, border: "1px solid #2a2f33", background: "#11161a", color: "var(--putih)", fontSize: 16 }}
-              />
-              <button
-                type="submit"
-                style={{ padding: "13px 20px", borderRadius: 13, border: "none", background: "#11161a", color: "var(--jingga)", fontSize: 16, fontWeight: 600, cursor: "pointer" }}
+          {/* TEKS OUTPUT & TOMBOL ICON */}
+          <div style={{ width: '100%', maxWidth: '600px', display: 'flex', flexDirection: 'column', gap: '14px', flexShrink: 0 }}>
+            
+            {/* Teks Output (Solid Orange) */}
+            <div style={{ backgroundColor: 'var(--jingga, #f97316)', padding: '18px 20px', borderRadius: '16px', boxShadow: '0 4px 20px rgba(249,115,22,0.2)' }}>
+              <h2 style={{ fontSize: '15px', fontWeight: '700', textAlign: 'center', color: 'white', margin: 0, lineHeight: '1.5' }}>
+                {resultText}
+              </h2>
+            </div>
+            
+            {/* Tombol Icon Action (Horizontal) */}
+            <div style={{ display: 'flex', justifyContent: 'space-evenly', alignItems: 'center', padding: '0 10px' }}>
+              
+              <button 
+                className="btn-icon"
+                onClick={() => setAppState('SHOWING_RESULT')}
+                aria-label="Ulangi Pembacaan"
               >
-                Kirim
+                <svg fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.92-12.28l5.07 5.07"/>
+                </svg>
               </button>
-            </form>
-          </>
-        )}
+              
+              <button 
+                className="btn-icon"
+                onClick={() => setAppState('INIT')}
+                aria-label="Foto Lagi"
+              >
+                <svg fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/>
+                  <circle cx="12" cy="13" r="4"/>
+                </svg>
+              </button>
+              
+              <button 
+                className="btn-icon"
+                onClick={() => {
+                  playSystemAudio("Terima kasih sudah memakai aplikasi kami.");
+                  setAppState('IDLE');
+                }}
+                aria-label="Keluar Aplikasi"
+              >
+                <svg fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/>
+                  <polyline points="16 17 21 12 16 7"/>
+                  <line x1="21" y1="12" x2="9" y2="12"/>
+                </svg>
+              </button>
+
+            </div>
+          </div>
+
+        </div>
       </div>
     </main>
   );
