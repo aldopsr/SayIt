@@ -980,11 +980,17 @@ export default function SayItPage() {
             </div>
 
             <button className="btn-cam" onClick={handleFlip} aria-label="Balik kamera depan dan belakang">
-              <svg fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M8 3 4 7l4 4"/>
-                <path d="M4 7h16"/>
-                <path d="m16 21 4-4-4-4"/>
-                <path d="M20 17H4"/>
+              {/* Bentuk "switch-camera" dari Lucide (MIT), bukan gambaran sendiri:
+                  badan kamera terbelah + lensa + dua chevron arah. Dua panah lurus
+                  yang lama terbaca sebagai "tukar" apa saja, tidak spesifik kamera.
+                  Busur buatan tangan sempat dicoba dan gagal - pada strokeWidth 2.5
+                  kepala panahnya menyatu dengan busur jadi gumpalan di 46 px. */}
+              <svg fill="none" stroke="currentColor" strokeWidth="2.2" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M11 19H4a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2h5"/>
+                <path d="M13 5h7a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2h-5"/>
+                <circle cx="12" cy="12" r="3"/>
+                <path d="m18 22-3-3 3-3"/>
+                <path d="m6 2 3 3-3 3"/>
               </svg>
             </button>
           </div>
