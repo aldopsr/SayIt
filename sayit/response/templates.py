@@ -71,6 +71,14 @@ FIXED_PHRASES: dict[str, str] = {
     "berkas_rusak": "Berkas itu tidak bisa dibaca atau rusak. Coba pilih berkas yang lain.",
     "berkas_lain": ("Kamu bisa memilih berkas lain yang lebih jelas, "
                     "atau memotret langsung dengan menyentuh layar."),
+    # Kendali tombol lewat suara. Pengguna tunanetra tidak melihat tombolnya,
+    # jadi hasil tiap tindakan harus diucapkan, bukan hanya terjadi.
+    "kamera_diputar": "Baik, kameranya saya putar.",
+    "kamera_depan": "Kamera depan aktif.",
+    "kamera_belakang": "Kamera belakang aktif.",
+    "kamera_tunggal": ("Perangkat ini hanya punya satu kamera. "
+                       "Kamu masih bisa memilih berkas dari penyimpanan."),
+    "buka_berkas": "Silakan pilih berkas dari penyimpanan.",
     "tidak_ada_tanggal": "Saya tidak menemukan tanggal kedaluwarsa. Coba foto bagian kemasan yang lain.",
     "tulisan_bukan_tanggal": ("Saya menemukan tulisan, tetapi tidak yakin itu tanggal kedaluwarsa. "
                               "Tulisannya:"),

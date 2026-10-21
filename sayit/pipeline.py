@@ -192,6 +192,13 @@ class Pipeline:
             self.document = None
             self.chunk_index = 0
             return self._jawab(fixed("sampai_jumpa"), intent, "pengguna mengakhiri", catatan)
+        # Dua intent berikut adalah TINDAKAN DI KLIEN: server hanya mengenali dan
+        # melaporkannya. Yang memutar kamera dan membuka pemilih berkas adalah
+        # peramban, karena hanya ia yang punya kameranya.
+        if intent == K.PUTAR_KAMERA:
+            return self._jawab(fixed("kamera_diputar"), intent, "kendali kamera diteruskan ke klien", catatan)
+        if intent == K.PILIH_BERKAS:
+            return self._jawab(fixed("buka_berkas"), intent, "pemilih berkas diteruskan ke klien", catatan)
         if intent == K.LANJUT:
             return self._lanjut(catatan)
 

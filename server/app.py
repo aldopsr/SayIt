@@ -175,6 +175,15 @@ async def tanya(
         ucapan = list(giliran.utterance)
         if giliran.intent in ("UANG", "BACA", "KEDALUWARSA"):
             ucapan += fixed("tindak_lanjut")
+
+        # PUTAR_KAMERA tidak dirender: hasilnya baru diketahui SETELAH klien memutar
+        # kameranya, dan klien yang mengucapkan "kamera depan/belakang aktif".
+        # Merender di sini berarti dua kalimat berturut-turut untuk satu tindakan,
+        # plus satu detik gTTS yang terbuang.
+        if giliran.intent == "PUTAR_KAMERA":
+            return {"teks": giliran.text, "intent": giliran.intent,
+                    "alasan": giliran.reason, "audio": None}
+
         audio, sr = penyuara.render(ucapan)
 
     return {"teks": giliran.text, "intent": giliran.intent, "alasan": giliran.reason,

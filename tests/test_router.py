@@ -121,3 +121,33 @@ def test_keluar_tidak_menelan_kalimat_lain():
     """`sudah` sendirian terlalu lazim, jadi hanya `sudah cukup` yang dihitung."""
     r = ROUTER
     assert r.route("uang ini sudah berapa").intent != K.KELUAR
+
+
+# --------------------------------------------------------------------------- kendali tombol
+
+@pytest.mark.parametrize("teks", [
+    "putar kamera", "ganti kamera", "balik kamera", "tukar kamera",
+    "tolong putar kameranya", "pakai kamera belakang", "ganti ke kamera depan",
+])
+def test_putar_kamera_dikenali(teks):
+    assert ROUTER.route(teks).intent == K.PUTAR_KAMERA
+
+
+@pytest.mark.parametrize("teks", [
+    "pilih berkas", "pilih file", "buka galeri", "ambil dari galeri",
+    "unggah foto", "upload gambar",
+])
+def test_pilih_berkas_dikenali(teks):
+    assert ROUTER.route(teks).intent == K.PILIH_BERKAS
+
+
+def test_putar_tanpa_kamera_bukan_kendali_kamera():
+    """`putar` sendirian terlalu umum; harus berpasangan dengan `kamera`."""
+    assert ROUTER.route("putar lagunya").intent != K.PUTAR_KAMERA
+    assert ROUTER.route("putar balik").intent != K.PUTAR_KAMERA
+
+
+def test_kendali_kamera_tidak_menelan_pertanyaan_uang():
+    """Kalimat tugas yang kebetulan menyebut kamera tetap harus jadi intent tugas."""
+    assert ROUTER.route("ini uang berapa").intent == K.UANG
+    assert ROUTER.route("bacakan tulisan di kertas ini").intent == K.BACA
