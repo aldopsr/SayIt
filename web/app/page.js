@@ -2,21 +2,33 @@
 
 import { useState, useEffect, useRef } from 'react';
 
-// === KOMPONEN AI ORB (PARTIKEL 3D + BATANG FREKUENSI MELINGKAR) ===
-// Bola di tengah dikelilingi batang-batang frekuensi (ujung membulat) yang memanjang-memendek mengikuti suara.
+// === KOMPONEN AI ORB (BOLA PARTIKEL + GELOMBANG FREKUENSI DARI PARTIKEL YANG SAMA) ===
+// Gelombang audio tidak digambar sebagai bidang terpisah, tapi terdiri dari titik-titik (partikel) dengan
+// gaya yang sama seperti bolanya. Saat ada suara, titik-titik itu "keluar" dari bola dan membentuk
+// puncak-puncak frekuensi, lalu masuk lagi ke bola saat suara mereda.
 // mode:
-//  - 'idle'      : tidak ada suara -> batang hilang, bola tenang bernapas pelan
-//  - 'speaking'  : sistem sedang berbicara -> batang bergerak halus, lobus berputar pelan, oranye
-//  - 'listening' : user sedang input suara -> batang lebih liar/cepat naik-turun, oranye-merah pekat, bola mengerut
+//  - 'idle'      : tidak ada suara -> titik gelombang menyatu kembali ke bola, bola tenang bernapas pelan
+//  - 'speaking'  : sistem sedang berbicara -> puncak lebar & lembut, bergerak pelan, oranye
+//  - 'listening' : user sedang input suara -> puncak lebih rapat & cepat, oranye-merah pekat, bola mengerut
 // levelRef (opsional): ref berisi angka 0..1 dari volume mic asli untuk mode 'listening'.
 //   Kalau tidak diisi, amplitudo suara user disimulasikan.
 const ORB_MODES = {
   idle:      { amp: 0.05, speed: 0.4, bars: 0, glow: 0.22, radius: 1.0,  pulse: 0.02, mix: 0, r: 251, g: 140, b: 50 },
-  speaking:  { amp: 0.12, speed: 1.4, bars: 1, glow: 0.4,  radius: 1.03, pulse: 0.06, mix: 0, r: 249, g: 115, b: 22 },
-  listening: { amp: 0.14, speed: 2.0, bars: 1, glow: 0.45, radius: 0.95, pulse: 0.05, mix: 1, r: 225, g: 70,  b: 12 },
+  speaking:  { amp: 0.10, speed: 1.4, bars: 1, glow: 0.4,  radius: 1.03, pulse: 0.06, mix: 0, r: 249, g: 115, b: 22 },
+  listening: { amp: 0.12, speed: 2.0, bars: 1, glow: 0.45, radius: 0.95, pulse: 0.05, mix: 1, r: 225, g: 70,  b: 12 },
 };
 
-const BAR_COUNT = 56;
+// Lapisan gelombang. n1/n2 harus bilangan bulat supaya gelombang menyambung mulus mengelilingi bola.
+const WAVE_LAYERS = [
+  { n1: 3, n2: 7,  s1: 1.3,  s2: -0.9, ph: 0.0, a: 1.0 },
+  { n1: 4, n2: 9,  s1: -1.1, s2: 1.4,  ph: 1.7, a: 0.8 },
+  { n1: 2, n2: 6,  s1: 0.8,  s2: -1.2, ph: 3.1, a: 0.9 },
+  { n1: 5, n2: 11, s1: 1.7,  s2: 1.0,  ph: 4.4, a: 0.7 },
+];
+const WAVE_COLORS_SPEAKING  = [[249,115,22], [251,146,60], [234,88,12], [245,158,11]];
+const WAVE_COLORS_LISTENING = [[225,60,20],  [244,90,60],  [190,40,20], [239,68,68]];
+const WAVE_SAMPLES = 160;
+const WAVE_DOTS = 2400;
 
 function AiParticleOrb({ width = 260, height = 260, mode = 'idle', levelRef = null }) {
   const canvasRef = useRef(null);
@@ -51,27 +63,104 @@ function AiParticleOrb({ width = 260, height = 260, mode = 'idle', levelRef = nu
       });
     }
 
-    // Karakter tiap batang (tetap): kecepatan & fase sendiri supaya panjangnya tidak seragam
-    const rnd = (n) => { const x = Math.sin(n * 12.9898) * 43758.5453; return x - Math.floor(x); };
-    const bars = [];
-    for (let i = 0; i < BAR_COUNT; i++) {
-      bars.push({ ang: (i / BAR_COUNT) * Math.PI * 2 - Math.PI / 2, f: 3 + rnd(i + 1) * 6, p: rnd(i + 99) * Math.PI * 2, h: 0 });
-    }
-
     const R = width * 0.235;
     const cx = width / 2;
     const cy = height / 2;
     const fov = 260;
-    const maxLen = R * 0.75;
-    const barWidth = 4.5;
+    const TWO_PI = Math.PI * 2;
 
     const lerp = (a, b, t) => a + (b - a) * t;
     const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
+    const frac = (v) => v - Math.floor(v);
+
+    // Titik-titik gelombang: tiap titik punya sudut (theta), jarak tetap dari bola (u: 0..1),
+    // dan lapisan. Sebaran 2D merata (low-discrepancy) supaya kerapatannya mirip titik di bola.
+    const dots = [];
+    for (let j = 0; j < WAVE_DOTS; j++) {
+      dots.push({
+        theta: frac((j + 1) * 0.7548776662) * TWO_PI,
+        u: frac((j + 1) * 0.5698402910),
+        layer: j % 4,
+        front: Math.floor(j / 4) % 2 === 1, // sebagian di depan bola, sebagian di belakang
+        ph: frac((j + 1) * 0.3247179572) * TWO_PI,
+      });
+    }
+    const shapes = WAVE_LAYERS.map(() => new Float32Array(WAVE_SAMPLES));
 
     const cur = { ...ORB_MODES.idle }; // nilai yang dihaluskan antar mode
     let spin = 0, wave = 0, wt = 0, time = 0, env = 0;
     let last = performance.now();
     let raf;
+
+    // Hitung profil tinggi gelombang (0..1) tiap lapisan di sekeliling bola
+    const computeShapes = () => {
+      for (let k = 0; k < WAVE_LAYERS.length; k++) {
+        const L = WAVE_LAYERS[k];
+        const arr = shapes[k];
+        for (let n = 0; n < WAVE_SAMPLES; n++) {
+          const th = (n / WAVE_SAMPLES) * TWO_PI - Math.PI / 2;
+          // speaking: puncak lebar & lambat, listening: puncak rapat & cepat
+          const sS = Math.pow(0.55 * (0.5 + 0.5 * Math.sin(th * L.n1 + wt * L.s1 + L.ph)) + 0.45 * (0.5 + 0.5 * Math.sin(th * L.n2 - wt * L.s2 + L.ph * 0.7)), 1.15);
+          const sL = Math.pow(0.55 * (0.5 + 0.5 * Math.sin(th * L.n1 * 2 + wt * L.s1 * 1.6 + L.ph)) + 0.45 * (0.5 + 0.5 * Math.sin(th * L.n2 * 2 - wt * L.s2 * 1.6 + L.ph * 0.7)), 1.15);
+          arr[n] = sS + (sL - sS) * cur.mix;
+        }
+      }
+    };
+
+    // Gambar titik-titik gelombang (pass belakang atau depan bola)
+    const drawWaveDots = (front, baseR) => {
+      if (cur.bars < 0.02) return;
+      const innerR = baseR * 0.9; // mulai sedikit di dalam bola supaya menyatu
+      const softEdge = R * 0.14;
+      const amps = WAVE_LAYERS.map((L) => L.a * R * 1.0);
+      const live = cur.bars * (0.25 + 0.75 * env);
+
+      for (let i = 0; i < dots.length; i++) {
+        const d = dots[i];
+        if (d.front !== front) continue;
+
+        const hMax = amps[d.layer];
+        const rho = d.u * hMax;                                  // jarak titik dari bola kalau gelombang penuh
+        const idx = Math.min(WAVE_SAMPLES - 1, (d.theta / TWO_PI * WAVE_SAMPLES) | 0);
+        const H = shapes[d.layer][idx] * hMax * live;            // tinggi gelombang saat ini di sudut ini
+        const vis = clamp((H - rho) / softEdge, 0, 1);           // titik muncul kalau gelombang sudah sampai ke posisinya
+        if (vis <= 0) continue;
+
+        const rr = innerR + rho * (1 + 0.05 * Math.sin(time * 2.5 + d.ph));
+        const ang = d.theta - Math.PI / 2;
+        const px = cx + Math.cos(ang) * rr;
+        const py = cy + Math.sin(ang) * rr;
+
+        const far = rho / hMax; // 0 dekat bola, 1 ujung gelombang
+        const c0 = WAVE_COLORS_SPEAKING[d.layer], c1 = WAVE_COLORS_LISTENING[d.layer];
+        const cr = lerp(lerp(c0[0], c1[0], cur.mix), 253, far * 0.45);
+        const cg = lerp(lerp(c0[1], c1[1], cur.mix), 186, far * 0.45);
+        const cb = lerp(lerp(c0[2], c1[2], cur.mix), 116, far * 0.45);
+        const alpha = (0.4 + 0.6 * (1 - far * 0.6)) * vis * (front ? 1 : 0.7);
+        const size = (1.3 + 0.9 * (1 - far)) * (0.9 + 0.25 * env) * (0.6 + 0.4 * vis);
+
+        ctx.fillStyle = `rgba(${cr | 0},${cg | 0},${cb | 0},${alpha.toFixed(2)})`;
+        ctx.beginPath();
+        ctx.arc(px, py, size, 0, TWO_PI);
+        ctx.fill();
+      }
+
+      // Kontur: deretan titik di tepi tiap gelombang, supaya bentuk frekuensinya jelas terbaca
+      for (let k = 0; k < WAVE_LAYERS.length; k++) {
+        if ((k % 2 === 1) !== front) continue;
+        const hMax = amps[k];
+        const c0 = WAVE_COLORS_SPEAKING[k], c1 = WAVE_COLORS_LISTENING[k];
+        ctx.fillStyle = `rgba(${lerp(c0[0], c1[0], cur.mix) | 0},${lerp(c0[1], c1[1], cur.mix) | 0},${lerp(c0[2], c1[2], cur.mix) | 0},0.9)`;
+        for (let n = 0; n < WAVE_SAMPLES; n += 2) {
+          const H = shapes[k][n] * hMax * live;
+          if (H < 3) continue;
+          const ang = (n / WAVE_SAMPLES) * TWO_PI - Math.PI / 2;
+          ctx.beginPath();
+          ctx.arc(cx + Math.cos(ang) * (innerR + H), cy + Math.sin(ang) * (innerR + H), 1.5, 0, TWO_PI);
+          ctx.fill();
+        }
+      }
+    };
 
     const render = (now) => {
       const dt = clamp((now - last) / 1000, 0.001, 0.05);
@@ -107,6 +196,7 @@ function AiParticleOrb({ width = 260, height = 260, mode = 'idle', levelRef = nu
       env += (rawEnv - env) * (1 - Math.exp(-dt * 14));
 
       const colStr = (a) => `rgba(${cur.r | 0},${cur.g | 0},${cur.b | 0},${a.toFixed(3)})`;
+      const baseR = R * cur.radius * (1 + cur.pulse * env * 2);
 
       ctx.clearRect(0, 0, width, height);
 
@@ -117,8 +207,12 @@ function AiParticleOrb({ width = 260, height = 260, mode = 'idle', levelRef = nu
       ctx.fillStyle = grad;
       ctx.fillRect(0, 0, width, height);
 
+      if (cur.bars >= 0.02) computeShapes();
+
+      // Titik gelombang yang berada di belakang bola
+      drawWaveDots(false, baseR);
+
       // Partikel bola
-      const baseR = R * cur.radius * (1 + cur.pulse * env * 2);
       const cosY = Math.cos(spin), sinY = Math.sin(spin);
       const tilt = 0.35 + Math.sin(time * 0.4) * 0.08;
       const cosX = Math.cos(tilt), sinX = Math.sin(tilt);
@@ -155,32 +249,8 @@ function AiParticleOrb({ width = 260, height = 260, mode = 'idle', levelRef = nu
         ctx.fill();
       }
 
-      // Batang frekuensi melingkar di sekeliling bola (ujung membulat)
-      if (cur.bars > 0.02) {
-        const r0 = baseR * (1 + cur.amp) + 8;
-        const follow = 1 - Math.exp(-dt * lerp(10, 24, cur.mix)); // listening: lebih responsif
-        const sp = 1 + 1.2 * cur.mix;
-        ctx.lineCap = 'round';
-        ctx.lineWidth = barWidth;
-
-        for (const bar of bars) {
-          const jit = Math.abs(Math.sin(time * bar.f * sp + bar.p));
-          const lobeS = 0.5 + 0.5 * Math.sin(bar.ang * 3 + wt * 1.6); // speaking: lobus berputar pelan
-          const lobeL = 0.5 + 0.5 * Math.sin(bar.ang * 7 - wt * 2.4); // listening: lebih acak
-          const lobe = lobeS + (lobeL - lobeS) * cur.mix;
-          const t = Math.pow(0.15 + 0.85 * (0.55 * jit + 0.45 * lobe), 1.5);
-          const targetH = t * (0.2 + 0.8 * env);
-          bar.h += (targetH - bar.h) * follow;
-
-          const len = 1 + bar.h * maxLen * cur.bars;
-          const cos = Math.cos(bar.ang), sin = Math.sin(bar.ang);
-          ctx.strokeStyle = colStr((0.55 + 0.45 * bar.h) * cur.bars);
-          ctx.beginPath();
-          ctx.moveTo(cx + cos * r0, cy + sin * r0);
-          ctx.lineTo(cx + cos * (r0 + len), cy + sin * (r0 + len));
-          ctx.stroke();
-        }
-      }
+      // Titik gelombang yang berada di depan bola
+      drawWaveDots(true, baseR);
 
       raf = requestAnimationFrame(render);
     };
@@ -192,6 +262,31 @@ function AiParticleOrb({ width = 260, height = 260, mode = 'idle', levelRef = nu
   return <canvas ref={canvasRef} style={{ display: 'block', width, height }} />;
 }
 
+// === LOGO SAYIT (inline SVG dari sayit-light.svg, tanpa background, tampil di semua screen) ===
+function SayItLogo({ height = 36 }) {
+  return (
+    <svg
+      role="img"
+      aria-label="SayIt"
+      xmlns="http://www.w3.org/2000/svg"
+      width={(height * 800) / 280}
+      height={height}
+      viewBox="0 0 800 280"
+      style={{ display: 'block' }}
+    >
+      <g transform="translate(70 0)">
+        <g transform="translate(66 40)">
+          <g fill="none" stroke="#FF6900" strokeWidth="23" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M58 22H32Q12 22 12 42V62 M130 22H156Q176 22 176 42V62 M12 130V150Q12 170 32 170H58 M130 170H156Q176 170 176 150V130" />
+            <path d="M58 86V114 M94 61V139 M130 86V114" />
+          </g>
+        </g>
+        <text x="294" y="191" fill="#111111" fontFamily="Arial, Helvetica, sans-serif" fontSize="134" fontWeight="700" letterSpacing="-6">SayIt</text>
+      </g>
+    </svg>
+  );
+}
+
 export default function SayItPage() {
   // === STATE MANAGEMENT ===
   const [appState, setAppState] = useState('INIT');
@@ -199,10 +294,16 @@ export default function SayItPage() {
   const [resultText, setResultText] = useState('');
   const [capturedImage, setCapturedImage] = useState(null);
   const [isSpeaking, setIsSpeaking] = useState(false); // sistem sedang berbicara (TTS)
+  const [facingMode, setFacingMode] = useState('user'); // 'user' = kamera depan, 'environment' = kamera belakang
+  const [capturedMirror, setCapturedMirror] = useState(true); // foto dari kamera depan ditampilkan mirror, kamera belakang & upload tidak
   const [orbSlot, setOrbSlot] = useState({ top: null, scale: 0.9 }); // posisi orb di layar hasil
 
   // === REFS ===
   const videoRef = useRef(null);
+  const streamRef = useRef(null);
+  const facingRef = useRef('user');
+  const isFlipping = useRef(false);
+  const fileInputRef = useRef(null);
   const isSpeechSynthesisSpeaking = useRef(false);
   const utteranceId = useRef(0);
   const orbSlotRef = useRef(null);
@@ -251,34 +352,53 @@ export default function SayItPage() {
     }, 3000);
   };
 
+  // === KAMERA ===
+  // Menyalakan kamera sesuai arah (depan/belakang). Stream lama dimatikan dulu,
+  // karena banyak HP tidak bisa membuka dua kamera sekaligus.
+  // exact = true dipakai saat flip, supaya gagal (dan kita beri tahu user) kalau kamera itu tidak ada.
+  const startStream = async (facing, exact = false) => {
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach((t) => t.stop());
+      streamRef.current = null;
+    }
+    const stream = await navigator.mediaDevices.getUserMedia({
+      video: {
+        facingMode: exact ? { exact: facing } : { ideal: facing },
+        width: { ideal: 1920 },
+        height: { ideal: 1080 }
+      }
+    });
+    streamRef.current = stream;
+    if (videoRef.current) videoRef.current.srcObject = stream;
+    return stream;
+  };
+
+  // Matikan kamera saat halaman ditutup
+  useEffect(() => {
+    return () => {
+      if (streamRef.current) streamRef.current.getTracks().forEach((t) => t.stop());
+    };
+  }, []);
+
   // === EFFECTS BERDASARKAN STATE ===
   useEffect(() => {
     if (appState === 'INIT') {
       let isMounted = true;
       setCapturedImage(null);
-      
-      const constraints = {
-        video: {
-          facingMode: 'user', 
-          width: { ideal: 1920 },
-          height: { ideal: 1080 }
-        }
-      };
 
-      navigator.mediaDevices.getUserMedia(constraints)
-        .then(stream => {
-          if (isMounted && videoRef.current) {
-            videoRef.current.srcObject = stream;
+      startStream(facingRef.current)
+        .then(() => {
+          if (isMounted) {
             setAppState('CAMERA_READY');
             playSystemAudio("Selamat datang di SayIt. Silakan arahkan kamera, lalu ketuk layar untuk memotret.");
           }
         })
         .catch(err => {
-            console.error(err);
-            peringatkan("Kamera tidak ditemukan", "Periksa izin kamera.");
+          console.error(err);
+          peringatkan("Kamera tidak ditemukan", "Periksa izin kamera.");
         });
-        
-        return () => { isMounted = false; };
+
+      return () => { isMounted = false; };
     }
   }, [appState]);
 
@@ -343,11 +463,80 @@ export default function SayItPage() {
     };
   }, [resultText]);
 
+  // Lanjut ke tahap membaca foto (dipakai oleh jepretan kamera maupun foto upload)
+  const proceedWithPhoto = (imageUrl, mirrored) => {
+    setCapturedImage(imageUrl);
+    setCapturedMirror(mirrored);
+    setAppState('PROCESSING_VISION');
+    playSystemAudio("Sedang membaca foto.");
+
+    setTimeout(() => {
+      setAppState('PROMPTING_Q');
+      playSystemAudio("Apa yang ingin anda tanyakan dari foto ini?", 'LISTENING_Q');
+    }, 3000);
+  };
+
+  // Tombol flip: ganti kamera depan <-> belakang
+  const handleFlip = async (e) => {
+    e.stopPropagation(); // jangan ikut memicu "ketuk layar untuk memotret"
+    if (appState !== 'CAMERA_READY' || isFlipping.current) return;
+    isFlipping.current = true;
+
+    const prev = facingRef.current;
+    const next = prev === 'user' ? 'environment' : 'user';
+    try {
+      await startStream(next, true);
+      facingRef.current = next;
+      setFacingMode(next);
+      playSystemAudio(next === 'environment' ? "Kamera belakang aktif." : "Kamera depan aktif.");
+    } catch (err) {
+      console.error(err);
+      try { await startStream(prev); } catch (err2) { console.error(err2); }
+      peringatkan("Kamera tidak dapat diganti", "Perangkat ini mungkin tidak memiliki kamera lain.");
+    } finally {
+      isFlipping.current = false;
+    }
+  };
+
+  // Tombol upload: buka galeri/file perangkat
+  const handleUploadClick = (e) => {
+    e.stopPropagation();
+    if (appState !== 'CAMERA_READY') return;
+    if (fileInputRef.current) fileInputRef.current.click();
+  };
+
+  const handleFileChange = (e) => {
+    e.stopPropagation();
+    const file = e.target.files && e.target.files[0];
+    e.target.value = ''; // supaya foto yang sama bisa dipilih lagi
+    if (!file || appState !== 'CAMERA_READY') return;
+
+    const url = URL.createObjectURL(file);
+    const img = new Image();
+    img.onload = () => {
+      // Perkecil kalau sangat besar (maks 1600px) supaya ringan, dan orientasi EXIF ikut dirapikan
+      const maxSide = 1600;
+      const sc = Math.min(1, maxSide / Math.max(img.naturalWidth, img.naturalHeight));
+      const c = document.createElement('canvas');
+      c.width = Math.round(img.naturalWidth * sc);
+      c.height = Math.round(img.naturalHeight * sc);
+      c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+      URL.revokeObjectURL(url);
+      proceedWithPhoto(c.toDataURL('image/jpeg', 0.9), false);
+    };
+    img.onerror = () => {
+      URL.revokeObjectURL(url);
+      peringatkan("Foto tidak dapat dibuka", "Silakan pilih foto lain.");
+    };
+    img.src = url;
+  };
+
   // === HANDLER KLIK ===
   const handleScreenClick = () => {
     if (isSpeechSynthesisSpeaking.current) return;
 
     if (appState === 'CAMERA_READY') {
+      let imageUrl = null;
       if (videoRef.current) {
         const video = videoRef.current;
         const vw = video.videoWidth;
@@ -378,17 +567,10 @@ export default function SayItPage() {
         
         ctx.drawImage(video, cropX, cropY, cropW, cropH, 0, 0, frameW, frameH);
         
-        const imageUrl = canvas.toDataURL('image/jpeg');
-        setCapturedImage(imageUrl);
+        imageUrl = canvas.toDataURL('image/jpeg');
       }
 
-      setAppState('PROCESSING_VISION');
-      playSystemAudio("Sedang membaca foto.");
-      
-      setTimeout(() => {
-        setAppState('PROMPTING_Q');
-        playSystemAudio("Apa yang ingin anda tanyakan dari foto ini?", 'LISTENING_Q');
-      }, 3000);
+      proceedWithPhoto(imageUrl, facingRef.current === 'user');
     }
   };
 
@@ -453,7 +635,7 @@ export default function SayItPage() {
         maxWidth: '80%',
         objectFit: 'contain',
         borderRadius: '16px',
-        transform: 'scaleX(-1)',
+        transform: capturedMirror ? 'scaleX(-1)' : 'none',
         boxShadow: '0 10px 30px rgba(0,0,0,0.1)'
       }}
     />
@@ -499,12 +681,46 @@ export default function SayItPage() {
           width: 26px;
           height: 26px;
         }
+        .btn-cam {
+          pointer-events: auto;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          width: 56px;
+          height: 56px;
+          padding: 0;
+          border: none;
+          border-radius: 50%;
+          background-color: rgba(255, 255, 255, 0.92);
+          color: #ea580c;
+          box-shadow: 0 4px 10px rgba(0,0,0,0.35);
+          cursor: pointer;
+          transition: transform 0.2s ease, background-color 0.2s ease;
+          -webkit-tap-highlight-color: transparent;
+        }
+        .btn-cam:active {
+          transform: scale(0.92);
+        }
+        .btn-cam svg {
+          width: 26px;
+          height: 26px;
+        }
       `}} />
 
       {/* Pembaca Layar Wajib (SR) */}
       <div aria-live="assertive" aria-atomic="true">
         <p className="sr">{srText}</p>
       </div>
+
+      {/* Input file tersembunyi untuk tombol upload */}
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept="image/*"
+        onChange={handleFileChange}
+        onClick={(e) => e.stopPropagation()}
+        style={{ display: 'none' }}
+      />
 
       {/* Layer Kamera */}
       <video 
@@ -519,7 +735,7 @@ export default function SayItPage() {
           width: '100%',
           height: '100%',
           objectFit: 'cover', 
-          transform: 'scaleX(-1)', 
+          transform: facingMode === 'user' ? 'scaleX(-1)' : 'none', 
           zIndex: 0
         }}
       />
@@ -537,13 +753,47 @@ export default function SayItPage() {
             <div style={{ position: 'absolute', bottom: 0, right: 0, width: '40px', height: '40px', borderBottom: '6px solid var(--jingga, #f97316)', borderRight: '6px solid var(--jingga, #f97316)' }}></div>
           </div>
 
-          <div style={{ position: 'absolute', bottom: '40px', left: '50%', transform: 'translateX(-50%)', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+          {/* Baris bawah: upload (kiri) - shutter (tengah) - flip kamera (kanan) */}
+          <div style={{ position: 'absolute', bottom: '40px', left: 0, right: 0, height: '76px', padding: '0 10.5%', boxSizing: 'border-box', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <button className="btn-cam" onClick={handleUploadClick} aria-label="Unggah foto dari perangkat">
+              <svg fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                <polyline points="17 8 12 3 7 8"/>
+                <line x1="12" y1="3" x2="12" y2="15"/>
+              </svg>
+            </button>
+
             <div style={{ width: '76px', height: '76px', backgroundColor: 'white', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 4px 10px rgba(0,0,0,0.5)' }}>
               <div style={{ width: '60px', height: '60px', backgroundColor: 'var(--jingga, #f97316)', borderRadius: '50%' }}></div>
             </div>
+
+            <button className="btn-cam" onClick={handleFlip} aria-label="Balik kamera depan dan belakang">
+              <svg fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M8 3 4 7l4 4"/>
+                <path d="M4 7h16"/>
+                <path d="m16 21 4-4-4-4"/>
+                <path d="M20 17H4"/>
+              </svg>
+            </button>
           </div>
         </div>
       )}
+
+      {/* === LOGO SAYIT (tampil di semua screen, tengah atas) === */}
+      {/* Di screen kamera/pertanyaan/hasil: di atas (ukuran normal). Saat orb di tengah (memproses): turun ke tepat di atas orb dan membesar 2x, lalu kembali naik & mengecil saat ganti screen */}
+      <div style={{
+        position: 'absolute',
+        top: '14px',
+        left: '50%',
+        transform: `translate(-50%, ${isProcessing ? 'calc(50vh - 204px)' : '0px'}) scale(${isProcessing ? 2 : 1})`,
+        transformOrigin: '50% 100%', // membesar ke atas, jarak ke orb tetap
+        transition: 'transform 0.8s cubic-bezier(0.4, 0, 0.2, 1)',
+        filter: 'drop-shadow(0 0 3px rgba(255,255,255,0.85))', // biar teks tetap terbaca di atas video kamera
+        zIndex: 40,
+        pointerEvents: 'none'
+      }}>
+        <SayItLogo />
+      </div>
 
       {/* === PERSISTENT AI VOICE ORB (Untuk Screen Loading/Pertanyaan) === */}
       <div style={orbPosStyle}>
@@ -575,8 +825,8 @@ export default function SayItPage() {
             zIndex: 31
           }}
         >
-          {/* Foto besar di atas (10% - 62% layar) */}
-          <div style={{ position: 'absolute', top: '10%', height: '52%', left: 0, right: 0, display: 'flex', justifyContent: 'center' }}>
+          {/* Foto besar di atas, sejajar dengan posisi foto di layar hasil (ukuran tetap 52% tinggi layar) */}
+          <div style={{ position: 'absolute', top: 'max(5.5vh, 64px)', height: '52%', left: 0, right: 0, display: 'flex', justifyContent: 'center' }}>
             {photoImg}
           </div>
           
@@ -596,7 +846,7 @@ export default function SayItPage() {
             display: 'flex',
             flexDirection: 'column',
             alignItems: 'center',
-            paddingTop: '5.5vh',
+            paddingTop: 'max(5.5vh, 64px)', // sisakan ruang untuk logo di atas
             paddingBottom: '10vh',
             opacity: isResultScreen ? 1 : 0,
             pointerEvents: isResultScreen ? 'auto' : 'none',
