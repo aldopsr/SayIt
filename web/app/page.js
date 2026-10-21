@@ -30,6 +30,12 @@ const WAVE_COLORS_LISTENING = [[225,60,20],  [244,90,60],  [190,40,20], [239,68,
 const WAVE_SAMPLES = 160;
 const WAVE_DOTS = 2400;
 
+// Ambang RMS mikrofon: di bawah ini dianggap hening. Dikalibrasi kasar di laptop;
+// ponytail: satu angka, bukan AGC - naikkan kalau ruangnya berisik.
+const AMBANG_SUARA = 0.015;
+const HENING_MS = 3000;    // spec 4: berhenti mendengar setelah 3 detik hening
+const IDLE_MS = 30000;     // spec 7: tutup aplikasi setelah 30 detik tanpa interaksi
+
 function AiParticleOrb({ width = 260, height = 260, mode = 'idle', levelRef = null }) {
   const canvasRef = useRef(null);
   const modeRef = useRef(mode);
@@ -307,11 +313,55 @@ export default function SayItPage() {
   const isSpeechSynthesisSpeaking = useRef(false);
   const utteranceId = useRef(0);
   const orbSlotRef = useRef(null);
+  const nivRef = useRef(0);                        // volume mic 0..1, dibaca orb
+  const aktifRef = useRef(0);                      // kapan terakhir ada aktivitas (sentuh ATAU suara)
+  const timersRef = useRef([]);
+  const hentiDengarRef = useRef(null);             // membatalkan sesi mendengar yang berjalan
+  const dengarGen = useRef(0);                     // penjaga sesi mendengar, lihat dengarkan()
+
+  // === KELOMPOK LAYAR ===
+  // Dideklarasikan di atas karena efek timer idle (spec 7) membacanya, dan const
+  // tidak boleh dibaca sebelum baris deklarasinya.
+  const isCamera = appState === 'INIT' || appState === 'CAMERA_READY';
+  const isProcessing = appState === 'PROCESSING_VISION' || appState === 'PROCESSING_Q';
+  const isQuestionScreen = appState === 'PROMPTING_Q' || appState === 'LISTENING_Q';
+  const isResultScreen = appState === 'SHOWING_RESULT' || appState === 'PROMPTING_MENU'
+    || appState === 'LISTENING_MENU' || appState === 'HASIL_SUNYI';
+
+  // === TIMER: semua perpindahan state tertunda lewat sini ===
+  // Timer yang tertinggal adalah AKAR dari bug "Foto Lagi butuh dua klik": timer
+  // lama (onend -> nextState, atau simulasi mendengar) menimpa state yang baru
+  // saja diset oleh klik pengguna. Jadi tiap perpindahan state membatalkannya dulu.
+  const bersihkanTimer = () => {
+    timersRef.current.forEach(clearTimeout);
+    timersRef.current = [];
+  };
+  const nanti = (fn, ms) => { timersRef.current.push(setTimeout(fn, ms)); };
+
+  /** Satu-satunya jalan berpindah state. Membatalkan timer dan sesi mendengar dulu. */
+  const pindah = (state) => {
+    bersihkanTimer();
+    dengarGen.current++;                           // batalkan sesi dengar yang belum mulai
+    if (hentiDengarRef.current) hentiDengarRef.current();
+    setAppState(state);
+  };
+
+  /** Hentikan ucapan sistem (barge-in).
+   *
+   *  utteranceId WAJIB ikut dinaikkan: cancel() memicu onend, dan tanpa ini onend
+   *  itu masih dianggap sah lalu menjadwalkan perpindahan state yang tidak diminta
+   *  pengguna - persis kebalikan dari maksud barge-in. */
+  const hentikanSuara = () => {
+    utteranceId.current++;
+    if (typeof window !== 'undefined') window.speechSynthesis?.cancel();
+    isSpeechSynthesisSpeaking.current = false;
+    setIsSpeaking(false);
+  };
 
   // === FUNGSI UTILITAS: AUDIO & AKSESIBILITAS ===
-  const playSystemAudio = (textUtama, nextStateDelay = null) => {
+  const playSystemAudio = (textUtama, nextStateDelay = null, selesai = null) => {
     setSrText(textUtama);
-    
+
     window.speechSynthesis.cancel();
     const id = ++utteranceId.current; // abaikan event dari utterance lama yang di-cancel
     isSpeechSynthesisSpeaking.current = true;
@@ -319,25 +369,39 @@ export default function SayItPage() {
 
     const utterance = new SpeechSynthesisUtterance(textUtama);
     utterance.lang = 'id-ID';
-    
-    utterance.onend = () => {
-      if (id !== utteranceId.current) return;
+
+    let sudah = false;
+    const habis = () => {
+      if (sudah || id !== utteranceId.current) return;
+      sudah = true;
       isSpeechSynthesisSpeaking.current = false;
       setIsSpeaking(false);
-      if (nextStateDelay) {
-        setTimeout(() => {
-          setAppState(nextStateDelay);
-        }, 1000); 
-      }
-    };
-    
-    utterance.onerror = () => {
-      if (id !== utteranceId.current) return;
-      isSpeechSynthesisSpeaking.current = false;
-      setIsSpeaking(false);
+      if (nextStateDelay) nanti(() => pindah(nextStateDelay), 1000);
+      if (selesai) selesai();
     };
 
+    utterance.onend = habis;
+    // Suara Indonesia tidak selalu ada di tiap perangkat. Kalau gagal, onerror
+    // harus tetap melanjutkan alur - kalau tidak, pengguna tunanetra terjebak.
+    utterance.onerror = habis;
+
     window.speechSynthesis.speak(utterance);
+
+    // PENJAGA WAKTU. Seluruh alur bergantung pada onend, dan onend TIDAK SELALU
+    // BERBUNYI: cancel() yang langsung disusul speak() kadang membuat ucapan baru
+    // ditelan peramban (terbukti saat menguji tombol Keluar - tanpa penjaga ini
+    // aplikasinya tidak pernah menutup). Kalau itu terjadi, alur harus tetap jalan;
+    // pengguna tunanetra tidak bisa melihat bahwa sistemnya menggantung.
+    // ponytail: perkiraan kasar dari jumlah kata, bukan pengukuran durasi suara.
+    const perkiraanMs = 1800 + textUtama.trim().split(/\s+/).length * 420;
+    const penjaga = () => {
+      if (sudah) return;
+      // Masih benar-benar bicara (perkiraannya terlalu pendek) -> tunggu, jangan
+      // potong di tengah kalimat. Yang dipaksa lanjut hanya ucapan yang ditelan.
+      if (window.speechSynthesis?.speaking) { nanti(penjaga, 1500); return; }
+      habis();
+    };
+    nanti(penjaga, perkiraanMs);
   };
 
   const peringatkan = (pesan, aksiBerikutnya) => {
@@ -345,11 +409,85 @@ export default function SayItPage() {
     playSystemAudio(teksPeringatan);
   };
 
-  // === MEKANISME SIMULASI MENDENGARKAN (UI MOCK MODE) ===
-  const startListening = (onSilenceCallback) => {
-    setTimeout(() => {
-      onSilenceCallback();
-    }, 3000);
+  // === MENDENGARKAN: mikrofon sungguhan + deteksi hening 3 detik (spec 4) ===
+  // Mengisi nivRef supaya orb bergerak mengikuti suara asli pengguna - orb sudah
+  // mendukungnya lewat prop levelRef, hanya belum pernah dialiri.
+  // Selesai sendiri setelah HENING_MS tanpa suara di atas AMBANG_SUARA.
+  // ponytail: analyser saja, belum merekam. MediaRecorder masuk di sini juga saat
+  // disambungkan ke /api/tanya - tidak ada logika layar yang perlu berubah.
+  const dengarkan = (saatSelesai) => {
+    if (!navigator.mediaDevices?.getUserMedia) {
+      peringatkan('Mikrofon tidak tersedia di perangkat ini',
+                  'Kamu masih bisa mengetuk layar untuk memotret ulang.');
+      return;
+    }
+    const gen = ++dengarGen.current;
+    navigator.mediaDevices.getUserMedia({ audio: true }).then((stream) => {
+      // Pengguna bisa menyela SELAGI izin mikrofon masih diminta. Tanpa penjaga ini
+      // sesinya tetap jalan lalu memindahkan state yang sudah tidak diinginkan -
+      // pola yang sama dengan penjaga utteranceId di playSystemAudio.
+      if (gen !== dengarGen.current) {
+        stream.getTracks().forEach((t) => t.stop());
+        return;
+      }
+      const ctx = new (window.AudioContext || window.webkitAudioContext)();
+      const analyser = ctx.createAnalyser();
+      analyser.fftSize = 1024;
+      ctx.createMediaStreamSource(stream).connect(analyser);
+      const buf = new Float32Array(analyser.fftSize);
+
+      let raf = 0;
+      let diamSejak = performance.now();
+      let hidup = true;
+
+      const tutup = () => {
+        if (!hidup) return;
+        hidup = false;
+        cancelAnimationFrame(raf);
+        stream.getTracks().forEach((t) => t.stop());
+        ctx.close().catch(() => {});
+        nivRef.current = 0;
+        hentiDengarRef.current = null;
+      };
+
+      // Dipanggil pindah(): pengguna menyela, jadi jangan lanjutkan alur lama.
+      hentiDengarRef.current = tutup;
+
+      const tik = () => {
+        analyser.getFloatTimeDomainData(buf);
+        let jml = 0;
+        for (let i = 0; i < buf.length; i++) jml += buf[i] * buf[i];
+        const rms = Math.sqrt(jml / buf.length);
+        nivRef.current = Math.min(1, rms * 8);
+
+        const now = performance.now();
+        if (rms > AMBANG_SUARA) {
+          diamSejak = now;
+          aktifRef.current = now;      // suara juga menunda penutupan otomatis (spec 7)
+        }
+        if (now - diamSejak >= HENING_MS) {
+          tutup();
+          if (gen === dengarGen.current) saatSelesai();
+          return;
+        }
+        raf = requestAnimationFrame(tik);
+      };
+      tik();
+    }).catch(() => {
+      peringatkan('Mikrofon belum diizinkan',
+                  'Buka pengaturan izin situs di peramban, nyalakan mikrofon, lalu ketuk layar lagi.');
+    });
+  };
+
+  // === SEAM BACKEND ===
+  // ponytail: dua fungsi ini adalah satu-satunya tempat yang perlu diganti saat
+  // disambungkan ke server - jadi POST /api/foto dan POST /api/tanya. Layar sudah
+  // menunggu PROMISE, bukan timer, jadi durasinya otomatis mengikuti proses nyata.
+  const jeda = (ms) => new Promise((r) => { timersRef.current.push(setTimeout(r, ms)); });
+  const kirimFoto = async () => { await jeda(1200); };
+  const kirimPertanyaan = async () => {
+    await jeda(1800);
+    return 'Nominal uang ini adalah dua ribu rupiah.';
   };
 
   // === KAMERA ===
@@ -389,7 +527,7 @@ export default function SayItPage() {
       startStream(facingRef.current)
         .then(() => {
           if (isMounted) {
-            setAppState('CAMERA_READY');
+            pindah('CAMERA_READY');
             playSystemAudio("Selamat datang di SayIt. Silakan arahkan kamera, lalu ketuk layar untuk memotret.");
           }
         })
@@ -404,20 +542,29 @@ export default function SayItPage() {
 
   useEffect(() => {
     if (appState === 'LISTENING_Q') {
-      startListening(() => {
-        setAppState('PROCESSING_Q');
-      });
+      dengarkan(() => pindah('PROCESSING_Q'));
     }
   }, [appState]);
 
+  // Spec 3: orb berputar selama prosesnya BERJALAN, bukan selama durasi tetap.
+  // Pindah layar terjadi saat promise selesai - tidak ada timeout simulasi lagi.
   useEffect(() => {
-    if (appState === 'PROCESSING_Q') {
-      playSystemAudio("Sedang memproses pertanyaan Anda.");
-      setTimeout(() => {
-        setResultText("Nominal uang ini adalah dua ribu rupiah.");
-        setAppState('SHOWING_RESULT');
-      }, 3000); 
-    }
+    if (appState !== 'PROCESSING_Q') return;
+    let batal = false;
+    playSystemAudio('Sedang memproses pertanyaan Anda.');
+    kirimPertanyaan()
+      .then((jawab) => {
+        if (batal) return;
+        setResultText(jawab);
+        pindah('SHOWING_RESULT');
+      })
+      .catch(() => {
+        if (batal) return;
+        peringatkan('Tidak bisa menghubungi server SayIt',
+                    'Periksa koneksi internetmu, lalu ketuk layar untuk memotret lagi.');
+        pindah('INIT');
+      });
+    return () => { batal = true; };
   }, [appState]);
 
   useEffect(() => {
@@ -434,9 +581,12 @@ export default function SayItPage() {
 
   useEffect(() => {
     if (appState === 'LISTENING_MENU') {
-      startListening(() => {
-        setAppState('INIT'); 
-      });
+      // ponytail: jawaban menu belum dikenali (butuh STT dari backend), jadi hening
+      // 3 detik berarti pengguna tidak menjawab -> diam di layar hasil, bukan
+      // memotret ulang diam-diam. Timer idle 30 detik yang menutup aplikasinya.
+      // HASIL_SUNYI, bukan SHOWING_RESULT: yang kedua membacakan ulang lalu kembali
+      // ke menu lagi - lingkaran suara tanpa akhir.
+      dengarkan(() => pindah('HASIL_SUNYI'));
     }
   }, [appState]);
 
@@ -464,22 +614,82 @@ export default function SayItPage() {
   }, [resultText]);
 
   // Lanjut ke tahap membaca foto (dipakai oleh jepretan kamera maupun foto upload)
-  const proceedWithPhoto = (imageUrl, mirrored) => {
+  // Spec 3: menunggu promise, bukan timeout. Orb berputar selama prosesnya jalan.
+  const proceedWithPhoto = async (imageUrl, mirrored) => {
     setCapturedImage(imageUrl);
     setCapturedMirror(mirrored);
-    setAppState('PROCESSING_VISION');
-    playSystemAudio("Sedang membaca foto.");
+    pindah('PROCESSING_VISION');
+    playSystemAudio('Sedang membaca foto.');
 
-    setTimeout(() => {
-      setAppState('PROMPTING_Q');
-      playSystemAudio("Apa yang ingin anda tanyakan dari foto ini?", 'LISTENING_Q');
-    }, 3000);
+    try {
+      await kirimFoto(imageUrl);
+    } catch {
+      peringatkan('Foto tidak bisa diproses', 'Ketuk layar untuk memotret ulang.');
+      pindah('INIT');
+      return;
+    }
+    pindah('PROMPTING_Q');
+    playSystemAudio('Apa yang ingin anda tanyakan dari foto ini?', 'LISTENING_Q');
   };
+
+  /** Matikan kamera dan semua suara. Dipakai saat keluar dan saat idle. */
+  const matikanSemua = () => {
+    bersihkanTimer();
+    if (hentiDengarRef.current) hentiDengarRef.current();
+    hentikanSuara();
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach((t) => t.stop());
+      streamRef.current = null;
+    }
+  };
+
+  /** Tutup aplikasi (spec 6 dan 7).
+   *
+   *  Halaman web TIDAK BISA menutup dirinya sendiri kecuali dibuka oleh skrip.
+   *  Di PWA terpasang (manifest display: standalone) window.close() diizinkan dan
+   *  benar-benar menutup. Di tab peramban biasa ia gagal DIAM-DIAM - jadi harus ada
+   *  layar akhir yang jelas dan terucap, bukan layar putih kosong seperti state
+   *  'IDLE' yang lama. */
+  const tutupAplikasi = () => {
+    matikanSemua();
+    setAppState('SELESAI');
+    window.close();
+  };
+
+  // Spec 6: ucapkan terima kasih, lalu tutup - tanpa layar perantara.
+  const keluar = () => {
+    bersihkanTimer();
+    if (hentiDengarRef.current) hentiDengarRef.current();
+    setAppState('SELESAI');
+    playSystemAudio('Terima kasih sudah memakai aplikasi kami.', null, tutupAplikasi);
+  };
+
+  // Spec 7: di layar hasil, 30 detik tanpa interaksi apa pun -> tutup aplikasi.
+  // Diperiksa dengan interval, bukan timeout, supaya DUA sumber aktivitas bisa
+  // menundanya: sentuhan/tombol di sini, dan suara pengguna dari dengarkan().
+  useEffect(() => {
+    if (!isResultScreen) return;
+    const sentuh = () => { aktifRef.current = performance.now(); };
+    sentuh();
+    ['pointerdown', 'keydown'].forEach((e) => window.addEventListener(e, sentuh, true));
+    const iv = setInterval(() => {
+      if (performance.now() - aktifRef.current >= IDLE_MS) {
+        clearInterval(iv);
+        tutupAplikasi();
+      }
+    }, 1000);
+    return () => {
+      clearInterval(iv);
+      ['pointerdown', 'keydown'].forEach((e) => window.removeEventListener(e, sentuh, true));
+    };
+  }, [isResultScreen]);
 
   // Tombol flip: ganti kamera depan <-> belakang
   const handleFlip = async (e) => {
     e.stopPropagation(); // jangan ikut memicu "ketuk layar untuk memotret"
     if (appState !== 'CAMERA_READY' || isFlipping.current) return;
+    aktifRef.current = performance.now();
+    hentikanSuara();                     // spec 2: tombol menyela ucapan sistem
     isFlipping.current = true;
 
     const prev = facingRef.current;
@@ -502,6 +712,8 @@ export default function SayItPage() {
   const handleUploadClick = (e) => {
     e.stopPropagation();
     if (appState !== 'CAMERA_READY') return;
+    aktifRef.current = performance.now();
+    hentikanSuara();                     // spec 2: tombol menyela ucapan sistem
     if (fileInputRef.current) fileInputRef.current.click();
   };
 
@@ -533,7 +745,11 @@ export default function SayItPage() {
 
   // === HANDLER KLIK ===
   const handleScreenClick = () => {
-    if (isSpeechSynthesisSpeaking.current) return;
+    // Spec 2 (barge-in): dulu di sini ada `if (isSpeechSynthesisSpeaking.current)
+    // return;` yang memblokir SEMUA ketukan selagi sistem bicara - termasuk
+    // sambutan yang panjang. Sekarang ketukan justru MENGHENTIKAN ucapan sistem.
+    aktifRef.current = performance.now();
+    hentikanSuara();
 
     if (appState === 'CAMERA_READY') {
       let imageUrl = null;
@@ -575,10 +791,6 @@ export default function SayItPage() {
   };
 
   // === LOGIKA POSISI DAN VISIBILITAS TRANSISI KELOMPOK SCREEN ===
-  const isCamera = appState === 'INIT' || appState === 'CAMERA_READY';
-  const isProcessing = appState === 'PROCESSING_VISION' || appState === 'PROCESSING_Q';
-  const isQuestionScreen = appState === 'PROMPTING_Q' || appState === 'LISTENING_Q';
-  const isResultScreen = appState === 'SHOWING_RESULT' || appState === 'PROMPTING_MENU' || appState === 'LISTENING_MENU';
 
   // Mode AI orb: user input suara > sistem berbicara > diam
   const isListeningState = appState === 'LISTENING_Q' || appState === 'LISTENING_MENU';
@@ -797,7 +1009,7 @@ export default function SayItPage() {
 
       {/* === PERSISTENT AI VOICE ORB (Untuk Screen Loading/Pertanyaan) === */}
       <div style={orbPosStyle}>
-        <AiParticleOrb width={260} height={260} mode={orbMode} />
+        <AiParticleOrb width={260} height={260} mode={orbMode} levelRef={nivRef} />
       </div>
 
       {/* === OVERLAY PUTIH UTAMA DENGAN TRANSISI HALUS === */}
@@ -854,7 +1066,6 @@ export default function SayItPage() {
             transform: isResultScreen ? 'scale(1)' : 'scale(0.96)',
             zIndex: 31
           }}
-          onClick={(e) => e.stopPropagation()} 
         >
           {/* 1. FOTO (ukuran normal 42vh, mengecil kalau teks output sangat panjang) */}
           <div style={{ flex: '0 1 42vh', minHeight: '18vh', width: '100%', display: 'flex', justifyContent: 'center' }}>
@@ -884,10 +1095,27 @@ export default function SayItPage() {
           </div>
 
           {/* 4. TIGA TOMBOL ICON */}
-          <div style={{ width: '75%', display: 'flex', gap: '12px', marginTop: '24px', flex: '0 0 auto' }}>
+          {/* stopPropagation WAJIB di sini. Latar layar hasil sengaja dibiarkan
+              menembus ke handleScreenClick supaya ketukan di mana saja bisa menyela
+              ucapan (spec 2) - tetapi klik tombol tidak boleh ikut naik ke sana:
+              handleScreenClick memanggil hentikanSuara(), yang menaikkan utteranceId
+              dan membuat callback "selesai" milik tombol Keluar dianggap kedaluwarsa,
+              sehingga aplikasinya tidak pernah menutup. Terbukti saat diuji. */}
+          <div
+            onClick={(e) => e.stopPropagation()}
+            style={{ width: '75%', display: 'flex', gap: '12px', marginTop: '24px', flex: '0 0 auto' }}
+          >
             <button 
               className="btn-icon"
-              onClick={() => setAppState('SHOWING_RESULT')}
+              onClick={() => {
+                // setAppState('SHOWING_RESULT') tidak berbuat apa pun kalau state-nya
+                // SUDAH itu - React mengabaikan set ke nilai yang sama, jadi
+                // pembacaan tidak pernah terulang. Diucapkan langsung saja.
+                aktifRef.current = performance.now();
+                bersihkanTimer();
+                if (hentiDengarRef.current) hentiDengarRef.current();
+                playSystemAudio(resultText, 'PROMPTING_MENU');
+              }}
               aria-label="Ulangi Pembacaan"
             >
               <svg fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" strokeLinecap="round" strokeLinejoin="round">
@@ -898,7 +1126,7 @@ export default function SayItPage() {
 
             <button 
               className="btn-icon"
-              onClick={() => setAppState('INIT')}
+              onClick={() => { hentikanSuara(); pindah('INIT'); }}
               aria-label="Foto Lagi"
             >
               <svg fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" strokeLinecap="round" strokeLinejoin="round">
@@ -909,10 +1137,7 @@ export default function SayItPage() {
 
             <button 
               className="btn-icon"
-              onClick={() => {
-                playSystemAudio("Terima kasih sudah memakai aplikasi kami.");
-                setAppState('IDLE');
-              }}
+              onClick={keluar}
               aria-label="Keluar Aplikasi"
             >
               <svg fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" strokeLinecap="round" strokeLinejoin="round">
@@ -924,6 +1149,34 @@ export default function SayItPage() {
           </div>
         </div>
       </div>
+
+      {/* === LAYAR SELESAI ===
+          window.close() hanya berhasil di PWA terpasang. Di tab peramban biasa ia
+          gagal diam-diam, jadi inilah yang terlihat - layar akhir yang jelas dan
+          terucap, bukan layar putih kosong seperti state 'IDLE' yang lama. */}
+      {appState === 'SELESAI' && (
+        <div style={{
+          position: 'absolute', inset: 0, zIndex: 60,
+          background: 'var(--hitam, #050809)', color: 'var(--putih, #fafafa)',
+          display: 'flex', flexDirection: 'column', alignItems: 'center',
+          justifyContent: 'center', gap: '26px', padding: '0 32px', textAlign: 'center'
+        }}>
+          <SayItLogo height={44} />
+          <p style={{ fontSize: '19px', fontWeight: 700, lineHeight: 1.4, margin: 0 }}>
+            Terima kasih sudah memakai SayIt.
+          </p>
+          <p style={{ fontSize: '15px', color: 'var(--abu, #8b9196)', margin: 0 }}>
+            Aplikasi sudah ditutup. Kamu bisa menutup tab ini.
+          </p>
+          <button
+            className="btn-icon"
+            style={{ width: 'auto', padding: '14px 26px', fontSize: '16px', fontWeight: 700 }}
+            onClick={() => { aktifRef.current = performance.now(); pindah('INIT'); }}
+          >
+            Mulai lagi
+          </button>
+        </div>
+      )}
     </main>
   );
 }
