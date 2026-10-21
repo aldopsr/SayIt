@@ -146,6 +146,15 @@ def sehat():
     return {"status": status}
 
 
+@app.get("/klip-teks")
+def klip_teks():
+    """Teks tiap klip, supaya klien bisa menaruhnya di wilayah aria-live tanpa
+    menyalin kalimatnya. Salinan di sisi klien pasti menyimpang dari
+    templates.py cepat atau lambat, dan aturan proyek menaruh kalimat di satu
+    tempat saja."""
+    return CLIP_TEXTS
+
+
 @app.post("/tanya")
 async def tanya(
     foto: UploadFile | None = File(None),

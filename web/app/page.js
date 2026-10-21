@@ -36,6 +36,85 @@ const AMBANG_SUARA = 0.015;
 const HENING_MS = 3000;    // spec 4: berhenti mendengar setelah 3 detik hening
 const IDLE_MS = 30000;     // spec 7: tutup aplikasi setelah 30 detik tanpa interaksi
 
+/* --- basis API, header tunnel, dan pengemas WAV: dikembalikan apa adanya dari
+   commit bfba151. Semuanya sudah pernah diuji lewat tunnel sungguhan, jadi
+   ditulis ulang hanya akan mengulang jebakan yang sama. --- */
+const API_DIIZINKAN = /^https:\/\/[a-z0-9][a-z0-9-]*\.(ngrok-free\.dev|ngrok-free\.app|ngrok\.app|trycloudflare\.com)$/i;
+
+function basisApi() {
+  let simpan = null;
+  try { simpan = localStorage.getItem("sayit.api"); } catch {}
+  const minta = new URLSearchParams(location.search).get("api");
+  if (minta === null) return simpan || "/api";
+
+  const bersih = minta.replace(/\/+$/, "");
+  if (!bersih) {                                   // ?api= kosong: kembali ke bawaan
+    try { localStorage.removeItem("sayit.api"); } catch {}
+    return "/api";
+  }
+  if (!API_DIIZINKAN.test(bersih)) return simpan || "/api";
+  try { localStorage.setItem("sayit.api", bersih); } catch {}
+  return bersih;
+}
+
+let _basis;
+/** Jalur penuh ke API. Dihitung saat dipakai, bukan saat render, supaya hasil
+ *  server dan klien tidak berbeda saat hydrate. */
+function api(jalur) {
+  if (_basis === undefined) _basis = typeof window === "undefined" ? "/api" : basisApi();
+  return _basis + jalur;
+}
+
+/** ngrok gratis menyelipkan halaman peringatan untuk permintaan yang tampak dari
+ *  peramban. Header ini melewatinya. Tidak dikirim saat memakai rewrite sendiri. */
+function kepalaApi() {
+  api("");                                     // pastikan _basis sudah dihitung
+  return _basis !== "/api" ? { "ngrok-skip-browser-warning": "1" } : undefined;
+}
+
+/** webm/opus dari MediaRecorder tidak terbaca soundfile di server.
+ *  Browser sudah punya decodernya, jadi didecode di sini lalu dikemas jadi WAV 16-bit. */
+async function keWav(blob) {
+  // Tekan sekejap -> potongan belum keluar -> blob kosong -> decodeAudioData
+  // melempar EncodingError. Dijaga supaya pengguna dapat pesan, bukan layar galat.
+  if (blob.size < 1024) throw new Error("terlalu-pendek");
+
+  const ctx = new (window.AudioContext || window.webkitAudioContext)();
+  let buf;
+  try {
+    buf = await ctx.decodeAudioData(await blob.arrayBuffer());
+  } catch {
+    ctx.close();
+    throw new Error("terlalu-pendek");
+  }
+  if (buf.duration < 0.3) {
+    ctx.close();
+    throw new Error("terlalu-pendek");
+  }
+  const pcm = buf.getChannelData(0);
+  const out = new DataView(new ArrayBuffer(44 + pcm.length * 2));
+  const tulis = (o, s) => [...s].forEach((c, i) => out.setUint8(o + i, c.charCodeAt(0)));
+
+  tulis(0, "RIFF");
+  out.setUint32(4, 36 + pcm.length * 2, true);
+  tulis(8, "WAVEfmt ");
+  out.setUint32(16, 16, true);
+  out.setUint16(20, 1, true);
+  out.setUint16(22, 1, true);
+  out.setUint32(24, buf.sampleRate, true);
+  out.setUint32(28, buf.sampleRate * 2, true);
+  out.setUint16(32, 2, true);
+  out.setUint16(34, 16, true);
+  tulis(36, "data");
+  out.setUint32(40, pcm.length * 2, true);
+  for (let i = 0; i < pcm.length; i++) {
+    const v = Math.max(-1, Math.min(1, pcm[i]));
+    out.setInt16(44 + i * 2, v * 0x7fff, true);
+  }
+  ctx.close();
+  return new Blob([out], { type: "audio/wav" });
+}
+
 function AiParticleOrb({ width = 260, height = 260, mode = 'idle', levelRef = null }) {
   const canvasRef = useRef(null);
   const modeRef = useRef(mode);
@@ -318,6 +397,12 @@ export default function SayItPage() {
   const timersRef = useRef([]);
   const hentiDengarRef = useRef(null);             // membatalkan sesi mendengar yang berjalan
   const dengarGen = useRef(0);                     // penjaga sesi mendengar, lihat dengarkan()
+  const audioRef = useRef(null);                   // satu elemen audio, dipakai ulang
+  const klipRef = useRef({});                      // nama klip -> blob URL (lihat prefetch)
+  const teksKlipRef = useRef({});                  // nama klip -> kalimatnya, dari /klip-teks
+  const klipTerakhirRef = useRef(null);            // klip yang sedang berbunyi, lihat susulan teks
+  const jawabanRef = useRef(null);                 // {audio, teks} jawaban terakhir, untuk ULANGI
+  const suaraRef = useRef(null);                   // rekaman WAV yang menunggu dikirim
 
   // === KELOMPOK LAYAR ===
   // Dideklarasikan di atas karena efek timer idle (spec 7) membacanya, dan const
@@ -325,7 +410,7 @@ export default function SayItPage() {
   const isCamera = appState === 'INIT' || appState === 'CAMERA_READY';
   const isProcessing = appState === 'PROCESSING_VISION' || appState === 'PROCESSING_Q';
   const isQuestionScreen = appState === 'PROMPTING_Q' || appState === 'LISTENING_Q';
-  const isResultScreen = appState === 'SHOWING_RESULT' || appState === 'PROMPTING_MENU'
+  const isResultScreen = appState === 'SHOWING_RESULT'
     || appState === 'LISTENING_MENU' || appState === 'HASIL_SUNYI';
 
   // === TIMER: semua perpindahan state tertunda lewat sini ===
@@ -358,17 +443,29 @@ export default function SayItPage() {
     setIsSpeaking(false);
   };
 
-  // === FUNGSI UTILITAS: AUDIO & AKSESIBILITAS ===
-  const playSystemAudio = (textUtama, nextStateDelay = null, selesai = null) => {
-    setSrText(textUtama);
+  // === SUARA ===
+  // Tiga sumber, sesuai keputusan tim yang sudah dikunci:
+  //   1. kalimat tetap   -> klip gTTS tersimpan di server (/api/klip/<nama>.mp3)
+  //   2. jawaban modul   -> WAV yang dirender server, dikirim bersama responsnya
+  //   3. peringatan klien -> speechSynthesis, HANYA cadangan, karena sebagian
+  //      peringatan muncul justru ketika servernya tidak terjangkau.
+  // speechSynthesis sengaja tidak dipakai untuk 1 dan 2: suara peramban di banyak
+  // perangkat hanya Inggris, dan tim sudah memilih gTTS setelah uji dengar.
 
-    window.speechSynthesis.cancel();
-    const id = ++utteranceId.current; // abaikan event dari utterance lama yang di-cancel
+  /** Putar satu sumber audio dan rantai alurnya.
+   *
+   *  onended milik <audio> jauh lebih andal daripada onend speechSynthesis, yang
+   *  terbukti bisa tidak pernah berbunyi. Penjaga waktu tetap ada sebagai jaring. */
+  const putar = (src, { teks = null, lalu = null, selesai = null } = {}) => {
+    if (teks !== null) setSrText(teks);
+    const id = ++utteranceId.current;
+    audioRef.current?.pause();
+    window.speechSynthesis?.cancel();
     isSpeechSynthesisSpeaking.current = true;
     setIsSpeaking(true);
 
-    const utterance = new SpeechSynthesisUtterance(textUtama);
-    utterance.lang = 'id-ID';
+    const a = new Audio(src);
+    audioRef.current = a;
 
     let sudah = false;
     const habis = () => {
@@ -376,45 +473,96 @@ export default function SayItPage() {
       sudah = true;
       isSpeechSynthesisSpeaking.current = false;
       setIsSpeaking(false);
-      if (nextStateDelay) nanti(() => pindah(nextStateDelay), 1000);
+      if (lalu) nanti(() => pindah(lalu), 400);
       if (selesai) selesai();
     };
+    a.onended = habis;
+    a.onerror = habis;            // klip gagal dimuat: alur tidak boleh berhenti
+    a.play().catch(habis);        // autoplay ditolak: jangan menggantung diam-diam
 
-    utterance.onend = habis;
-    // Suara Indonesia tidak selalu ada di tiap perangkat. Kalau gagal, onerror
-    // harus tetap melanjutkan alur - kalau tidak, pengguna tunanetra terjebak.
-    utterance.onerror = habis;
-
-    window.speechSynthesis.speak(utterance);
-
-    // PENJAGA WAKTU. Seluruh alur bergantung pada onend, dan onend TIDAK SELALU
-    // BERBUNYI: cancel() yang langsung disusul speak() kadang membuat ucapan baru
-    // ditelan peramban (terbukti saat menguji tombol Keluar - tanpa penjaga ini
-    // aplikasinya tidak pernah menutup). Kalau itu terjadi, alur harus tetap jalan;
-    // pengguna tunanetra tidak bisa melihat bahwa sistemnya menggantung.
-    // ponytail: perkiraan kasar dari jumlah kata, bukan pengukuran durasi suara.
-    const perkiraanMs = 1800 + textUtama.trim().split(/\s+/).length * 420;
+    // Jaring pengaman: kalau onended maupun onerror tidak pernah datang, pengguna
+    // tunanetra tidak bisa melihat bahwa sistemnya berhenti. Selama audionya
+    // benar-benar berbunyi, jangan dipotong.
     const penjaga = () => {
       if (sudah) return;
-      // Masih benar-benar bicara (perkiraannya terlalu pendek) -> tunggu, jangan
-      // potong di tengah kalimat. Yang dipaksa lanjut hanya ucapan yang ditelan.
-      if (window.speechSynthesis?.speaking) { nanti(penjaga, 1500); return; }
+      if (!a.paused && !a.ended) { nanti(penjaga, 1500); return; }
       habis();
     };
-    nanti(penjaga, perkiraanMs);
+    nanti(penjaga, 8000);
   };
 
-  const peringatkan = (pesan, aksiBerikutnya) => {
-    const teksPeringatan = `${pesan}. ${aksiBerikutnya}`;
-    playSystemAudio(teksPeringatan);
+  /** Klip tetap. Pakai salinan blob kalau ada (lihat prefetch di bawah). */
+  const klipSrc = (nama) => klipRef.current[nama] || api(`/klip/${nama}.mp3`);
+  const ucapkanKlip = (nama, opsi = {}) => {
+    klipTerakhirRef.current = nama;
+    return putar(klipSrc(nama), { teks: teksKlipRef.current[nama] ?? null, ...opsi });
   };
+
+  /** Jawaban dari server: WAV base64 yang sudah berisi kalimat lengkapnya. */
+  const ucapkanJawaban = (b64, teks, opsi = {}) =>
+    putar(`data:audio/wav;base64,${b64}`, { teks, ...opsi });
+
+  /** Peringatan sisi klien. speechSynthesis, bukan klip: sebagian peringatan ini
+   *  muncul justru ketika servernya tidak terjangkau, jadi klip tidak bisa
+   *  diandalkan di situ. Tiap pesan wajib menyebut tindakan berikutnya. */
+  const peringatkan = (pesan, aksiBerikutnya) => {
+    const teks = `${pesan}. ${aksiBerikutnya}`;
+    setSrText(teks);
+    utteranceId.current++;
+    audioRef.current?.pause();
+    isSpeechSynthesisSpeaking.current = false;
+    setIsSpeaking(false);
+    const s = window.speechSynthesis;
+    if (!s) return;                 // pembaca layar masih dapat lewat aria-live
+    s.cancel();
+    const u = new SpeechSynthesisUtterance(teks);
+    u.lang = 'id-ID';
+    s.speak(u);
+  };
+
+  /* Ambil teks tiap klip sekali, supaya wilayah aria-live memuat kalimat yang
+     SAMA dengan yang terdengar tanpa menyalin kalimatnya ke sini.
+
+     Klip yang diputar di dalam penangan gestur diambil lebih dulu sebagai blob:
+     ngrok gratis membalas halaman peringatan untuk GET yang tampak dari peramban,
+     dan elemen <audio> tidak bisa mengirim header pelewatnya - hanya fetch bisa.
+     Diambil SEKARANG, bukan saat disentuh: fetch di dalam penangan gestur membuat
+     play() kehilangan konteks gestur, dan iOS memblokirnya. */
+  useEffect(() => {
+    const h = kepalaApi();
+    fetch(api('/klip-teks'), { headers: h })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((j) => {
+        if (!j) return;
+        teksKlipRef.current = j;
+        // Klip pertama bisa berbunyi sebelum teksnya tiba. Isi susulan, kalau
+        // tidak pembaca layar kehilangan kalimat pembuka - satu-satunya petunjuk
+        // bagi pengguna yang memakai TalkBack alih-alih mendengar audionya.
+        const n = klipTerakhirRef.current;
+        if (n && j[n]) setSrText(j[n]);
+      })
+      .catch(() => {});
+
+    if (!h) return;                    // satu origin: <audio> sudah bisa langsung
+    const dibuat = [];
+    for (const nama of ['sambutan', 'sedang_memproses', 'kamera_depan', 'kamera_belakang']) {
+      fetch(api(`/klip/${nama}.mp3`), { headers: h })
+        .then((r) => (r.ok ? r.blob() : null))
+        .then((b) => {
+          if (!b || !b.size) return;
+          const u = URL.createObjectURL(b);
+          klipRef.current[nama] = u;
+          dibuat.push(u);
+        })
+        .catch(() => {});              // gagal ambil: jatuh ke URL biasa
+    }
+    return () => dibuat.forEach(URL.revokeObjectURL);
+  }, []);
 
   // === MENDENGARKAN: mikrofon sungguhan + deteksi hening 3 detik (spec 4) ===
   // Mengisi nivRef supaya orb bergerak mengikuti suara asli pengguna - orb sudah
   // mendukungnya lewat prop levelRef, hanya belum pernah dialiri.
   // Selesai sendiri setelah HENING_MS tanpa suara di atas AMBANG_SUARA.
-  // ponytail: analyser saja, belum merekam. MediaRecorder masuk di sini juga saat
-  // disambungkan ke /api/tanya - tidak ada logika layar yang perlu berubah.
   const dengarkan = (saatSelesai) => {
     if (!navigator.mediaDevices?.getUserMedia) {
       peringatkan('Mikrofon tidak tersedia di perangkat ini',
@@ -425,7 +573,7 @@ export default function SayItPage() {
     navigator.mediaDevices.getUserMedia({ audio: true }).then((stream) => {
       // Pengguna bisa menyela SELAGI izin mikrofon masih diminta. Tanpa penjaga ini
       // sesinya tetap jalan lalu memindahkan state yang sudah tidak diinginkan -
-      // pola yang sama dengan penjaga utteranceId di playSystemAudio.
+      // pola yang sama dengan penjaga utteranceId di putar().
       if (gen !== dengarGen.current) {
         stream.getTracks().forEach((t) => t.stop());
         return;
@@ -436,22 +584,47 @@ export default function SayItPage() {
       ctx.createMediaStreamSource(stream).connect(analyser);
       const buf = new Float32Array(analyser.fftSize);
 
+      // Analyser hanya MENGUKUR; yang menyimpan suaranya MediaRecorder. Keduanya
+      // menumpang satu stream yang sama, jadi izin mikrofon cuma diminta sekali.
+      const potongan = [];
+      const mr = new MediaRecorder(stream);
+      mr.ondataavailable = (e) => e.data.size && potongan.push(e.data);
+      mr.onstop = async () => {
+        if (gen !== dengarGen.current) return;     // sudah disela, buang rekamannya
+        try {
+          saatSelesai(await keWav(new Blob(potongan, { type: mr.mimeType })));
+        } catch {
+          // Terlalu pendek atau tidak bisa didecode: jangan kirim ke server,
+          // beri tahu pengguna apa yang harus dilakukan.
+          peringatkan('Suaramu tidak tertangkap',
+                      'Coba bicara lebih dekat ke mikrofon setelah nada, atau ketuk layar untuk memotret ulang.');
+          pindah(isResultScreen ? 'HASIL_SUNYI' : 'PROMPTING_Q');
+        }
+      };
+      mr.start(250);                               // potongan tiap 250 ms
+
       let raf = 0;
       let diamSejak = performance.now();
       let hidup = true;
 
-      const tutup = () => {
+      const tutup = (kirim = false) => {
         if (!hidup) return;
         hidup = false;
         cancelAnimationFrame(raf);
-        stream.getTracks().forEach((t) => t.stop());
-        ctx.close().catch(() => {});
         nivRef.current = 0;
         hentiDengarRef.current = null;
+        // Hentikan perekam DULU baru matikan track: urutan terbalik membuat
+        // potongan terakhir hilang di sebagian peramban.
+        if (mr.state === 'recording') mr.stop();
+        else if (kirim) mr.onstop();
+        nanti(() => {
+          stream.getTracks().forEach((t) => t.stop());
+          ctx.close().catch(() => {});
+        }, 50);
       };
 
       // Dipanggil pindah(): pengguna menyela, jadi jangan lanjutkan alur lama.
-      hentiDengarRef.current = tutup;
+      hentiDengarRef.current = () => { dengarGen.current++; tutup(); };
 
       const tik = () => {
         analyser.getFloatTimeDomainData(buf);
@@ -466,8 +639,7 @@ export default function SayItPage() {
           aktifRef.current = now;      // suara juga menunda penutupan otomatis (spec 7)
         }
         if (now - diamSejak >= HENING_MS) {
-          tutup();
-          if (gen === dengarGen.current) saatSelesai();
+          tutup(true);        // saatSelesai dipanggil dari mr.onstop, bersama rekamannya
           return;
         }
         raf = requestAnimationFrame(tik);
@@ -479,16 +651,23 @@ export default function SayItPage() {
     });
   };
 
-  // === SEAM BACKEND ===
-  // ponytail: dua fungsi ini adalah satu-satunya tempat yang perlu diganti saat
-  // disambungkan ke server - jadi POST /api/foto dan POST /api/tanya. Layar sudah
-  // menunggu PROMISE, bukan timer, jadi durasinya otomatis mengikuti proses nyata.
-  const jeda = (ms) => new Promise((r) => { timersRef.current.push(setTimeout(r, ms)); });
-  const kirimFoto = async () => { await jeda(1200); };
-  const kirimPertanyaan = async () => {
-    await jeda(1800);
-    return 'Nominal uang ini adalah dua ribu rupiah.';
+  // === PANGGILAN SERVER ===
+  /** POST ke API, selalu kembalikan JSON SayIt atau lempar.
+   *
+   *  Penandanya bukan status HTTP melainkan apakah badannya JSON SayIt: rewrite
+   *  Next membalas 500 "Internal Server Error" teks biasa ketika backend mati,
+   *  jadi status 500 tidak bisa dibedakan dari galat server sungguhan. */
+  const kirim = async (jalur, form) => {
+    const r = await fetch(api(jalur), { method: 'POST', body: form, headers: kepalaApi() });
+    let j = null;
+    try { j = await r.json(); } catch {}
+    if (!j || (j.teks === undefined && j.error === undefined)) throw new Error('bukan-sayit');
+    return j;
   };
+
+  const galatJaringan = () =>
+    peringatkan('Tidak bisa menghubungi server SayIt',
+                'Periksa koneksi internetmu, atau pastikan server-nya sudah jalan, lalu coba lagi.');
 
   // === KAMERA ===
   // Menyalakan kamera sesuai arah (depan/belakang). Stream lama dimatikan dulu,
@@ -528,7 +707,7 @@ export default function SayItPage() {
         .then(() => {
           if (isMounted) {
             pindah('CAMERA_READY');
-            playSystemAudio("Selamat datang di SayIt. Silakan arahkan kamera, lalu ketuk layar untuk memotret.");
+            ucapkanKlip('sambutan');
           }
         })
         .catch(err => {
@@ -542,7 +721,7 @@ export default function SayItPage() {
 
   useEffect(() => {
     if (appState === 'LISTENING_Q') {
-      dengarkan(() => pindah('PROCESSING_Q'));
+      dengarkan((wav) => { suaraRef.current = wav; pindah('PROCESSING_Q'); });
     }
   }, [appState]);
 
@@ -551,32 +730,31 @@ export default function SayItPage() {
   useEffect(() => {
     if (appState !== 'PROCESSING_Q') return;
     let batal = false;
-    playSystemAudio('Sedang memproses pertanyaan Anda.');
-    kirimPertanyaan()
-      .then((jawab) => {
-        if (batal) return;
-        setResultText(jawab);
-        pindah('SHOWING_RESULT');
-      })
+    ucapkanKlip('sedang_memproses');
+    const wav = suaraRef.current;
+    suaraRef.current = null;
+    const form = new FormData();
+    if (wav) form.append('suara', wav, 'tanya.wav');
+    else form.append('teks', 'bacakan tulisannya');   // jalur kotak teks/darurat
+
+    kirim('/tanya', form)
+      .then((j) => { if (!batal) tanganiJawaban(j); })
       .catch(() => {
         if (batal) return;
-        peringatkan('Tidak bisa menghubungi server SayIt',
-                    'Periksa koneksi internetmu, lalu ketuk layar untuk memotret lagi.');
-        pindah('INIT');
+        galatJaringan();
+        pindah(capturedImage ? 'PROMPTING_Q' : 'CAMERA_READY');
       });
     return () => { batal = true; };
   }, [appState]);
 
+  // Audio jawaban dari server SUDAH memuat "Mau saya ulangi, foto lagi, atau
+  // keluar?" di ujungnya, jadi state PROMPTING_MENU yang lama dihapus - satu
+  // kalimat, satu pemutaran, tanpa jeda di tengah bagi pengguna tunanetra.
   useEffect(() => {
-    if (appState === 'SHOWING_RESULT') {
-      playSystemAudio(resultText, 'PROMPTING_MENU');
-    }
-  }, [appState, resultText]);
-
-  useEffect(() => {
-    if (appState === 'PROMPTING_MENU') {
-      playSystemAudio("Katakan Ulangi untuk pembacaan ulang, Foto Lagi untuk memotret kembali, atau Keluar untuk menutup aplikasi.", 'LISTENING_MENU');
-    }
+    if (appState !== 'SHOWING_RESULT') return;
+    const j = jawabanRef.current;
+    if (!j) { pindah('HASIL_SUNYI'); return; }
+    ucapkanJawaban(j.audio, j.teks, { lalu: 'LISTENING_MENU' });
   }, [appState]);
 
   useEffect(() => {
@@ -586,7 +764,14 @@ export default function SayItPage() {
       // memotret ulang diam-diam. Timer idle 30 detik yang menutup aplikasinya.
       // HASIL_SUNYI, bukan SHOWING_RESULT: yang kedua membacakan ulang lalu kembali
       // ke menu lagi - lingkaran suara tanpa akhir.
-      dengarkan(() => pindah('HASIL_SUNYI'));
+      dengarkan((wav) => {
+        if (!wav) { pindah('HASIL_SUNYI'); return; }
+        const form = new FormData();
+        form.append('suara', wav, 'menu.wav');
+        kirim('/tanya', form)
+          .then(tanganiJawaban)
+          .catch(() => { galatJaringan(); pindah('HASIL_SUNYI'); });
+      });
     }
   }, [appState]);
 
@@ -619,17 +804,31 @@ export default function SayItPage() {
     setCapturedImage(imageUrl);
     setCapturedMirror(mirrored);
     pindah('PROCESSING_VISION');
-    playSystemAudio('Sedang membaca foto.');
+    ucapkanKlip('sedang_memproses');
 
+    let j;
     try {
-      await kirimFoto(imageUrl);
+      const form = new FormData();
+      form.append('foto', await (await fetch(imageUrl)).blob(), 'foto.jpg');
+      j = await kirim('/foto', form);
     } catch {
-      peringatkan('Foto tidak bisa diproses', 'Ketuk layar untuk memotret ulang.');
-      pindah('INIT');
+      galatJaringan();
+      pindah('CAMERA_READY');
       return;
     }
+    if (j.error) { ucapkanGalat(j); pindah('CAMERA_READY'); return; }
+
+    // Mutu ditolak quality gate: alasannya sudah dibacakan server lengkap dengan
+    // jalan keluarnya, dan fotonya TIDAK tersimpan - jadi jangan suruh bertanya.
+    if (!j.diterima) {
+      ucapkanJawaban(j.audio, j.teks);
+      pindah('CAMERA_READY');
+      return;
+    }
+    // Audio /foto sudah berbunyi "Foto berhasil diambil. Apa yang ingin kamu
+    // tanyakan?", jadi tidak ada kalimat tambahan di sini.
     pindah('PROMPTING_Q');
-    playSystemAudio('Apa yang ingin anda tanyakan dari foto ini?', 'LISTENING_Q');
+    ucapkanJawaban(j.audio, j.teks, { lalu: 'LISTENING_Q' });
   };
 
   /** Matikan kamera dan semua suara. Dipakai saat keluar dan saat idle. */
@@ -661,7 +860,7 @@ export default function SayItPage() {
     bersihkanTimer();
     if (hentiDengarRef.current) hentiDengarRef.current();
     setAppState('SELESAI');
-    playSystemAudio('Terima kasih sudah memakai aplikasi kami.', null, tutupAplikasi);
+    ucapkanKlip('sampai_jumpa', { selesai: tutupAplikasi });
   };
 
   // Spec 7: di layar hasil, 30 detik tanpa interaksi apa pun -> tutup aplikasi.
@@ -685,26 +884,84 @@ export default function SayItPage() {
   }, [isResultScreen]);
 
   // Tombol flip: ganti kamera depan <-> belakang
-  const handleFlip = async (e) => {
-    e.stopPropagation(); // jangan ikut memicu "ketuk layar untuk memotret"
-    if (appState !== 'CAMERA_READY' || isFlipping.current) return;
-    aktifRef.current = performance.now();
-    hentikanSuara();                     // spec 2: tombol menyela ucapan sistem
+  /** Putar kamera dan UMUMKAN hasilnya. Dipakai tombol maupun perintah suara,
+   *  jadi keduanya tidak bisa menyimpang. Pengguna tunanetra tidak melihat
+   *  gambarnya berubah - satu-satunya tanda bahwa perintahnya jalan adalah suara. */
+  const putarKamera = async () => {
+    if (isFlipping.current) return;
     isFlipping.current = true;
-
     const prev = facingRef.current;
     const next = prev === 'user' ? 'environment' : 'user';
     try {
       await startStream(next, true);
       facingRef.current = next;
       setFacingMode(next);
-      playSystemAudio(next === 'environment' ? "Kamera belakang aktif." : "Kamera depan aktif.");
-    } catch (err) {
-      console.error(err);
-      try { await startStream(prev); } catch (err2) { console.error(err2); }
-      peringatkan("Kamera tidak dapat diganti", "Perangkat ini mungkin tidak memiliki kamera lain.");
+      ucapkanKlip(next === 'environment' ? 'kamera_belakang' : 'kamera_depan');
+    } catch {
+      try { await startStream(prev); } catch {}
+      // Klip, bukan speechSynthesis: ini kalimat tetap yang sudah terdaftar.
+      ucapkanKlip('kamera_tunggal');
     } finally {
       isFlipping.current = false;
+    }
+  };
+
+  const handleFlip = (e) => {
+    e.stopPropagation(); // jangan ikut memicu "ketuk layar untuk memotret"
+    if (appState !== 'CAMERA_READY') return;
+    aktifRef.current = performance.now();
+    hentikanSuara();                     // spec 2: tombol menyela ucapan sistem
+    putarKamera();
+  };
+
+  /** Jawaban server yang berupa galat: tetap harus BERBUNYI. Klip gTTS kalau
+   *  server mengirimkannya, speechSynthesis hanya kalau tidak ada. */
+  const ucapkanGalat = (j) => {
+    if (j.audio) ucapkanJawaban(j.audio, j.error || j.teks);
+    else peringatkan(j.error || 'Terjadi galat di server', 'Coba sekali lagi.');
+  };
+
+  /** Satu pintu untuk semua balasan /tanya. Intent kendali dijalankan di sini;
+   *  jawaban tugas disimpan supaya ULANGI bisa memutarnya tanpa memanggil
+   *  server lagi. */
+  const tanganiJawaban = (j) => {
+    aktifRef.current = performance.now();
+    if (j.error) { ucapkanGalat(j); pindah('HASIL_SUNYI'); return; }
+
+    switch (j.intent) {
+      case 'PUTAR_KAMERA':
+        // Server sengaja tidak mengirim audio: hasilnya baru diketahui setelah
+        // kameranya benar-benar berputar, dan putarKamera yang mengumumkannya.
+        pindah('CAMERA_READY');
+        putarKamera();
+        return;
+      case 'PILIH_BERKAS':
+        pindah('CAMERA_READY');
+        ucapkanJawaban(j.audio, j.teks, { selesai: () => fileInputRef.current?.click() });
+        return;
+      case 'FOTO_BARU':
+        ucapkanJawaban(j.audio, j.teks, { lalu: 'INIT' });
+        return;
+      case 'KELUAR':
+        setAppState('SELESAI');
+        ucapkanJawaban(j.audio, j.teks, { selesai: tutupAplikasi });
+        return;
+      case 'TIDAK_DIKENALI':
+        // Suara tidak tertangkap atau kalimatnya tidak dimengerti. Jawabannya
+        // sudah menyuruh mengulang, jadi kembalikan ke tahap yang sama - bukan
+        // ke layar hasil, yang lalu menawarkan "ulangi, foto lagi, atau keluar"
+        // padahal belum ada jawaban apa pun untuk diulang.
+        ucapkanJawaban(j.audio, j.teks, {
+          lalu: capturedImage ? 'LISTENING_Q' : 'LISTENING_MENU',
+        });
+        return;
+
+      default:
+        // Jawaban tugas, ULANGI, LANJUT, dan BANTUAN dibacakan di layar hasil.
+        jawabanRef.current = { audio: j.audio, teks: j.teks };
+        setResultText(j.teks);
+        pindah(appState === 'SHOWING_RESULT' ? 'HASIL_SUNYI' : 'SHOWING_RESULT');
+        if (appState === 'SHOWING_RESULT') ucapkanJawaban(j.audio, j.teks, { lalu: 'LISTENING_MENU' });
     }
   };
 
@@ -717,30 +974,45 @@ export default function SayItPage() {
     if (fileInputRef.current) fileInputRef.current.click();
   };
 
-  const handleFileChange = (e) => {
+  /** Berkas dari penyimpanan: gambar, PDF, atau DOCX. Dikirim APA ADANYA ke
+   *  /berkas - server yang memutuskan mana yang perlu OCR dan mana yang sudah
+   *  punya lapisan teks. Tidak dirender jadi gambar dulu di sini, karena PDF dan
+   *  DOCX berteks justru rusak kalau dipaksa lewat kanvas. */
+  const handleFileChange = async (e) => {
     e.stopPropagation();
     const file = e.target.files && e.target.files[0];
-    e.target.value = ''; // supaya foto yang sama bisa dipilih lagi
+    e.target.value = '';                       // berkas yang sama bisa dipilih lagi
     if (!file || appState !== 'CAMERA_READY') return;
 
-    const url = URL.createObjectURL(file);
-    const img = new Image();
-    img.onload = () => {
-      // Perkecil kalau sangat besar (maks 1600px) supaya ringan, dan orientasi EXIF ikut dirapikan
-      const maxSide = 1600;
-      const sc = Math.min(1, maxSide / Math.max(img.naturalWidth, img.naturalHeight));
-      const c = document.createElement('canvas');
-      c.width = Math.round(img.naturalWidth * sc);
-      c.height = Math.round(img.naturalHeight * sc);
-      c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
-      URL.revokeObjectURL(url);
-      proceedWithPhoto(c.toDataURL('image/jpeg', 0.9), false);
-    };
-    img.onerror = () => {
-      URL.revokeObjectURL(url);
-      peringatkan("Foto tidak dapat dibuka", "Silakan pilih foto lain.");
-    };
-    img.src = url;
+    aktifRef.current = performance.now();
+    setCapturedImage(file.type.startsWith('image/') ? URL.createObjectURL(file) : null);
+    setCapturedMirror(false);
+    pindah('PROCESSING_VISION');
+    ucapkanKlip('sedang_memproses');
+
+    let j;
+    try {
+      const form = new FormData();
+      form.append('berkas', file, file.name);
+      j = await kirim('/berkas', form);
+    } catch {
+      galatJaringan();
+      pindah('CAMERA_READY');
+      return;
+    }
+    if (j.error) { ucapkanGalat(j); pindah('CAMERA_READY'); return; }
+    if (!j.diterima) { ucapkanJawaban(j.audio, j.teks); pindah('CAMERA_READY'); return; }
+
+    // DOCX dan PDF berteks langsung dibacakan (intent BACA); gambar masuk jalur
+    // foto biasa dan menunggu pertanyaan.
+    if (j.intent === 'BACA') {
+      jawabanRef.current = { audio: j.audio, teks: j.teks };
+      setResultText(j.teks);
+      pindah('SHOWING_RESULT');
+      return;
+    }
+    pindah('PROMPTING_Q');
+    ucapkanJawaban(j.audio, j.teks, { lalu: 'LISTENING_Q' });
   };
 
   // === HANDLER KLIK ===
@@ -776,14 +1048,22 @@ export default function SayItPage() {
         const cropW = Math.min(vw - cropX, frameW / scale);
         const cropH = Math.min(vh - cropY, frameH / scale);
 
+        // Kanvas diberi ukuran piksel SUMBER, bukan piksel layar.
+        //
+        // Sebelumnya canvas.width = frameW, yaitu lebar bingkai di layar (sekitar
+        // 332 px di HP). Jadi berapa pun resolusi kameranya, foto yang dikirim
+        // selalu sekitar 332x630 - di bawah quality_gate.resolution.min_short_side
+        // (480), sehingga SETIAP foto ditolak "Resolusi foto terlalu kecil".
+        // Terbukti saat diuji dengan kamera 1920x1080.
+        const skala = Math.min(1, 1600 / Math.max(cropW, cropH));   // samakan dengan resize.max_side
         const canvas = document.createElement('canvas');
-        canvas.width = frameW;
-        canvas.height = frameH;
+        canvas.width = Math.round(cropW * skala);
+        canvas.height = Math.round(cropH * skala);
         const ctx = canvas.getContext('2d');
-        
-        ctx.drawImage(video, cropX, cropY, cropW, cropH, 0, 0, frameW, frameH);
-        
-        imageUrl = canvas.toDataURL('image/jpeg');
+
+        ctx.drawImage(video, cropX, cropY, cropW, cropH, 0, 0, canvas.width, canvas.height);
+
+        imageUrl = canvas.toDataURL('image/jpeg', 0.92);
       }
 
       proceedWithPhoto(imageUrl, facingRef.current === 'user');
@@ -928,7 +1208,7 @@ export default function SayItPage() {
       <input
         ref={fileInputRef}
         type="file"
-        accept="image/*"
+        accept="image/*,.pdf,.docx"
         onChange={handleFileChange}
         onClick={(e) => e.stopPropagation()}
         style={{ display: 'none' }}
@@ -1120,7 +1400,8 @@ export default function SayItPage() {
                 aktifRef.current = performance.now();
                 bersihkanTimer();
                 if (hentiDengarRef.current) hentiDengarRef.current();
-                playSystemAudio(resultText, 'PROMPTING_MENU');
+                const j = jawabanRef.current;
+                if (j) ucapkanJawaban(j.audio, j.teks, { lalu: 'LISTENING_MENU' });
               }}
               aria-label="Ulangi Pembacaan"
             >
