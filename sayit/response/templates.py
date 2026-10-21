@@ -39,10 +39,15 @@ Utterance = list  # list[Part]
 # --------------------------------------------------------------------------- kosakata klip
 
 FIXED_PHRASES: dict[str, str] = {
-    "sambutan": ("Selamat datang di SayIt. Aplikasi ini bisa membacakan nominal uang, "
-                 "tanggal kedaluwarsa, dan tulisan dokumen. Sentuh layar di mana saja untuk "
-                 "mengambil foto. Kalau berkasnya sudah ada di penyimpanan, pakai tombol "
-                 "pilih berkas di bagian bawah layar."),
+    # Tiap cara memberi perintah WAJIB disebut di sini. Tombol yang tidak pernah
+    # diucapkan sama saja dengan tidak ada bagi pengguna tunanetra - itu terbukti:
+    # perintah suara sempat terpasang tanpa diumumkan, dan tidak ada yang tahu.
+    # Panjang tidak jadi masalah karena sentuhan menyela ucapan (barge-in).
+    "sambutan": ("Selamat datang di SayIt. Saya bisa membacakan nominal uang, tanggal "
+                 "kedaluwarsa, dan tulisan dokumen. Sentuh layar di mana saja untuk "
+                 "mengambil foto. Kamu juga bisa bicara kapan saja: katakan putar kamera "
+                 "untuk berganti ke kamera depan atau belakang, atau katakan pilih berkas "
+                 "untuk membaca gambar, PDF, atau dokumen dari penyimpanan."),
     "tindak_lanjut": "Mau saya ulangi, foto lagi, atau keluar?",
     "sampai_jumpa": "Sampai jumpa.",
     "foto_diambil": "Foto berhasil diambil. Apa yang ingin kamu tanyakan?",
@@ -54,8 +59,10 @@ FIXED_PHRASES: dict[str, str] = {
                        "membacakan tulisan, atau tanggal kedaluwarsa."),
     "menu_bantuan": ("Saya bisa membantu tiga hal: menyebutkan nominal uang kertas, membacakan tulisan, "
                      "dan membacakan tanggal kedaluwarsa. Ambil foto, lalu ajukan pertanyaanmu. "
-                     "Selain memotret, kamu juga bisa memilih berkas gambar, PDF, atau dokumen Word "
-                     "dari penyimpanan lewat tombol pilih berkas. "
+                     "Semua tombol juga bisa dipanggil dengan suara. Katakan putar kamera untuk "
+                     "berganti kamera, pilih berkas untuk membaca berkas dari penyimpanan, ulangi "
+                     "untuk mendengar jawaban sekali lagi, foto lagi untuk memotret ulang, atau "
+                     "keluar untuk menutup aplikasi. "
                      "Saya tidak bisa memeriksa keaslian uang."),
     "foto_buram": "Foto terlihat buram. Coba pegang kamera lebih diam, lalu foto ulang.",
     "foto_gelap": "Foto terlalu gelap. Coba dekatkan ke lampu, lalu foto ulang.",

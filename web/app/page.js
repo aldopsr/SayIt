@@ -412,6 +412,7 @@ export default function SayItPage() {
   const isQuestionScreen = appState === 'PROMPTING_Q' || appState === 'LISTENING_Q';
   const isResultScreen = appState === 'SHOWING_RESULT'
     || appState === 'LISTENING_MENU' || appState === 'HASIL_SUNYI';
+  const isSelesai = appState === 'SELESAI';
 
   // === TIMER: semua perpindahan state tertunda lewat sini ===
   // Timer yang tertinggal adalah AKAR dari bug "Foto Lagi butuh dua klik": timer
@@ -563,14 +564,29 @@ export default function SayItPage() {
   // Mengisi nivRef supaya orb bergerak mengikuti suara asli pengguna - orb sudah
   // mendukungnya lewat prop levelRef, hanya belum pernah dialiri.
   // Selesai sendiri setelah HENING_MS tanpa suara di atas AMBANG_SUARA.
-  const dengarkan = (saatSelesai) => {
+  // tungguSuara: rekaman tetap jalan dari awal (supaya suku kata pertama tidak
+  //   terpotong) tetapi hanya DIKIRIM kalau pengguna benar-benar bicara. Dipakai
+  //   di layar kamera, yang mendengarkan terus - hening tidak boleh membebani
+  //   server maupun kuota pengguna.
+  // batasSunyi: tutup sesi kalau tidak ada suara sama sekali selama sekian ms,
+  //   lalu pemanggil membukanya lagi. Ini yang menjaga penyangga rekaman tidak
+  //   tumbuh terus selama layar kamera dibiarkan terbuka.
+  const dengarkan = (saatSelesai, { tungguSuara = false, batasSunyi = 0 } = {}) => {
     if (!navigator.mediaDevices?.getUserMedia) {
       peringatkan('Mikrofon tidak tersedia di perangkat ini',
                   'Kamu masih bisa mengetuk layar untuk memotret ulang.');
       return;
     }
     const gen = ++dengarGen.current;
-    navigator.mediaDevices.getUserMedia({ audio: true }).then((stream) => {
+    // Izin ditangani TERPISAH dari sisanya. Satu .catch() di ujung rantai membuat
+    // kegagalan apa pun di dalam .then() - misalnya MediaRecorder yang tidak
+    // mendukung formatnya - dilaporkan sebagai "mikrofon belum diizinkan", dan
+    // pengguna tunanetra lalu mengejar pengaturan izin yang sebenarnya baik-baik saja.
+    navigator.mediaDevices.getUserMedia({ audio: true }).catch((e) => {
+      peringatkan('Mikrofon belum diizinkan',
+                  'Buka pengaturan izin situs di peramban, nyalakan mikrofon, lalu ketuk layar lagi.');
+      throw e;
+    }).then((stream) => {
       // Pengguna bisa menyela SELAGI izin mikrofon masih diminta. Tanpa penjaga ini
       // sesinya tetap jalan lalu memindahkan state yang sudah tidak diinginkan -
       // pola yang sama dengan penjaga utteranceId di putar().
@@ -588,9 +604,10 @@ export default function SayItPage() {
       // menumpang satu stream yang sama, jadi izin mikrofon cuma diminta sekali.
       const potongan = [];
       const mr = new MediaRecorder(stream);
+      let kirimkan = false;                        // diisi tutup(), dibaca onstop
       mr.ondataavailable = (e) => e.data.size && potongan.push(e.data);
       mr.onstop = async () => {
-        if (gen !== dengarGen.current) return;     // sudah disela, buang rekamannya
+        if (!kirimkan || gen !== dengarGen.current) return;   // disela atau cuma hening
         try {
           saatSelesai(await keWav(new Blob(potongan, { type: mr.mimeType })));
         } catch {
@@ -604,19 +621,21 @@ export default function SayItPage() {
       mr.start(250);                               // potongan tiap 250 ms
 
       let raf = 0;
-      let diamSejak = performance.now();
+      const mulai = performance.now();
+      let diamSejak = mulai;
+      let adaSuara = false;
       let hidup = true;
 
       const tutup = (kirim = false) => {
         if (!hidup) return;
         hidup = false;
+        kirimkan = kirim;
         cancelAnimationFrame(raf);
         nivRef.current = 0;
         hentiDengarRef.current = null;
         // Hentikan perekam DULU baru matikan track: urutan terbalik membuat
         // potongan terakhir hilang di sebagian peramban.
         if (mr.state === 'recording') mr.stop();
-        else if (kirim) mr.onstop();
         nanti(() => {
           stream.getTracks().forEach((t) => t.stop());
           ctx.close().catch(() => {});
@@ -636,18 +655,27 @@ export default function SayItPage() {
         const now = performance.now();
         if (rms > AMBANG_SUARA) {
           diamSejak = now;
+          adaSuara = true;
           aktifRef.current = now;      // suara juga menunda penutupan otomatis (spec 7)
         }
-        if (now - diamSejak >= HENING_MS) {
+        // Tidak ada suara sama sekali sampai batasnya: tutup tanpa mengirim apa pun.
+        if (!adaSuara && batasSunyi && now - mulai >= batasSunyi) {
+          tutup();
+          saatSelesai(null);
+          return;
+        }
+        if ((adaSuara || !tungguSuara) && now - diamSejak >= HENING_MS) {
           tutup(true);        // saatSelesai dipanggil dari mr.onstop, bersama rekamannya
           return;
         }
         raf = requestAnimationFrame(tik);
       };
       tik();
-    }).catch(() => {
-      peringatkan('Mikrofon belum diizinkan',
-                  'Buka pengaturan izin situs di peramban, nyalakan mikrofon, lalu ketuk layar lagi.');
+    }).catch((e) => {
+      if (e && (e.name === 'NotAllowedError' || e.name === 'SecurityError')) return;  // sudah dilaporkan
+      console.error('dengarkan gagal:', e);
+      peringatkan('Mikrofon tidak bisa dipakai di perangkat ini',
+                  'Ketuk layar untuk memotret, lalu jawab dengan menekan tombolnya.');
     });
   };
 
@@ -863,6 +891,38 @@ export default function SayItPage() {
     ucapkanKlip('sampai_jumpa', { selesai: tutupAplikasi });
   };
 
+  /* Layar kamera ikut mendengarkan, supaya tombol bisa dipanggil dengan suara
+     ("putar kamera", "pilih berkas"). Dulu mikrofon hanya menyala di layar
+     pertanyaan dan menu, jadi perintah di layar kamera tidak punya kesempatan.
+
+     isSpeaking ikut jadi dependensi, dan itu BUKAN kebetulan: di HP mikrofon
+     mendengar pengeras suaranya sendiri. Tanpa ini aplikasi merekam ucapannya
+     sendiri lalu mengirimkannya ke STT. Jadi mendengar berhenti selama sistem
+     bicara, dan menyala lagi tepat setelah selesai - yang sekaligus menjadi cara
+     memasang ulang pendengar setiap habis menjawab perintah. */
+  useEffect(() => {
+    if (appState !== 'CAMERA_READY' || isSpeaking) return;
+    let hidup = true;
+    const pasang = () => {
+      if (!hidup) return;
+      dengarkan(
+        (wav) => {
+          if (!hidup) return;
+          if (!wav) { pasang(); return; }        // sunyi sampai batas: buka lagi
+          const form = new FormData();
+          form.append('suara', wav, 'perintah.wav');
+          kirim('/tanya', form).then(tanganiJawaban).catch(() => pasang());
+        },
+        { tungguSuara: true, batasSunyi: 15000 },
+      );
+    };
+    pasang();
+    return () => {
+      hidup = false;
+      if (hentiDengarRef.current) hentiDengarRef.current();
+    };
+  }, [appState, isSpeaking]);
+
   // Spec 7: di layar hasil, 30 detik tanpa interaksi apa pun -> tutup aplikasi.
   // Diperiksa dengan interval, bukan timeout, supaya DUA sumber aktivitas bisa
   // menundanya: sentuhan/tombol di sini, dan suara pengguna dari dengarkan().
@@ -957,6 +1017,14 @@ export default function SayItPage() {
         return;
 
       default:
+        if (appState === 'CAMERA_READY') {
+          // Pengguna bicara di layar kamera tetapi bukan perintah tombol -
+          // misalnya bertanya sebelum memotret. Jawabannya ("belum ada foto")
+          // diucapkan di tempat; melompat ke layar hasil hanya membingungkan,
+          // karena di sana belum ada jawaban apa pun untuk diulang.
+          ucapkanJawaban(j.audio, j.teks);
+          return;
+        }
         // Jawaban tugas, ULANGI, LANJUT, dan BANTUAN dibacakan di layar hasil.
         jawabanRef.current = { audio: j.audio, teks: j.teks };
         setResultText(j.teks);
@@ -1104,6 +1172,15 @@ export default function SayItPage() {
       ...orbPosStyle,
       top: '86%', 
       transform: 'translate(-50%, -50%) scale(0.9)',
+      opacity: 1,
+    };
+  } else if (isSelesai) {
+    // Orb tetap ada dan tenang: layar akhir bukan layar mati, dan orb adalah
+    // satu-satunya elemen yang hadir di SEMUA layar lain.
+    orbPosStyle = {
+      ...orbPosStyle,
+      top: '46%',
+      transform: 'translate(-50%, -50%) scale(0.85)',
       opacity: 1,
     };
   } else if (isResultScreen) {
@@ -1438,32 +1515,67 @@ export default function SayItPage() {
       </div>
 
       {/* === LAYAR SELESAI ===
-          window.close() hanya berhasil di PWA terpasang. Di tab peramban biasa ia
-          gagal diam-diam, jadi inilah yang terlihat - layar akhir yang jelas dan
-          terucap, bukan layar putih kosong seperti state 'IDLE' yang lama. */}
-      {appState === 'SELESAI' && (
-        <div style={{
-          position: 'absolute', inset: 0, zIndex: 60,
-          background: 'var(--hitam, #050809)', color: 'var(--putih, #fafafa)',
+          Dirancang ulang memakai bahasa visual yang SAMA dengan layar hasil:
+          latar putih, logo di tempat yang sama, orb tetap hadir, dan kartu
+          jingga dengan tipografi yang sama. Versi sebelumnya berlatar gelap
+          sendirian - satu-satunya layar yang tidak mirip layar lain.
+
+          window.close() hanya berhasil di PWA terpasang. Di tab peramban biasa
+          ia gagal diam-diam, jadi inilah yang terlihat. */}
+      <div
+        aria-hidden={!isSelesai}
+        style={{
+          position: 'absolute', inset: 0, zIndex: 32,
+          backgroundColor: 'white',
+          boxSizing: 'border-box',
           display: 'flex', flexDirection: 'column', alignItems: 'center',
-          justifyContent: 'center', gap: '26px', padding: '0 32px', textAlign: 'center'
+          justifyContent: 'flex-end',
+          paddingBottom: 'max(10vh, 72px)',
+          opacity: isSelesai ? 1 : 0,
+          pointerEvents: isSelesai ? 'auto' : 'none',
+          // Masuk dari 0,96 bukan dari nol: tidak ada yang muncul dari ketiadaan.
+          transform: isSelesai ? 'scale(1)' : 'scale(0.96)',
+          transition: 'opacity 0.45s cubic-bezier(0.23, 1, 0.32, 1), transform 0.45s cubic-bezier(0.23, 1, 0.32, 1)',
+        }}
+      >
+        {/* Kartu jingga, sama persis dengan kartu jawaban di layar hasil */}
+        <div style={{
+          width: '75%', boxSizing: 'border-box',
+          padding: '18px 20px',
+          backgroundColor: 'var(--jingga, #f97316)',
+          borderRadius: '16px',
+          boxShadow: '0 4px 20px rgba(249,115,22,0.2)',
         }}>
-          <SayItLogo height={44} />
-          <p style={{ fontSize: '19px', fontWeight: 700, lineHeight: 1.4, margin: 0 }}>
+          <h2 style={{
+            margin: 0, fontSize: '15px', fontWeight: 700, lineHeight: 1.5,
+            textAlign: 'center', color: 'white',
+          }}>
             Terima kasih sudah memakai SayIt.
-          </p>
-          <p style={{ fontSize: '15px', color: 'var(--abu, #8b9196)', margin: 0 }}>
-            Aplikasi sudah ditutup. Kamu bisa menutup tab ini.
-          </p>
-          <button
-            className="btn-icon"
-            style={{ width: 'auto', padding: '14px 26px', fontSize: '16px', fontWeight: 700 }}
-            onClick={() => { aktifRef.current = performance.now(); pindah('INIT'); }}
-          >
-            Mulai lagi
-          </button>
+          </h2>
         </div>
-      )}
+
+        <p style={{
+          width: '75%', margin: '14px 0 0', fontSize: '13px', lineHeight: 1.5,
+          textAlign: 'center', color: '#6b7280',
+        }}>
+          Aplikasi sudah ditutup. Kamu bisa menutup tab ini.
+        </p>
+
+        {/* Satu tombol, selebar kartu, tinggi 52 px sama dengan .btn-icon di
+            layar hasil - jadi letak jempol tidak berpindah antar layar. */}
+        <button
+          className="btn-icon"
+          onClick={() => { aktifRef.current = performance.now(); pindah('INIT'); }}
+          style={{ width: '75%', flex: '0 0 auto', marginTop: '24px', gap: '10px', fontSize: '16px', fontWeight: 700 }}
+        >
+          <svg fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+            <path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8"/>
+            <path d="M21 3v5h-5"/>
+          </svg>
+          Mulai lagi
+        </button>
+      </div>
+
     </main>
   );
 }
