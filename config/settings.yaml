@@ -153,14 +153,24 @@ vision:
     # Buang deteksi yang skornya di bawah (rasio x skor tertinggi di foto itu).
     # 0 mematikan. Disetel dari sapuan 22-10; lihat docs/keputusan-teknis.md.
     relative_score_min: 0.80
-    # Diturunkan 0,40 -> 0,30 pada 22-10. Dua sapuan terpisah sepakat bahwa
-    # jawaban yang hilang di 0,40 adalah jawaban BENAR berskor 0,30-0,40:
-    #   model lama, 14 foto BERSIH : 0,40 -> 6/5/3 ; 0,30 -> 7/5/2
-    #   model baru, 49 foto tercemar: 0,40 -> 39/6/4 ; 0,30 -> 41/6/2
-    # Keduanya menambah BENAR tanpa menambah SALAH. Dipilih 0,30, bukan lebih
-    # rendah: di bawah itu tidak ada tambahan terukur, sementara risikonya
-    # asimetris - deteksi palsu pada latar ramai yang belum pernah kita foto
-    # akan menambah jawaban SALAH, arah yang paling berbahaya.
+    # PRD 8.9 menulis 0,5. Dipakai 0,30 setelah SAPUAN K-FOLD BERSIH (22-10):
+    # tiap foto dinilai model yang belum pernah melihatnya, 48 foto layak nilai.
+    #
+    #   ambang   BENAR  SALAH  DIAM   akurasi  presisi
+    #     0,25     34      5     9     70,8%    87,2%
+    #     0,30     33      4    11     68,8%    89,2%   <- dipakai
+    #     0,40     32      4    12     66,7%    88,9%   <- nilai lama
+    #     0,50     29      3    16     60,4%    90,6%
+    #
+    # Dipilih 0,30, bukan 0,25 yang akurasinya lebih tinggi: 0,25 menukar satu
+    # jawaban BENAR dengan satu jawaban SALAH, dan PRD 8.9 mengutamakan presisi
+    # di atas recall. Bagi pengguna tunanetra nominal yang keliru lebih berbahaya
+    # daripada sistem yang diam - ia tidak punya cara memeriksanya.
+    # Terhadap nilai lama 0,40, pilihan ini menang di KEDUA kolom sekaligus.
+    #
+    # Catatan: hanya 5 dari 12 DIAM bisa diselamatkan dengan menurunkan ambang.
+    # Sisanya tidak punya deteksi sama sekali bahkan di 0,15 - itu batas model,
+    # bukan batas ambang, dan hanya bisa diperbaiki dengan data atau model baru.
     score_min: 0.30
     nested_area_ratio: 0.85     # kotak yang >= 85% luasnya di dalam kotak sekelas dianggap uang yang sama
     # Kotak sekelas yang tumpang tindih >= ambang ini digabung (NMS per kelas).

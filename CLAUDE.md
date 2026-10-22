@@ -239,7 +239,7 @@ Langkah lengkapnya di `docs/deploy.md`.
 |---|---|---|---|
 | Akurasi kedaluwarsa | **81%** (13 benar / 1 salah / 2 diam) | >= 70% | **TERCAPAI** |
 | CER dokumen | 15,3% (9,0% pada 11 foto bagus) | <= 15% | meleset 0,3 poin |
-| Akurasi uang (total diucapkan) | **68,0%** (k-fold, 50 foto, 22-10) | >= 85% | meleset 17 poin |
+| Akurasi uang (total diucapkan) | **68,8%** (k-fold bersih, 48 foto, ambang 0,30) | >= 85% | meleset 16 poin |
 | Latensi uang / kendali | 1,4 s / 1,3 s | <= 8 s | **LOLOS** |
 | Latensi dokumen / kedaluwarsa | 11,5 s / 11,4 s | <= 8 s | **penyimpangan diterima** |
 
@@ -249,13 +249,12 @@ mesin OCR dipisah per modul - dokumen EasyOCR, kedaluwarsa PaddleOCR + `mobile_d
 `resize.max_side: 1600`; `rotate_retry: [180, 90, 270]`; `zone_score_min: 0.40`.
 
 **Kerja berikutnya, berurutan:**
-1. **Modul uang 68,0% lawan target 85% (k-fold 50 foto, 22-10).** Model
-   `money_kfold_v1_final` sudah dipasang. **Penghambatnya kini DIAM, bukan SALAH**:
-   14 diam lawan 4 salah. Yang tersisa, berurutan dari termurah:
-   a. **Sapu `money.score_min` pada model BARU** - belum pernah dilakukan. 28% foto tidak
-      dijawab karena tidak ada deteksi di atas 0,40. Ini tuas termurah dan belum disentuh.
-      Ukur benar/salah/diam, bukan hanya akurasi: menurunkan ambang menukar DIAM dengan
-      BENAR **dan** SALAH.
+1. **Modul uang 68,8% lawan target 85%** (k-fold bersih, 48 foto, ambang 0,30).
+   Model `money_kfold_v1_final` dipasang, `score_min` sudah disapu dan disetel 0,30.
+   **Penghambatnya DIAM, bukan SALAH**: 11 diam lawan 4 salah.
+   **Tuas ambang SUDAH HABIS** - dari 12 DIAM di 0,40 hanya 5 yang bisa diselamatkan
+   dengan menurunkan ambang; sisanya tidak punya deteksi sama sekali bahkan di 0,15.
+   Itu batas model, bukan batas ambang. Yang tersisa:
    b. **Kelas terlemah: 5000 (0,29), 2000 (0,50), 100000 (0,50).** 20000 dan 50000 sempurna.
       Foto tambahan sebaiknya difokuskan ke tiga kelas lemah itu, bukan merata.
    c. Augmentasi lebih agresif (blur, derau, cutout) untuk mensimulasikan variasi yang tidak difoto.
