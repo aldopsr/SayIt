@@ -153,12 +153,15 @@ vision:
     # Buang deteksi yang skornya di bawah (rasio x skor tertinggi di foto itu).
     # 0 mematikan. Disetel dari sapuan 22-10; lihat docs/keputusan-teknis.md.
     relative_score_min: 0.80
-    # PRD 8.9 menulis 0,5. Diturunkan ke 0,40 setelah disapu pada 35 foto sendiri:
-    # 0,35-0,45 memberi 25 benar / 4 salah, sedangkan 0,50 memberi 24 benar / 4 salah.
-    # Selisihnya hanya satu foto, tetapi arah yang sama juga mengurangi jumlah foto
-    # yang tidak dijawab (6 lawan 7). Di bawah 0,35 jumlah jawaban SALAH bertambah,
-    # dan untuk pengguna tunanetra jawaban salah lebih berbahaya daripada menolak.
-    score_min: 0.40
+    # Diturunkan 0,40 -> 0,30 pada 22-10. Dua sapuan terpisah sepakat bahwa
+    # jawaban yang hilang di 0,40 adalah jawaban BENAR berskor 0,30-0,40:
+    #   model lama, 14 foto BERSIH : 0,40 -> 6/5/3 ; 0,30 -> 7/5/2
+    #   model baru, 49 foto tercemar: 0,40 -> 39/6/4 ; 0,30 -> 41/6/2
+    # Keduanya menambah BENAR tanpa menambah SALAH. Dipilih 0,30, bukan lebih
+    # rendah: di bawah itu tidak ada tambahan terukur, sementara risikonya
+    # asimetris - deteksi palsu pada latar ramai yang belum pernah kita foto
+    # akan menambah jawaban SALAH, arah yang paling berbahaya.
+    score_min: 0.30
     nested_area_ratio: 0.85     # kotak yang >= 85% luasnya di dalam kotak sekelas dianggap uang yang sama
     # Kotak sekelas yang tumpang tindih >= ambang ini digabung (NMS per kelas).
     # DIMATIKAN (0) secara bawaan. Mekanismenya ada dan ada tesnya, tetapi sapuan
