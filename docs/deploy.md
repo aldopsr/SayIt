@@ -74,17 +74,23 @@ yang perlu dipasang atau didaftarkan.
 
 Tiga perintah, tiga jendela:
 
-```bash
-.venv\Scriptsctivate && uvicorn server.app:app --port 8000
+PowerShell tidak mengenal `&&`, dan venv tidak perlu diaktifkan sama sekali:
+
+```powershell
+.venv\Scripts\uvicorn.exe server.app:app --port 8000
 ```
 
-```bash
-ngrok http 8000
+```powershell
+cd web; npm run dev
 ```
 
-```bash
-cd web && npm run dev
+```powershell
+ngrok http 3000
 ```
+
+**Satu tunnel ke port 3000, bukan 8000.** Rewrite Next berjalan di laptop dan
+meneruskan `/api` ke port 8000 secara lokal, jadi backend ikut lewat tunnel yang
+sama dan `?api=` tidak diperlukan untuk uji lokal.
 
 ngrok mencetak URL seperti `https://expansive-surely-iodine.ngrok-free.dev`.
 **URL itu berganti setiap kali ngrok dijalankan ulang.**

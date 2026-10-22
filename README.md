@@ -94,20 +94,39 @@ lalu jalankan `python scripts\build_tts_cache.py`.
 
 ### Tiga jendela untuk alur lengkap
 
-```bash
-.venv\Scripts\activate && uvicorn server.app:app --port 8000
+**PowerShell (bawaan Windows) tidak mengenal `&&`** - seluruh baris gagal di-parse
+dan tidak ada yang dijalankan. Perintah di bawah sengaja satu baris tanpa `&&`,
+dan **tanpa mengaktifkan venv sama sekali**: memanggil berkasnya langsung
+menghilangkan sekaligus masalah `&&`, aktivasi, dan izin skrip.
+
+Tiga jendela PowerShell, masing-masing dibiarkan terbuka:
+
+```powershell
+.venv\Scripts\uvicorn.exe server.app:app --port 8000
 ```
 
-```bash
-ngrok http 8000
+```powershell
+cd web; npm run dev
 ```
 
-```bash
-cd web && npm run dev
+```powershell
+ngrok http 3000
 ```
+
+ngrok mencetak alamatnya sendiri; yang dibuka di HP adalah yang di sebelah
+`Forwarding`, dan **berganti setiap ngrok dijalankan ulang**:
+
+```
+Forwarding   https://xxxx.ngrok-free.dev -> http://localhost:3000
+```
+
+Satu tunnel ke port 3000 sudah cukup - backend ikut lewat situ, karena rewrite
+Next berjalan di laptop dan meneruskan `/api` ke port 8000 secara lokal.
+
+Menghentikannya: Ctrl+C di tiap jendela, atau `taskkill /F /IM ngrok.exe`.
 
 Kamera dan mikrofon **hanya jalan di HTTPS**, jadi untuk mengujinya dari HP
-pakai URL ngrok, bukan `localhost`.
+pakai URL ngrok, bukan `localhost` maupun IP laptop.
 
 ### Panel uji Streamlit (internal)
 
