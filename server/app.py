@@ -45,6 +45,22 @@ app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], all
 app.mount("/klip", StaticFiles(directory=str(project_path(cfg["tts"]["cache_dir"]))), name="klip")
 
 
+@app.middleware("http")
+async def klip_wajib_divalidasi(request, call_next):
+    """Paksa peramban memeriksa ulang klip sebelum memakainya.
+
+    StaticFiles mengirim ETag tetapi TIDAK mengirim Cache-Control. Tanpa itu
+    peramban memakai tebakan kesegarannya sendiri dan bisa memutar klip lama
+    berhari-hari - terbukti di HP: sambutan yang sudah dipendekkan tetap
+    terdengar versi panjangnya. "no-cache" bukan berarti jangan disimpan,
+    melainkan tanyakan dulu: kalau belum berubah jawabannya 304 yang murah.
+    """
+    respons = await call_next(request)
+    if request.url.path.startswith("/klip"):
+        respons.headers["Cache-Control"] = "no-cache"
+    return respons
+
+
 @app.on_event("startup")
 def muat():
     status.update(pipeline.load())

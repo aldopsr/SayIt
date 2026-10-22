@@ -30,9 +30,20 @@ const WAVE_COLORS_LISTENING = [[225,60,20],  [244,90,60],  [190,40,20], [239,68,
 const WAVE_SAMPLES = 160;
 const WAVE_DOTS = 2400;
 
-// Ambang RMS mikrofon: di bawah ini dianggap hening. Dikalibrasi kasar di laptop;
-// ponytail: satu angka, bukan AGC - naikkan kalau ruangnya berisik.
-const AMBANG_SUARA = 0.015;
+// Ambang RMS mikrofon. Angka TETAP tidak cukup: di tempat ramai derau latar
+// sendiri sudah melewatinya, jadi hening tidak pernah terdeteksi dan pengguna
+// menunggu lama walau sudah selesai bicara (dilaporkan 22-10).
+//
+// Jadi ambangnya DIHITUNG dari ruangan: derau latar diukur sebentar di awal tiap
+// sesi, lalu ambang = derau x KALI, dibatasi lantai dan langit-langit. Suara orang
+// biasanya 5-10x lebih kuat daripada derau latar, jadi 3x memberi jarak aman tanpa
+// menelan suara pelan.
+// ponytail: satu kali ukur di awal, bukan AGC yang terus menyesuaikan - cukup
+// untuk sesi sependek ini, dan tidak bisa "merayap" mengikuti suara penggunanya.
+const AMBANG_MIN = 0.012;        // ruangan sunyi: jangan lebih sensitif dari ini
+const AMBANG_MAKS = 0.12;        // ruangan sangat ramai: jangan jadi tuli sama sekali
+const AMBANG_KALI = 3.0;
+const UKUR_DERAU_MS = 400;       // sebelum ini, tiap sesi hanya mendengarkan ruangan
 const HENING_MS = 3000;    // spec 4: berhenti mendengar setelah 3 detik hening
 // Perintah tombol hanya dua kata, jadi menunggu 3 detik hening terasa lama sekali.
 // Nilai ini SENGAJA berbeda dari HENING_MS: spec 4 bicara tentang pertanyaan, bukan
@@ -396,6 +407,7 @@ export default function SayItPage() {
   const isSpeechSynthesisSpeaking = useRef(false);
   const utteranceId = useRef(0);
   const orbSlotRef = useRef(null);
+  const bingkaiRef = useRef(null);                 // kotak bidik; crop foto diukur dari sini
   const nivRef = useRef(0);                        // volume mic 0..1, dibaca orb
   const aktifRef = useRef(0);                      // kapan terakhir ada aktivitas (sentuh ATAU suara)
   const timersRef = useRef([]);
@@ -592,7 +604,7 @@ export default function SayItPage() {
   // === MENDENGARKAN: mikrofon sungguhan + deteksi hening 3 detik (spec 4) ===
   // Mengisi nivRef supaya orb bergerak mengikuti suara asli pengguna - orb sudah
   // mendukungnya lewat prop levelRef, hanya belum pernah dialiri.
-  // Selesai sendiri setelah HENING_MS tanpa suara di atas AMBANG_SUARA.
+  // Selesai sendiri setelah heningMs tanpa suara di atas ambang adaptif.
   // tungguSuara: rekaman tetap jalan dari awal (supaya suku kata pertama tidak
   //   terpotong) tetapi hanya DIKIRIM kalau pengguna benar-benar bicara. Dipakai
   //   di layar kamera, yang mendengarkan terus - hening tidak boleh membebani
@@ -654,6 +666,8 @@ export default function SayItPage() {
       let diamSejak = mulai;
       let adaSuara = false;
       let hidup = true;
+      let ambang = AMBANG_MIN;     // diganti hasil ukur derau setelah UKUR_DERAU_MS
+      let derauMaks = 0;
 
       const tutup = (kirim = false) => {
         if (!hidup) return;
@@ -682,7 +696,21 @@ export default function SayItPage() {
         nivRef.current = Math.min(1, rms * 8);
 
         const now = performance.now();
-        if (rms > AMBANG_SUARA) {
+
+        // Fase ukur derau: dengarkan ruangan dulu, jangan hitung sebagai suara.
+        // Puncak yang dipakai, bukan rata-rata, supaya satu dentuman tidak
+        // membuat ambangnya terlalu rendah sepanjang sesi.
+        if (now - mulai < UKUR_DERAU_MS) {
+          derauMaks = Math.max(derauMaks, rms);
+          diamSejak = now;
+          raf = requestAnimationFrame(tik);
+          return;
+        }
+        if (ambang === AMBANG_MIN && derauMaks > 0) {
+          ambang = Math.min(AMBANG_MAKS, Math.max(AMBANG_MIN, derauMaks * AMBANG_KALI));
+        }
+
+        if (rms > ambang) {
           diamSejak = now;
           adaSuara = true;
           aktifRef.current = now;      // suara juga menunda penutupan otomatis (spec 7)
@@ -1155,10 +1183,15 @@ export default function SayItPage() {
         const dx = (W - drawW) / 2;
         const dy = (H - drawH) / 2;
 
-        const frameX = 24;
-        const frameY = 60;
-        const frameW = W - 48; 
-        const frameH = H - 210; 
+        // Geometri diukur dari elemen bingkainya sendiri, bukan angka tetap.
+        // Dulu 24/60/48/210 disalin di sini DAN di gaya bingkainya; begitu
+        // tata letaknya menyesuaikan safe-area HP, kedua angka itu menyimpang
+        // dan fotonya terpotong di tempat yang salah tanpa ada yang tahu.
+        const kotak = bingkaiRef.current?.getBoundingClientRect();
+        const frameX = kotak ? kotak.left : 24;
+        const frameY = kotak ? kotak.top : 60;
+        const frameW = kotak ? kotak.width : W - 48;
+        const frameH = kotak ? kotak.height : H - 210;
 
         const cropX = Math.max(0, (frameX - dx) / scale);
         const cropY = Math.max(0, (frameY - dy) / scale);
@@ -1267,7 +1300,13 @@ export default function SayItPage() {
         top: 0,
         left: 0,
         width: '100vw',
+        // 100dvh, bukan 100vh: di HP 100vh MENGABAIKAN bilah alamat peramban,
+        // jadi apa pun yang ditempel ke bawah jatuh di belakangnya dan terpotong
+        // (dilaporkan 22-10). 100vh dipertahankan sebagai cadangan untuk
+        // peramban lama yang belum mengenal dvh.
         height: '100vh',
+        minHeight: '100dvh',
+        maxHeight: '100dvh',
         backgroundColor: 'white', 
         overflow: 'hidden',
         userSelect: 'none'
@@ -1361,8 +1400,12 @@ export default function SayItPage() {
       {/* === SCREEN 1: UI KAMERA === */}
       {appState === 'CAMERA_READY' && (
         <div style={{ position: 'absolute', inset: 0, zIndex: 20, pointerEvents: 'none', overflow: 'hidden' }}>
-          <div style={{ 
-            position: 'absolute', top: '60px', bottom: '150px', left: '24px', right: '24px', 
+          <div ref={bingkaiRef} style={{ 
+            position: 'absolute',
+            top: 'max(60px, env(safe-area-inset-top))',
+            bottom: 'calc(150px + env(safe-area-inset-bottom))',
+            left: 'max(24px, env(safe-area-inset-left))',
+            right: 'max(24px, env(safe-area-inset-right))',
             boxShadow: '0 0 0 9999px rgba(0,0,0,0.3)' 
           }}>
             <div style={{ position: 'absolute', top: 0, left: 0, width: '40px', height: '40px', borderTop: '6px solid var(--jingga, #f97316)', borderLeft: '6px solid var(--jingga, #f97316)' }}></div>
@@ -1372,7 +1415,13 @@ export default function SayItPage() {
           </div>
 
           {/* Baris bawah: upload (kiri) - shutter (tengah) - flip kamera (kanan) */}
-          <div style={{ position: 'absolute', bottom: '40px', left: 0, right: 0, height: '76px', padding: '0 10.5%', boxSizing: 'border-box', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <div style={{
+            position: 'absolute',
+            bottom: 'calc(40px + env(safe-area-inset-bottom))',
+            left: 0, right: 0, height: '76px',
+            padding: '0 10.5%', boxSizing: 'border-box',
+            display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+          }}>
             <button className="btn-cam" onClick={handleUploadClick} aria-label="Unggah foto dari perangkat">
               <svg fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" strokeLinecap="round" strokeLinejoin="round">
                 <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
@@ -1471,7 +1520,10 @@ export default function SayItPage() {
             flexDirection: 'column',
             alignItems: 'center',
             paddingTop: 'max(5.5vh, 64px)', // sisakan ruang untuk logo di atas
-            paddingBottom: '10vh',
+            // Jarak bawah TETAP minimal 24 px di atas area aman. Sebelumnya 10vh
+            // saja: di HP pendek itu kurang dari tinggi tombolnya sendiri, jadi
+            // baris tombol terpotong di bawah layar (dilaporkan 22-10).
+            paddingBottom: 'calc(24px + env(safe-area-inset-bottom))',
             opacity: isResultScreen ? 1 : 0,
             pointerEvents: isResultScreen ? 'auto' : 'none',
             transition: 'opacity 0.6s ease-in-out, transform 0.6s ease-in-out',
@@ -1480,20 +1532,24 @@ export default function SayItPage() {
           }}
         >
           {/* 1. FOTO (ukuran normal 42vh, mengecil kalau teks output sangat panjang) */}
-          <div style={{ flex: '0 1 42vh', minHeight: '18vh', width: '100%', display: 'flex', justifyContent: 'center' }}>
+          {/* Foto boleh menyusut sampai 12vh di layar pendek: yang TIDAK boleh
+              hilang adalah kartu jawaban dan barisan tombolnya. */}
+          <div style={{ flex: '0 1 42vh', minHeight: '12vh', width: '100%', display: 'flex', justifyContent: 'center' }}>
             {photoImg}
           </div>
 
           {/* 2. RUANG ORB: orb global diposisikan di tengah area ini */}
-          <div ref={orbSlotRef} style={{ flex: '1 0 150px', width: '100%' }} />
+          {/* flex-shrink dinyalakan: di layar pendek ruang orb yang mengalah,
+              bukan tombolnya. */}
+          <div ref={orbSlotRef} style={{ flex: '1 1 110px', minHeight: '70px', width: '100%' }} />
 
           {/* 3. CARD OUTPUT: tinggi mengikuti teks, scroll kalau lebih dari 40vh */}
           <div style={{
             width: '75%',
             boxSizing: 'border-box',
             flex: '0 0 auto',
-            minHeight: '10vh',
-            maxHeight: '40vh',
+            minHeight: '9vh',
+            maxHeight: '32vh',
             overflowY: 'auto',
             display: 'flex',
             padding: '14px 18px',
@@ -1515,7 +1571,7 @@ export default function SayItPage() {
               sehingga aplikasinya tidak pernah menutup. Terbukti saat diuji. */}
           <div
             onClick={(e) => e.stopPropagation()}
-            style={{ width: '75%', display: 'flex', gap: '12px', marginTop: '24px', flex: '0 0 auto' }}
+            style={{ width: '75%', display: 'flex', gap: '12px', marginTop: '20px', flex: '0 0 auto' }}
           >
             <button 
               className="btn-icon"
@@ -1579,7 +1635,7 @@ export default function SayItPage() {
           boxSizing: 'border-box',
           display: 'flex', flexDirection: 'column', alignItems: 'center',
           justifyContent: 'flex-end',
-          paddingBottom: 'max(10vh, 72px)',
+          paddingBottom: 'calc(32px + env(safe-area-inset-bottom))',
           opacity: isSelesai ? 1 : 0,
           pointerEvents: isSelesai ? 'auto' : 'none',
           // Masuk dari 0,96 bukan dari nol: tidak ada yang muncul dari ketiadaan.
