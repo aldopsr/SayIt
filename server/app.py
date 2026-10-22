@@ -211,5 +211,9 @@ async def tanya(
 
         audio, sr = penyuara.render(ucapan)
 
+    # `transcript` ikut dikembalikan: tanpa ini tidak ada cara melihat APA yang
+    # didengar sistem, dan tiap bug suara harus ditebak. Pipeline sudah
+    # menyimpannya di notes, hanya belum pernah diteruskan.
     return {"teks": giliran.text, "intent": giliran.intent, "alasan": giliran.reason,
+            "transcript": giliran.notes.get("transcript"),
             "audio": _wav_b64(audio, sr)}

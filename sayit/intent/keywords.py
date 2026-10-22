@@ -53,9 +53,21 @@ KEYWORDS: dict[str, dict[str, int]] = {
                    "buka galeri": 2, "ambil dari galeri": 2, "unggah": 2, "upload": 2},
     # "apa itu sayit" adalah pintu bantuan yang diumumkan sambutan, jadi ejaannya
     # harus longgar: STT menulis nama aplikasi ini bermacam-macam.
+    # BANTUAN paling butuh toleransi justru karena isinya NAMA APLIKASI, yang
+    # tidak ada di kamus Whisper. Diukur 22-10: 10 dari 15 ucapan wajar gagal.
+    # Melonggarkannya aman - salah memicu BANTUAN hanya membacakan satu kalimat,
+    # tidak seperti KELUAR yang menutup aplikasi atau FOTO_BARU yang membuang foto.
     BANTUAN: {"bantuan": 2, "bisa apa": 2, "bantu apa": 2, "cara pakai": 2, "cara menggunakan": 2,
+              "belum paham": 2, "tidak paham": 2, "kurang paham": 2,
+              # ejaan nama aplikasi yang keluar dari STT
               "apa itu sayit": 2, "apa itu say it": 2, "apa itu sai it": 2, "apa itu seyit": 2,
-              "belum paham": 2, "apa itu aplikasi ini": 2},
+              "apa itu sait": 2, "apa itu sayid": 2, "apa itu sae it": 2, "apa itu seit": 2,
+              "apa itu cyit": 2, "apa itu sayit itu": 2,
+              # susunan kalimat lain yang sama maksudnya
+              "sayit itu apa": 2, "say it itu apa": 2, "apa sih sayit": 2,
+              "apa itu aplikasi ini": 2, "ini aplikasi apa": 2, "aplikasi apa ini": 2,
+              "aplikasi ini buat apa": 2, "aplikasi ini untuk apa": 2,
+              "fitur apa saja": 2, "ada fitur apa": 2, "kamu bisa apa": 2, "siapa kamu": 2},
 }
 
 SUFFIXES = ("nya", "kah", "lah")

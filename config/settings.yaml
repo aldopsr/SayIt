@@ -16,9 +16,14 @@ stt:
   beam_size: 5
   vad_filter: true
   use_prompt: true              # tanpa prompt WER naik ke 27,5% pada Fase 0
+  # Kata yang TIDAK ada di sini jauh lebih sering salah ditranskrip (tanpa prompt
+  # WER naik 7% -> 27%). Jadi setiap perintah yang diucapkan aplikasi ke pengguna
+  # WAJIB ada di sini - termasuk "sayit", nama yang tidak ada di kamus Whisper dan
+  # justru jadi satu-satunya pintu masuk pengguna baru lewat "apa itu SayIt".
   initial_prompt: >-
-    uang, rupiah, nominal, kembalian, baca, bacakan, tulisan, dokumen, surat,
-    kedaluwarsa, expired, tanggal, ulangi, lanjut, foto lagi
+    SayIt, uang, rupiah, nominal, kembalian, baca, bacakan, tulisan, dokumen, surat,
+    kedaluwarsa, expired, tanggal, ulangi, lanjut, foto lagi, bantuan, keluar,
+    putar kamera, ganti kamera, pilih berkas, apa itu SayIt
   min_chars: 2                  # transkrip lebih pendek dari ini dianggap kosong
   max_no_speech_prob: 0.6       # segmen dengan peluang "tidak ada suara" di atas ini diabaikan
 

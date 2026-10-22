@@ -168,3 +168,33 @@ def test_sambutan_pendek_tetap_menyebut_pintu_bantuannya():
     sambutan = CLIP_TEXTS["sambutan"].lower()
     assert "apa itu sayit" in sambutan
     assert ROUTER.route("apa itu sayit").intent == K.BANTUAN
+
+
+# --------------------------------------------------------------------------- bantuan longgar
+
+@pytest.mark.parametrize("teks", [
+    # ejaan nama aplikasi yang keluar dari STT - "sayit" tidak ada di kamus Whisper
+    "apa itu sayit", "apa itu sait", "apa itu sayid", "apa itu cyit", "apa itu sae it",
+    # susunan kalimat lain yang sama maksudnya
+    "sayit itu apa", "apa sih sayit itu", "ini aplikasi apa", "aplikasi ini buat apa",
+    "ada fitur apa saja", "siapa kamu", "saya belum paham",
+])
+def test_bantuan_toleran_terhadap_variasi_ucapan(teks):
+    """Diukur 22-10: 10 dari 15 ucapan wajar gagal karena BANTUAN dicocokkan persis.
+
+    Melonggarkannya aman - salah memicu BANTUAN hanya membacakan satu kalimat,
+    tidak seperti KELUAR yang menutup aplikasi.
+    """
+    assert ROUTER.route(teks).intent == K.BANTUAN
+
+
+def test_prompt_stt_memuat_kata_yang_disuruh_diucapkan_aplikasi():
+    """Kata yang tidak ada di initial_prompt jauh lebih sering salah ditranskrip.
+
+    Sambutan menyuruh pengguna mengucapkan "apa itu SayIt", jadi "sayit" wajib
+    ada di prompt - kalau tidak, pintu masuk pengguna baru dibiarkan rapuh.
+    """
+    from sayit.config import load_config
+    prompt = load_config()["stt"]["initial_prompt"].lower()
+    for kata in ["sayit", "bantuan", "keluar", "putar kamera", "pilih berkas"]:
+        assert kata in prompt, f"{kata!r} tidak ada di initial_prompt"

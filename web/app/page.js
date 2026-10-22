@@ -821,7 +821,15 @@ export default function SayItPage() {
 
   useEffect(() => {
     if (appState === 'LISTENING_Q') {
-      dengarkan((wav) => { suaraRef.current = wav; pindah('PROCESSING_Q'); });
+      // tungguSuara WAJIB. Tanpa itu hening 3 detik tetap dikirim ke Whisper,
+      // transkripnya kosong, jawabannya "suaramu tidak terdengar jelas", lalu
+      // kembali ke sini - lingkaran tanpa akhir bagi pengguna yang diam.
+      // Hening sampai batas berarti pasang lagi, bukan kirim.
+      const pasang = () => dengarkan(
+        (wav) => { if (!wav) { pasang(); return; } suaraRef.current = wav; pindah('PROCESSING_Q'); },
+        { tungguSuara: true, batasSunyi: 15000 },
+      );
+      pasang();
     }
   }, [appState]);
 
@@ -864,14 +872,21 @@ export default function SayItPage() {
       // memotret ulang diam-diam. Timer idle 30 detik yang menutup aplikasinya.
       // HASIL_SUNYI, bukan SHOWING_RESULT: yang kedua membacakan ulang lalu kembali
       // ke menu lagi - lingkaran suara tanpa akhir.
-      dengarkan((wav) => {
-        if (!wav) { pindah('HASIL_SUNYI'); return; }
-        const form = new FormData();
-        form.append('suara', wav, 'menu.wav');
-        kirim('/tanya', form)
-          .then(tanganiJawaban)
-          .catch(() => { galatJaringan(); pindah('HASIL_SUNYI'); });
-      });
+      // Sama seperti LISTENING_Q: hening tidak dikirim, melainkan memasang
+      // pendengar lagi. Timer idle 30 detik yang akhirnya menutup aplikasi.
+      const pasang = () => dengarkan(
+        (wav) => {
+          if (!wav) { pasang(); return; }
+          bip();
+          const form = new FormData();
+          form.append('suara', wav, 'menu.wav');
+          kirim('/tanya', form)
+            .then(tanganiJawaban)
+            .catch(() => { galatJaringan(); pasang(); });
+        },
+        { tungguSuara: true, batasSunyi: 15000 },
+      );
+      pasang();
     }
   }, [appState]);
 
@@ -1065,6 +1080,9 @@ export default function SayItPage() {
    *  server lagi. */
   const tanganiJawaban = (j) => {
     aktifRef.current = performance.now();
+    // Apa yang DIDENGAR sistem, bukan apa yang kita kira kita ucapkan. Tanpa ini
+    // tiap bug suara harus ditebak; dengan ini cukup buka konsol di HP.
+    if (j.transcript) console.info('[SayIt] didengar:', JSON.stringify(j.transcript), '-> intent', j.intent);
     if (j.error) { ucapkanGalat(j); pindah('HASIL_SUNYI'); return; }
 
     switch (j.intent) {
@@ -1091,12 +1109,17 @@ export default function SayItPage() {
         ucapkanJawaban(j.audio, j.teks, { selesai: tutupAplikasi });
         return;
       case 'TIDAK_DIKENALI':
-        // Suara tidak tertangkap atau kalimatnya tidak dimengerti. Jawabannya
-        // sudah menyuruh mengulang, jadi kembalikan ke tahap yang sama - bukan
-        // ke layar hasil, yang lalu menawarkan "ulangi, foto lagi, atau keluar"
-        // padahal belum ada jawaban apa pun untuk diulang.
+        // Kembalikan ke tahap yang SAMA. Penentunya `appState`, bukan
+        // `capturedImage`: dulu memakai foto, jadi pengguna yang bicara di layar
+        // kamera tanpa foto dilempar ke LISTENING_MENU - yang termasuk layar
+        // hasil - dan melihat kartu jawaban KOSONG. Itu persis bug yang
+        // dilaporkan saat mengucapkan "apa itu SayIt" di layar kamera.
+        if (appState === 'CAMERA_READY') {
+          ucapkanJawaban(j.audio, j.teks);    // pendengar kamera memasang diri lagi
+          return;
+        }
         ucapkanJawaban(j.audio, j.teks, {
-          lalu: capturedImage ? 'LISTENING_Q' : 'LISTENING_MENU',
+          lalu: isResultScreen ? 'LISTENING_MENU' : 'LISTENING_Q',
         });
         return;
 
