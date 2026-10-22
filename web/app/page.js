@@ -758,7 +758,14 @@ export default function SayItPage() {
    *  Next membalas 500 "Internal Server Error" teks biasa ketika backend mati,
    *  jadi status 500 tidak bisa dibedakan dari galat server sungguhan. */
   const kirim = async (jalur, form) => {
-    const r = await fetch(api(jalur), { method: 'POST', body: form, headers: kepalaApi() });
+    // Batas waktu klien, sedikit DI BAWAH proxyTimeout Next (180 detik). Tanpa
+    // ini permintaan yang benar-benar menggantung membisukan aplikasi tanpa
+    // batas, dan pengguna tunanetra tidak punya cara tahu bahwa ia menunggu
+    // sesuatu yang tidak akan datang.
+    const putus = AbortSignal.timeout ? AbortSignal.timeout(170000) : undefined;
+    const r = await fetch(api(jalur), {
+      method: 'POST', body: form, headers: kepalaApi(), signal: putus,
+    });
     let j = null;
     try { j = await r.json(); } catch {}
     if (!j || (j.teks === undefined && j.error === undefined)) throw new Error('bukan-sayit');
@@ -838,7 +845,13 @@ export default function SayItPage() {
   useEffect(() => {
     if (appState !== 'PROCESSING_Q') return;
     let batal = false;
-    ucapkanKlip('sedang_memproses');
+    // Penandanya DIULANG, bukan sekali. Modul kedaluwarsa bisa butuh hampir satu
+    // menit (terukur 58 detik lewat tunnel untuk foto yang memicu rotasi), dan
+    // diam selama itu tidak bisa dibedakan dari rusak oleh orang yang tidak
+    // melihat layar. nanti() dipakai supaya pindah() otomatis membatalkannya
+    // begitu jawabannya datang.
+    const penanda = () => { ucapkanKlip('sedang_memproses'); nanti(penanda, 20000); };
+    penanda();
     const wav = suaraRef.current;
     suaraRef.current = null;
     const form = new FormData();
