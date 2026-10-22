@@ -565,14 +565,27 @@ export default function SayItPage() {
   /* Ambil teks tiap klip sekali, supaya wilayah aria-live memuat kalimat yang
      SAMA dengan yang terdengar tanpa menyalin kalimatnya ke sini.
 
-     Klip yang diputar di dalam penangan gestur diambil lebih dulu sebagai blob:
-     ngrok gratis membalas halaman peringatan untuk GET yang tampak dari peramban,
-     dan elemen <audio> tidak bisa mengirim header pelewatnya - hanya fetch bisa.
-     Diambil SEKARANG, bukan saat disentuh: fetch di dalam penangan gestur membuat
-     play() kehilangan konteks gestur, dan iOS memblokirnya. */
+     Klip yang diputar klien sendiri diambil lebih dulu sebagai blob. Tiga alasan,
+     dan ketiganya pernah menggigit:
+
+     1. CACHE. Elemen <audio> memakai cache HTTP peramban apa adanya, dan sebuah
+        entri yang terlanjur tersimpan tanpa Cache-Control bisa dipakai berhari-hari
+        - sambutan yang sudah dipendekkan tetap terdengar versi panjangnya di HP
+        walau berkas di server sudah benar. `cache: 'no-cache'` pada fetch memaksa
+        peramban bertanya dulu, dan itu TIDAK BISA dilakukan lewat <audio>.
+     2. Header pelewat ngrok juga hanya bisa dikirim fetch, bukan <audio>.
+     3. Diambil SEKARANG, bukan saat disentuh: fetch di dalam penangan gestur
+        membuat play() kehilangan konteks gestur, dan iOS memblokirnya.
+
+     Dulu prefetch ini dilewati ketika frontend dan backend satu origin
+     (`if (!h) return`). Justru itulah keadaan saat memakai satu tunnel, jadi
+     jalur yang paling sering dipakai pengguna adalah satu-satunya yang tidak
+     terlindungi. */
   useEffect(() => {
     const h = kepalaApi();
-    fetch(api('/klip-teks'), { headers: h })
+    const opsi = { headers: h, cache: 'no-cache' };
+
+    fetch(api('/klip-teks'), opsi)
       .then((r) => (r.ok ? r.json() : null))
       .then((j) => {
         if (!j) return;
@@ -585,10 +598,12 @@ export default function SayItPage() {
       })
       .catch(() => {});
 
-    if (!h) return;                    // satu origin: <audio> sudah bisa langsung
+    // Hanya klip yang diputar KLIEN sendiri. Jawaban modul datang sebagai WAV
+    // di badan responsnya, jadi tidak pernah lewat cache.
     const dibuat = [];
-    for (const nama of ['sambutan', 'sedang_memproses', 'kamera_depan', 'kamera_belakang']) {
-      fetch(api(`/klip/${nama}.mp3`), { headers: h })
+    for (const nama of ['sambutan', 'sedang_memproses', 'kamera_depan', 'kamera_belakang',
+                        'kamera_tunggal', 'sentuh_untuk_berkas', 'sampai_jumpa']) {
+      fetch(api(`/klip/${nama}.mp3`), opsi)
         .then((r) => (r.ok ? r.blob() : null))
         .then((b) => {
           if (!b || !b.size) return;
