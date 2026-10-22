@@ -156,16 +156,22 @@ Yang masih terbuka: latensi PaddleOCR - lihat **Titik sambung**.
 Sudah ada: 35 foto uji uang sendiri di `data/uji_sendiri/` (1000 2, 2000 4, 5000 5, 10000 7, 20000 5, 50000 6,
 100000 6). Dua latar: meja kayu dan dipegang di depan laptop. Berkas asli iPhone ada di `data/uji_sendiri/asli/`
 (HEIC, sudah dikonversi; boleh dihapus).
-**Label YOLO (diperbarui 22-10): 49 gambar, 48 label berisi, 0 kosong, ketujuh kelas**
-(1000:4, 2000:8, 5000:7, 10000:10, 20000:7, 50000:6, 100000:6) di `data/label_sendiri/`.
-Naik dari 29 label: 13 foto baru dari teman + 6 foto yang ternyata ada di
-`data/uji_sendiri/` tetapi TIDAK PERNAH disalin ke folder dataset.
-Empat foto dilabeli dengan memeriksa gambarnya satu per satu, karena kotak model
-tidak bisa dipakai apa adanya (terlalu lebar, seluruh bingkai, atau lembar terlipat
-yang dipecah jadi tiga). Rinciannya di `data/label_sendiri/BACA_DULU.txt`.
-Satu foto SENGAJA tidak dilabeli: `5000_dipegang_ (3).jpeg` berisi DUA lembar
-(5.000 dipegang + satu lembar lagi di meja). Menebak labelnya adalah persis
-kesalahan yang dulu merusak dataset Roboflow.
+**Label YOLO (diperbarui 23-10): 81 gambar, 80 label berisi, 0 kosong, 81 kotak, ketujuh kelas**
+(1000:4, 2000:21, 5000:20, 10000:10, 20000:7, 50000:6, 100000:13) di `data/label_sendiri/`.
+Tambahan 23-10 (+33 foto) sengaja **diarahkan ke tiga kelas terlemah k-fold**
+(5000 0,29 / 2000 0,50 / 100000 0,50), bukan merata: 2000 8->21, 5000 7->20, 100000 6->13.
+1000 (hanya 4 kotak) kini kelas terlemah berikutnya kalau hasilnya tetap buruk.
+Dari 33 foto baru, 21 berlabel otomatis (deteksi tunggal) dan 12 diputuskan dengan melihat
+gambarnya satu per satu. **Pola kesalahan model yang paling sering: deteksi palsu di LAYAR
+LAPTOP** di bagian atas bingkai - model membaca gambar uang di layar sebagai uang sungguhan.
+Rinciannya per berkas di `data/label_sendiri/BACA_DULU.txt`.
+Dua foto istimewa, dan keduanya menjebak skrip ukur:
+- `5000_dipegang_ (3).jpeg` SENGAJA tidak dilabeli (dua lembar, yang kedua tidak terbaca).
+  Menebak labelnya adalah persis kesalahan yang dulu merusak dataset Roboflow.
+- `2000_dipegang_ (10).jpeg` punya **dua kotak** (dua lembar 2.000 sungguhan, nomor seri
+  berbeda) - satu-satunya foto banyak lembar yang berlabel. `scripts/diagnosa_uang.py
+  --harapan-dari-nama` akan selalu menilainya SALAH karena membaca harapan dari nama berkas;
+  notebook k-fold membaca labelnya, jadi di situ benar.
 **JANGAN melengkapi foto tanpa label dengan berkas `.txt` kosong** - dalam YOLO
 label kosong berarti "tidak ada uang di gambar ini", dan itu pernah merusak
 latihan k-fold pertama (07-10).
@@ -256,7 +262,11 @@ mesin OCR dipisah per modul - dokumen EasyOCR, kedaluwarsa PaddleOCR + `mobile_d
    dengan menurunkan ambang; sisanya tidak punya deteksi sama sekali bahkan di 0,15.
    Itu batas model, bukan batas ambang. Yang tersisa:
    b. **Kelas terlemah: 5000 (0,29), 2000 (0,50), 100000 (0,50).** 20000 dan 50000 sempurna.
-      Foto tambahan sebaiknya difokuskan ke tiga kelas lemah itu, bukan merata.
+      **SUDAH DIKERJAKAN 23-10**: +33 foto diarahkan tepat ke tiga kelas itu
+      (2000 8->21 kotak, 5000 7->20, 100000 6->13), dataset kini 81 foto / 80 label.
+      **Belum diukur** - unggah `data/label_sendiri/` ke Drive dan jalankan ulang
+      `notebooks/04_money_kfold.ipynb` (`percaya_label`, `sendiri=True`,
+      `LATIH_MODEL_TERAKHIR = False`). Itu langkah berikutnya yang paling berbobot.
    c. Augmentasi lebih agresif (blur, derau, cutout) untuk mensimulasikan variasi yang tidak difoto.
    d. YOLOv8n -> YOLOv8s, lebih banyak epoch.
    e. Foto baru dengan variasi latar, cahaya, dan emisi - ini yang tidak bisa digantikan apa pun.
