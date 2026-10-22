@@ -239,7 +239,7 @@ Langkah lengkapnya di `docs/deploy.md`.
 |---|---|---|---|
 | Akurasi kedaluwarsa | **81%** (13 benar / 1 salah / 2 diam) | >= 70% | **TERCAPAI** |
 | CER dokumen | 15,3% (9,0% pada 11 foto bagus) | <= 15% | meleset 0,3 poin |
-| Akurasi uang (total diucapkan) | **82,8%** (k-fold, 29 foto) | >= 85% | meleset 2,2 poin |
+| Akurasi uang (total diucapkan) | **68,0%** (k-fold, 50 foto, 22-10) | >= 85% | meleset 17 poin |
 | Latensi uang / kendali | 1,4 s / 1,3 s | <= 8 s | **LOLOS** |
 | Latensi dokumen / kedaluwarsa | 11,5 s / 11,4 s | <= 8 s | **penyimpangan diterima** |
 
@@ -249,14 +249,15 @@ mesin OCR dipisah per modul - dokumen EasyOCR, kedaluwarsa PaddleOCR + `mobile_d
 `resize.max_side: 1600`; `rotate_retry: [180, 90, 270]`; `zone_score_min: 0.40`.
 
 **Kerja berikutnya, berurutan:**
-1. **Modul uang 65,7% lawan target 85%.** Tuas inferensi sudah habis (lihat Utang). Yang tersisa,
-   berurutan dari termurah:
-   a. **Perbaiki pasca-pemrosesan** - 2 dari 6 kesalahan adalah salah hitung lembar
-      (`100000` dijawab `200000`, `10000` dijawab `11000`). Tidak butuh foto baru maupun latihan ulang.
-   b. **Pakai 35 foto sendiri sebagai data LATIH lewat k-fold** - notebook SUDAH SIAP:
-      `notebooks/04_money_kfold.ipynb`. Jalankan di Colab dengan T4. Pembanding yang harus
-      dikalahkan: 65,7% (metrik total). `LATIH_MODEL_TERAKHIR = False` dulu; nyalakan hanya bila
-      angka k-fold lebih baik.
+1. **Modul uang 68,0% lawan target 85% (k-fold 50 foto, 22-10).** Model
+   `money_kfold_v1_final` sudah dipasang. **Penghambatnya kini DIAM, bukan SALAH**:
+   14 diam lawan 4 salah. Yang tersisa, berurutan dari termurah:
+   a. **Sapu `money.score_min` pada model BARU** - belum pernah dilakukan. 28% foto tidak
+      dijawab karena tidak ada deteksi di atas 0,40. Ini tuas termurah dan belum disentuh.
+      Ukur benar/salah/diam, bukan hanya akurasi: menurunkan ambang menukar DIAM dengan
+      BENAR **dan** SALAH.
+   b. **Kelas terlemah: 5000 (0,29), 2000 (0,50), 100000 (0,50).** 20000 dan 50000 sempurna.
+      Foto tambahan sebaiknya difokuskan ke tiga kelas lemah itu, bukan merata.
    c. Augmentasi lebih agresif (blur, derau, cutout) untuk mensimulasikan variasi yang tidak difoto.
    d. YOLOv8n -> YOLOv8s, lebih banyak epoch.
    e. Foto baru dengan variasi latar, cahaya, dan emisi - ini yang tidak bisa digantikan apa pun.
