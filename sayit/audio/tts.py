@@ -10,6 +10,7 @@ Hasil akhirnya satu array audio mono, sehingga bisa diputar langsung atau disimp
 from __future__ import annotations
 
 import hashlib
+import re
 import socket
 import tempfile
 from pathlib import Path
@@ -45,6 +46,33 @@ def gtts_save(text: str, path: Path, lang: str = "id", tld: str = "com", timeout
 # dipakai bersama dengan sayit/audio/io.py agar logikanya tidak bercabang
 _to_mono = io.to_mono
 _resample = io.resample
+
+
+# Kata yang seluruhnya kapital dibaca gTTS HURUF PER HURUF. Pada hasil OCR itu
+# sering: judul, penekanan, dan kop surat lazim ditulis kapital semua, dan
+# "KETENTUAN" terdengar sebagai "ka-e-te-en-te-u-a-en" - tidak bisa dipahami.
+#
+# Singkatan pendek justru BENAR dieja (PT, CV, RI, SMA), jadi ambangnya panjang:
+# empat huruf ke atas dianggap kata biasa yang kebetulan ditulis kapital.
+# ponytail: aturan panjang, bukan kamus singkatan - kamus tidak akan pernah lengkap
+# dan salahnya tidak kelihatan sampai ada yang mendengarnya.
+PANJANG_KAPITAL_DIEJA = 4
+
+_KATA = re.compile(r"[A-Za-zÀ-ÿ]+")
+
+
+def rapikan_untuk_suara(teks: str) -> str:
+    """Siapkan teks bebas supaya terdengar wajar, bukan dieja.
+
+    Hanya memengaruhi yang DIUCAPKAN; teks yang tampil di layar tetap asli.
+    """
+    def satu(m: re.Match) -> str:
+        kata = m.group(0)
+        if kata.isupper() and len(kata) >= PANJANG_KAPITAL_DIEJA:
+            return kata.capitalize()
+        return kata
+
+    return _KATA.sub(satu, teks)
 
 
 def _trim_silence(audio: np.ndarray, sr: int, threshold: float = 0.01, keep_ms: int = 20) -> np.ndarray:
@@ -97,6 +125,7 @@ class SpeechRenderer:
         """None berarti tidak bisa disintesis (offline atau gagal)."""
         if not self.is_online():
             return None
+        text = rapikan_untuk_suara(text)
         try:
             if self.cfg.get("cache_dynamic_text", False):
                 path = self.clip_dir.parent / "tts_dynamic" / (hashlib.sha1(text.encode()).hexdigest() + ".mp3")

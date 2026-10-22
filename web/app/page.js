@@ -562,6 +562,15 @@ export default function SayItPage() {
     s.speak(u);
   };
 
+  /* Daftarkan service worker supaya aplikasi bisa DIPASANG ke layar utama.
+     Itu bukan sekadar kenyamanan: window.close() pada tombol Keluar hanya
+     dituruti peramban di PWA terpasang, dan di tab biasa gagal diam-diam.
+     SW-nya tidak menyentuh /api sama sekali - lihat web/public/sw.js. */
+  useEffect(() => {
+    if (!('serviceWorker' in navigator)) return;
+    navigator.serviceWorker.register('/sw.js').catch(() => {});
+  }, []);
+
   /* Ambil teks tiap klip sekali, supaya wilayah aria-live memuat kalimat yang
      SAMA dengan yang terdengar tanpa menyalin kalimatnya ke sini.
 
@@ -909,7 +918,11 @@ export default function SayItPage() {
     if (!el) return;
     const update = () => {
       const top = el.offsetTop + el.offsetHeight / 2;
-      const scale = Math.min(0.9, Math.max(0.6, el.offsetHeight / 240));
+      // 260 = tinggi kanvas orb, bukan 240. Dan batas bawahnya 0,34 bukan 0,6:
+      // dengan minimum 0,6 orb selalu digambar setinggi 156 px sementara ruangnya
+      // boleh menyusut sampai 70 px saat jawaban panjang - jadi orb PASTI menabrak
+      // kartu jawaban. Terukur: tumpang tindih 21 px. Sekarang orb yang mengalah.
+      const scale = Math.min(0.9, Math.max(0.34, el.offsetHeight / 260));
       setOrbSlot((prev) =>
         prev.top !== null && Math.abs(prev.top - top) < 1 && Math.abs(prev.scale - scale) < 0.01
           ? prev
@@ -1602,6 +1615,9 @@ export default function SayItPage() {
             minHeight: '9vh',
             maxHeight: '32vh',
             overflowY: 'auto',
+            // Gulir di dalam kartu tidak boleh merembet ke halaman di belakangnya.
+            overscrollBehavior: 'contain',
+            WebkitOverflowScrolling: 'touch',
             display: 'flex',
             padding: '14px 18px',
             backgroundColor: 'var(--jingga, #f97316)',

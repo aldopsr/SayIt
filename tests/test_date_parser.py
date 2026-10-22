@@ -313,7 +313,7 @@ def test_teks_tanpa_tanggal(teks, cfg):
 def test_ujaran_tanggal_yakin(cfg):
     teks = T.to_plain_text(D.expiry_utterance(urai("EXP 03/12/2026", cfg), HARI_INI))
     assert teks == ("Tanggal kedaluwarsa tiga Desember dua ribu dua puluh enam. "
-                    "Produk masih berlaku, sisa tujuh puluh enam hari.")
+                    "Produk masih berlaku, sisa sekitar tiga bulan.")
 
 
 def test_ujaran_tanpa_hari_menyebut_berlaku_sampai(cfg):
@@ -335,7 +335,7 @@ def test_ujaran_dua_tanggal_menyebut_keduanya(cfg):
 
 def test_ujaran_produk_sudah_lewat(cfg):
     teks = T.to_plain_text(D.expiry_utterance(urai("01/01/2026", cfg), HARI_INI))
-    assert teks.endswith("Produk sudah melewati tanggal kedaluwarsa sejak dua ratus enam puluh hari lalu.")
+    assert teks.endswith("Produk sudah melewati tanggal kedaluwarsa sejak sekitar sembilan bulan lalu.")
 
 
 def test_ujaran_hari_terakhir(cfg):

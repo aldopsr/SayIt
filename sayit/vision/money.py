@@ -141,12 +141,37 @@ def count_by_nominal(dets: Sequence[Detection]) -> dict[int, int]:
     return dict(sorted(counts.items(), key=lambda kv: -kv[0]))
 
 
+def filter_by_relative_score(dets: Sequence[Detection], ratio: float) -> list[Detection]:
+    """Buang deteksi yang skornya jauh di bawah deteksi TERKUAT di foto yang sama.
+
+    Ambang mutlak (`score_min`) tidak menangkap pola kesalahan yang sebenarnya:
+    deteksi palsu lolos dengan skor 0,59-0,68 SEMENTARA lembar aslinya 0,90-0,94
+    di foto yang sama. Yang membedakan bukan nilainya, melainkan jaraknya.
+
+    Diukur 22-10 pada 35 foto sendiri: semua kesalahan menggelembungkan jumlah
+    (5.000 diucapkan 25.000), tidak pernah mengecilkan. Bagi pengguna tunanetra
+    arah itu yang paling berbahaya - ia menyerahkan uang lebih banyak daripada
+    yang dikiranya.
+
+    ratio <= 0 mematikan aturan ini.
+    """
+    if ratio <= 0 or len(dets) < 2:
+        return list(dets)
+    terbaik = max(d.score for d in dets)
+    return [d for d in dets if d.score >= terbaik * ratio]
+
+
 def postprocess(dets: Sequence[Detection], cfg: dict) -> MoneyResult:
     """Terapkan seluruh aturan PRD 8.6 pada deteksi mentah."""
     m = cfg["vision"]["money"]
     mentah = list(dets)
     kuat = filter_by_score(mentah, float(m["score_min"]))
     tanpa_sarang = drop_nested(kuat, float(m["nested_area_ratio"]))
+    # Ambang relatif WAJIB sesudah drop_nested, bukan sebelum. Lembar utuh bisa
+    # berskor lebih rendah daripada potret di dalamnya (terkunci oleh tes
+    # test_lembar_utuh_dipertahankan_walau_skornya_lebih_rendah); kalau diurutkan
+    # terbalik, justru lembar aslinya yang terbuang dan potretnya yang bertahan.
+    tanpa_sarang = filter_by_relative_score(tanpa_sarang, float(m.get("relative_score_min", 0.0)))
     bersih = merge_same_class(tanpa_sarang, float(m.get("same_class_iou", 0.0)))
     konflik = find_conflicts(bersih, float(m["conflict_iou"]))
 

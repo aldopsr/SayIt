@@ -12,7 +12,9 @@ export const viewport = {
   viewportFit: "cover",
   width: "device-width",
   initialScale: 1,
-  maximumScale: 1,
+  // maximumScale sengaja TIDAK diset: mengunci zoom adalah anti-pola
+  // aksesibilitas (WCAG 1.4.4). Penggunanya tunanetra, tetapi low vision juga
+  // memakai aplikasi ini dan mereka perlu bisa memperbesar.
 };
 
 export default function RootLayout({ children }) {

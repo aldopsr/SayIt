@@ -150,6 +150,9 @@ vision:
     imgsz: 640
     max_det: 50
     augment: false              # test-time augmentation; lihat sapuan 06-10 di keputusan-teknis
+    # Buang deteksi yang skornya di bawah (rasio x skor tertinggi di foto itu).
+    # 0 mematikan. Disetel dari sapuan 22-10; lihat docs/keputusan-teknis.md.
+    relative_score_min: 0.80
     # PRD 8.9 menulis 0,5. Diturunkan ke 0,40 setelah disapu pada 35 foto sendiri:
     # 0,35-0,45 memberi 25 benar / 4 salah, sedangkan 0,50 memberi 24 benar / 4 salah.
     # Selisihnya hanya satu foto, tetapi arah yang sama juga mengurangi jumlah foto

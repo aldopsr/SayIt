@@ -386,3 +386,40 @@ def test_kelas_model_asli_sesuai_kesepakatan(cfg):
     d = M.MoneyDetector(cfg)
     model = d.load(warmup=False)
     assert sorted(M.parse_nominal(n) for n in model.names.values()) == sorted(T.VALID_NOMINALS)
+
+
+# ------------------------------------------------------- ambang skor relatif
+
+def _det(nominal, score, x=0, y=0, w=100, h=100):
+    return M.Detection(nominal=nominal, score=score, box=(x, y, x + w, y + h))
+
+
+def test_ambang_relatif_membuang_deteksi_yang_jauh_lebih_lemah():
+    """Pola kesalahan yang terukur 22-10: deteksi palsu lolos dengan skor
+    0,59-0,68 sementara lembar aslinya 0,90-0,94 di foto yang sama. Yang
+    membedakan bukan nilainya, melainkan jaraknya."""
+    dets = [_det(5000, 0.901), _det(20000, 0.586, x=400)]
+    sisa = M.filter_by_relative_score(dets, 0.80)
+    assert [d.nominal for d in sisa] == [5000]
+
+
+def test_ambang_relatif_mempertahankan_deteksi_yang_setara():
+    """Dua lembar sungguhan biasanya berskor mirip - jangan dibuang."""
+    dets = [_det(50000, 0.91), _det(50000, 0.88, x=400)]
+    assert len(M.filter_by_relative_score(dets, 0.80)) == 2
+
+
+def test_ambang_relatif_bisa_dimatikan_dan_aman_untuk_satu_deteksi():
+    dets = [_det(5000, 0.901), _det(20000, 0.586, x=400)]
+    assert len(M.filter_by_relative_score(dets, 0.0)) == 2
+    assert len(M.filter_by_relative_score([_det(5000, 0.3)], 0.80)) == 1
+
+
+def test_kesalahan_terukur_menggelembungkan_jumlah_bukan_mengecilkan():
+    """Arah kesalahan wajib dipantau, bukan hanya jumlahnya: pengguna tunanetra
+    yang diberi tahu uangnya LEBIH banyak tidak punya cara memeriksanya."""
+    dets = [_det(5000, 0.901), _det(20000, 0.586, x=400)]
+    tanpa = M.count_by_nominal(M.filter_by_relative_score(dets, 0.0))
+    dengan = M.count_by_nominal(M.filter_by_relative_score(dets, 0.80))
+    assert sum(n * j for n, j in tanpa.items()) == 25000      # jawaban lama, salah
+    assert sum(n * j for n, j in dengan.items()) == 5000      # jawaban baru, benar

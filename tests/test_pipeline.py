@@ -188,7 +188,7 @@ def test_tanggal_dibandingkan_dengan_hari_ini_yang_disuntikkan(cfg):
     """`today` bisa dioper agar tes tidak berubah seiring waktu."""
     p = buat(cfg, teks_ocr="EXP 03/12/2026")
     p.set_photo(foto_layak())
-    assert "sisa tujuh puluh enam hari" in p.ask("kapan kedaluwarsanya").text
+    assert "sisa sekitar tiga bulan" in p.ask("kapan kedaluwarsanya").text
 
 
 # --------------------------------------------------------------------------- intent kendali

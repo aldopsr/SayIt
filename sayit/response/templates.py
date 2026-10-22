@@ -107,6 +107,15 @@ FIXED_PHRASES: dict[str, str] = {
     "p_berlaku_sampai": "Berlaku sampai",
     "p_masih_berlaku_sisa": "Produk masih berlaku, sisa",
     "p_hari": "hari",
+    # Satuan waktu yang lebih besar. "tiga ratus dua puluh tujuh hari" tidak bisa
+    # dibayangkan siapa pun; "sekitar sebelas bulan" langsung terbayang.
+    "p_minggu": "minggu",
+    "p_bulan": "bulan",
+    "p_tahun": "tahun",
+    "p_sekitar": "sekitar",
+    "p_minggu_lalu": "minggu lalu",
+    "p_bulan_lalu": "bulan lalu",
+    "p_tahun_lalu": "tahun lalu",
     "p_sudah_lewat_sejak": "Produk sudah melewati tanggal kedaluwarsa sejak",
     "p_hari_lalu": "hari lalu",
     "p_kurang_yakin_tanggal": "Saya kurang yakin, tetapi tanggal yang terbaca adalah",
@@ -126,6 +135,38 @@ VALID_NOMINALS = (1000, 2000, 5000, 10000, 20000, 50000, 100000)
 
 def number_clips(n: int) -> list[Part]:
     return [Clip(f"n_{w}") for w in terbilang_tokens(n)]
+
+
+# Ambang satuan waktu. Di bawah seminggu tetap dihitung hari, karena di situlah
+# ketelitian benar-benar berguna: "sisa tiga hari" menentukan tindakan hari ini.
+# Di atas itu angka harian justru menyembunyikan maknanya.
+BATAS_MINGGU = 7
+BATAS_BULAN = 60          # ~2 bulan; di bawah ini "delapan minggu" masih terbayang
+BATAS_TAHUN = 365
+
+
+def durasi_clips(hari: int, lampau: bool = False) -> list[Part]:
+    """Ubah jumlah hari menjadi satuan yang bisa dibayangkan.
+
+    `lampau=True` memakai bentuk "... lalu". Pembulatan disertai kata "sekitar",
+    supaya sistem tidak terdengar lebih yakin daripada yang sebenarnya - angka
+    bulat hasil pembagian BUKAN tanggal pasti, dan pengguna tunanetra tidak punya
+    cara lain memeriksanya.
+    """
+    hari = abs(int(hari))
+    if hari < BATAS_MINGGU:
+        return [*number_clips(hari), Clip("p_hari_lalu" if lampau else "p_hari")]
+
+    if hari < BATAS_BULAN:
+        n, satuan = round(hari / 7), "minggu"
+    elif hari < BATAS_TAHUN:
+        n, satuan = round(hari / 30), "bulan"
+    else:
+        n, satuan = round(hari / 365), "tahun"
+    n = max(1, n)                       # pembulatan ke bawah tidak boleh jadi nol
+
+    kunci = f"p_{satuan}_lalu" if lampau else f"p_{satuan}"
+    return [Clip("p_sekitar"), *number_clips(n), Clip(kunci)]
 
 
 def date_clips(d: date, month_only: bool = False) -> list[Part]:
@@ -186,11 +227,11 @@ def expiry_response(expiry: date, today: date, month_only: bool = False, confide
 
     delta = (expiry - today).days
     if delta > 0:
-        utt += [Clip("p_masih_berlaku_sisa"), *number_clips(delta), Clip("p_hari"), Pause("long")]
+        utt += [Clip("p_masih_berlaku_sisa"), *durasi_clips(delta), Pause("long")]
     elif delta == 0:
         utt += [Clip("hari_terakhir")]
     else:
-        utt += [Clip("p_sudah_lewat_sejak"), *number_clips(-delta), Clip("p_hari_lalu"), Pause("long")]
+        utt += [Clip("p_sudah_lewat_sejak"), *durasi_clips(-delta, lampau=True), Pause("long")]
     return utt
 
 

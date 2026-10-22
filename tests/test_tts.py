@@ -79,3 +79,30 @@ def test_resample_dan_trim():
     assert len(TTS._resample(x, 16000, 24000)) == 1500
     y = np.concatenate([np.zeros(5000), np.ones(100), np.zeros(5000)]).astype(np.float32)
     assert len(TTS._trim_silence(y, SR)) < 2000
+
+
+# --------------------------------------------------------------- kapital dieja
+
+@pytest.mark.parametrize("masuk,harap", [
+    ("KETENTUAN UMUM PENULISAN MAKALAH", "Ketentuan Umum Penulisan Makalah"),
+    ("PERHATIAN: harap dibaca", "Perhatian: harap dibaca"),
+    # singkatan pendek JUSTRU benar dieja, jadi tidak boleh diubah
+    ("Dikeluarkan oleh PT Maju Jaya di SMA 1 Bogor", "Dikeluarkan oleh PT Maju Jaya di SMA 1 Bogor"),
+    ("Nomor 25 s.d. 27 BAB I", "Nomor 25 s.d. 27 BAB I"),
+    ("A. terlalu banyak makan talas", "A. terlalu banyak makan talas"),
+])
+def test_kapital_panjang_tidak_lagi_dieja_huruf_per_huruf(masuk, harap):
+    """gTTS membaca kata kapital penuh huruf per huruf: "KETENTUAN" terdengar
+    sebagai "ka-e-te-en-...". Pada hasil OCR itu sering, karena judul dan kop
+    surat lazim ditulis kapital semua."""
+    from sayit.audio.tts import rapikan_untuk_suara
+    assert rapikan_untuk_suara(masuk) == harap
+
+
+def test_rapikan_hanya_memengaruhi_yang_diucapkan():
+    """Teks di layar harus tetap asli; yang dirapikan hanya jalur suaranya."""
+    from sayit.audio.tts import rapikan_untuk_suara
+    from sayit.response.templates import Text, to_plain_text
+    asli = "BAGIAN PERTAMA"
+    assert to_plain_text([Text(asli)]) == asli
+    assert rapikan_untuk_suara(asli) == "Bagian Pertama"

@@ -29,9 +29,11 @@ def test_uang_kosong_dan_nominal_tidak_valid():
 
 
 def test_kedaluwarsa_masih_berlaku():
+    """Diubah 22-10: dulu "sisa tujuh puluh delapan hari". Angka harian sebesar
+    itu tidak bisa dibayangkan siapa pun, apalagi tanpa melihat kalender."""
     text = T.to_plain_text(T.expiry_response(date(2026, 12, 3), date(2026, 9, 16)))
     assert text == ("Tanggal kedaluwarsa tiga Desember dua ribu dua puluh enam. "
-                    "Produk masih berlaku, sisa tujuh puluh delapan hari.")
+                    "Produk masih berlaku, sisa sekitar tiga bulan.")
 
 
 def test_kedaluwarsa_hari_ini_dan_lewat():
@@ -70,3 +72,41 @@ def test_split_chunks():
 def test_dokumen_dengan_lanjutan():
     utt = T.document_chunk_response("Halo.", has_more=True)
     assert T.to_plain_text(utt) == "Halo. Katakan lanjut untuk mendengar bagian berikutnya."
+
+
+# --------------------------------------------------------------------------- satuan durasi
+
+@pytest.mark.parametrize("hari,harap", [
+    (0, "nol hari"), (1, "satu hari"), (6, "enam hari"),          # di bawah seminggu: tetap hari
+    (7, "sekitar satu minggu"), (10, "sekitar satu minggu"), (45, "sekitar enam minggu"),
+    (60, "sekitar dua bulan"), (140, "sekitar lima bulan"), (333, "sekitar sebelas bulan"),
+    (365, "sekitar satu tahun"), (842, "sekitar dua tahun"),
+])
+def test_durasi_memakai_satuan_yang_bisa_dibayangkan(hari, harap):
+    """"Tiga ratus tiga puluh tiga hari" tidak bisa dibayangkan siapa pun."""
+    assert T.to_plain_text(T.durasi_clips(hari)).lower() == harap
+
+
+def test_durasi_lampau_memakai_bentuk_lalu():
+    assert T.to_plain_text(T.durasi_clips(3, lampau=True)).lower() == "tiga hari lalu"
+    assert T.to_plain_text(T.durasi_clips(51, lampau=True)).lower() == "sekitar tujuh minggu lalu"
+
+
+def test_pembulatan_tidak_pernah_menghasilkan_nol():
+    for hari in (T.BATAS_MINGGU, T.BATAS_BULAN, T.BATAS_TAHUN):
+        teks = T.to_plain_text(T.durasi_clips(hari)).lower()
+        assert not teks.startswith("sekitar nol"), teks
+
+
+def test_kata_sekitar_hanya_muncul_saat_dibulatkan():
+    """Sistem tidak boleh terdengar lebih yakin daripada yang sebenarnya: angka
+    hasil pembagian bukan tanggal pasti, dan pengguna tunanetra tidak punya cara
+    lain memeriksanya."""
+    assert "sekitar" not in T.to_plain_text(T.durasi_clips(5)).lower()
+    assert "sekitar" in T.to_plain_text(T.durasi_clips(140)).lower()
+
+
+def test_jawaban_kedaluwarsa_panjang_tidak_lagi_menyebut_ratusan_hari():
+    teks = T.to_plain_text(T.expiry_response(date(2027, 3, 11), date(2026, 10, 22))).lower()
+    assert "sekitar lima bulan" in teks
+    assert "hari" not in teks.split("sisa")[-1]
