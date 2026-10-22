@@ -151,3 +151,20 @@ def test_kendali_kamera_tidak_menelan_pertanyaan_uang():
     """Kalimat tugas yang kebetulan menyebut kamera tetap harus jadi intent tugas."""
     assert ROUTER.route("ini uang berapa").intent == K.UANG
     assert ROUTER.route("bacakan tulisan di kertas ini").intent == K.BACA
+
+
+def test_apa_itu_sayit_membuka_bantuan():
+    """Pintu bantuan yang diumumkan sambutan. Ejaan nama aplikasi dari STT beragam."""
+    for teks in ["apa itu sayit", "apa itu say it", "apa itu sai it",
+                 "apa itu aplikasi ini", "saya belum paham"]:
+        assert ROUTER.route(teks).intent == K.BANTUAN, teks
+
+
+def test_sambutan_pendek_tetap_menyebut_pintu_bantuannya():
+    """Sambutan sengaja dipendekkan; satu-satunya jalan ke daftar perintah adalah
+    kalimat yang ia sebutkan sendiri. Kalau keduanya menyimpang, fitur bantuannya
+    hilang tanpa ada yang sadar."""
+    from sayit.response.templates import CLIP_TEXTS
+    sambutan = CLIP_TEXTS["sambutan"].lower()
+    assert "apa itu sayit" in sambutan
+    assert ROUTER.route("apa itu sayit").intent == K.BANTUAN

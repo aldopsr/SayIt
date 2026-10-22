@@ -39,15 +39,13 @@ Utterance = list  # list[Part]
 # --------------------------------------------------------------------------- kosakata klip
 
 FIXED_PHRASES: dict[str, str] = {
-    # Tiap cara memberi perintah WAJIB disebut di sini. Tombol yang tidak pernah
-    # diucapkan sama saja dengan tidak ada bagi pengguna tunanetra - itu terbukti:
-    # perintah suara sempat terpasang tanpa diumumkan, dan tidak ada yang tahu.
-    # Panjang tidak jadi masalah karena sentuhan menyela ucapan (barge-in).
-    "sambutan": ("Selamat datang di SayIt. Saya bisa membacakan nominal uang, tanggal "
-                 "kedaluwarsa, dan tulisan dokumen. Sentuh layar di mana saja untuk "
-                 "mengambil foto. Kamu juga bisa bicara kapan saja: katakan putar kamera "
-                 "untuk berganti ke kamera depan atau belakang, atau katakan pilih berkas "
-                 "untuk membaca gambar, PDF, atau dokumen dari penyimpanan."),
+    # SENGAJA PENDEK. Versi sebelumnya menyebut setiap perintah dan berdurasi 22
+    # detik - pengguna yang sudah hafal harus menunggu tiap kali membuka aplikasi.
+    # Daftar lengkapnya pindah ke menu_bantuan, yang dipanggil dengan "apa itu SayIt".
+    # Barge-in tetap jadi jaring pengaman, tetapi menyela seharusnya tidak PERLU.
+    "sambutan": ("Halo, ini SayIt. Sentuh layar di mana saja untuk memotret. "
+                 "Kalau belum paham, katakan: apa itu SayIt."),
+    "sentuh_untuk_berkas": ("Sentuh layar sekali untuk membuka daftar berkas."),
     "tindak_lanjut": "Mau saya ulangi, foto lagi, atau keluar?",
     "sampai_jumpa": "Sampai jumpa.",
     "foto_diambil": "Foto berhasil diambil. Apa yang ingin kamu tanyakan?",

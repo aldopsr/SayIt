@@ -34,6 +34,10 @@ const WAVE_DOTS = 2400;
 // ponytail: satu angka, bukan AGC - naikkan kalau ruangnya berisik.
 const AMBANG_SUARA = 0.015;
 const HENING_MS = 3000;    // spec 4: berhenti mendengar setelah 3 detik hening
+// Perintah tombol hanya dua kata, jadi menunggu 3 detik hening terasa lama sekali.
+// Nilai ini SENGAJA berbeda dari HENING_MS: spec 4 bicara tentang pertanyaan, bukan
+// perintah. Jangan diturunkan lagi tanpa diuji pada penutur yang bicara pelan.
+const HENING_PERINTAH_MS = 1500;
 const IDLE_MS = 30000;     // spec 7: tutup aplikasi setelah 30 detik tanpa interaksi
 
 /* --- basis API, header tunnel, dan pengemas WAV: dikembalikan apa adanya dari
@@ -403,6 +407,7 @@ export default function SayItPage() {
   const klipTerakhirRef = useRef(null);            // klip yang sedang berbunyi, lihat susulan teks
   const jawabanRef = useRef(null);                 // {audio, teks} jawaban terakhir, untuk ULANGI
   const suaraRef = useRef(null);                   // rekaman WAV yang menunggu dikirim
+  const berkasMenunggu = useRef(false);            // "pilih berkas" diucapkan, menunggu sentuhan
 
   // === KELOMPOK LAYAR ===
   // Dideklarasikan di atas karena efek timer idle (spec 7) membacanya, dan const
@@ -492,6 +497,30 @@ export default function SayItPage() {
     nanti(penjaga, 8000);
   };
 
+  /** Nada pendek: "aku dengar, sedang kuproses".
+   *
+   *  Bukan kalimat utuh, karena perintahnya cuma dua kata: klip "sedang saya
+   *  proses" berdurasi 2 detik akan terpotong jawabannya sendiri, dan itu lebih
+   *  buruk daripada diam. Nada 0,2 detik memberi kepastian tanpa menunda apa pun.
+   *  Dibuat Web Audio, jadi tidak ada berkas tambahan. */
+  const bip = () => {
+    try {
+      const ac = new (window.AudioContext || window.webkitAudioContext)();
+      const o = ac.createOscillator();
+      const g = ac.createGain();
+      o.type = 'sine';
+      o.frequency.value = 880;
+      g.gain.setValueAtTime(0.0001, ac.currentTime);
+      g.gain.exponentialRampToValueAtTime(0.22, ac.currentTime + 0.012);
+      g.gain.exponentialRampToValueAtTime(0.0001, ac.currentTime + 0.18);
+      o.connect(g);
+      g.connect(ac.destination);
+      o.start();
+      o.stop(ac.currentTime + 0.2);
+      nanti(() => ac.close().catch(() => {}), 400);
+    } catch {}
+  };
+
   /** Klip tetap. Pakai salinan blob kalau ada (lihat prefetch di bawah). */
   const klipSrc = (nama) => klipRef.current[nama] || api(`/klip/${nama}.mp3`);
   const ucapkanKlip = (nama, opsi = {}) => {
@@ -571,7 +600,7 @@ export default function SayItPage() {
   // batasSunyi: tutup sesi kalau tidak ada suara sama sekali selama sekian ms,
   //   lalu pemanggil membukanya lagi. Ini yang menjaga penyangga rekaman tidak
   //   tumbuh terus selama layar kamera dibiarkan terbuka.
-  const dengarkan = (saatSelesai, { tungguSuara = false, batasSunyi = 0 } = {}) => {
+  const dengarkan = (saatSelesai, { tungguSuara = false, batasSunyi = 0, heningMs = HENING_MS } = {}) => {
     if (!navigator.mediaDevices?.getUserMedia) {
       peringatkan('Mikrofon tidak tersedia di perangkat ini',
                   'Kamu masih bisa mengetuk layar untuk memotret ulang.');
@@ -664,7 +693,7 @@ export default function SayItPage() {
           saatSelesai(null);
           return;
         }
-        if ((adaSuara || !tungguSuara) && now - diamSejak >= HENING_MS) {
+        if ((adaSuara || !tungguSuara) && now - diamSejak >= heningMs) {
           tutup(true);        // saatSelesai dipanggil dari mr.onstop, bersama rekamannya
           return;
         }
@@ -909,11 +938,18 @@ export default function SayItPage() {
         (wav) => {
           if (!hidup) return;
           if (!wav) { pasang(); return; }        // sunyi sampai batas: buka lagi
+          bip();                                 // "aku dengar" - instan, tanpa menunda
           const form = new FormData();
           form.append('suara', wav, 'perintah.wav');
-          kirim('/tanya', form).then(tanganiJawaban).catch(() => pasang());
+          // Kalau STT lebih lama dari dua detik, baru kalimat utuh diputar. Di
+          // bawah itu bip sudah cukup dan kalimatnya hanya akan terpotong.
+          const penanda = setTimeout(() => ucapkanKlip('sedang_memproses'), 2000);
+          timersRef.current.push(penanda);
+          kirim('/tanya', form)
+            .then((j) => { clearTimeout(penanda); tanganiJawaban(j); })
+            .catch(() => { clearTimeout(penanda); pasang(); });
         },
-        { tungguSuara: true, batasSunyi: 15000 },
+        { tungguSuara: true, batasSunyi: 15000, heningMs: HENING_PERINTAH_MS },
       );
     };
     pasang();
@@ -996,8 +1032,13 @@ export default function SayItPage() {
         putarKamera();
         return;
       case 'PILIH_BERKAS':
+        // Peramban HANYA mengizinkan pemilih berkas dibuka dari gestur pengguna.
+        // Memanggil .click() dari callback audio diabaikan DIAM-DIAM - itu
+        // sebabnya perintah suaranya tidak membuka apa pun padahal tombolnya
+        // bekerja. Jadi perintah menyiapkan, sentuhan berikutnya yang membuka.
+        berkasMenunggu.current = true;
         pindah('CAMERA_READY');
-        ucapkanJawaban(j.audio, j.teks, { selesai: () => fileInputRef.current?.click() });
+        ucapkanKlip('sentuh_untuk_berkas');
         return;
       case 'FOTO_BARU':
         ucapkanJawaban(j.audio, j.teks, { lalu: 'INIT' });
@@ -1090,6 +1131,14 @@ export default function SayItPage() {
     // sambutan yang panjang. Sekarang ketukan justru MENGHENTIKAN ucapan sistem.
     aktifRef.current = performance.now();
     hentikanSuara();
+
+    // "pilih berkas" sudah diucapkan: sentuhan ini dipakai untuk membuka
+    // pemilihnya, bukan memotret. Hanya di sinilah .click() diizinkan peramban.
+    if (berkasMenunggu.current) {
+      berkasMenunggu.current = false;
+      fileInputRef.current?.click();
+      return;
+    }
 
     if (appState === 'CAMERA_READY') {
       let imageUrl = null;

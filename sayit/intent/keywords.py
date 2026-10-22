@@ -51,7 +51,11 @@ KEYWORDS: dict[str, dict[str, int]] = {
     # karena STT Indonesia sering menuliskannya sebagai "fail".
     PILIH_BERKAS: {"pilih berkas": 2, "pilih file": 2, "pilih fail": 2, "dari galeri": 2,
                    "buka galeri": 2, "ambil dari galeri": 2, "unggah": 2, "upload": 2},
-    BANTUAN: {"bantuan": 2, "bisa apa": 2, "bantu apa": 2, "cara pakai": 2, "cara menggunakan": 2},
+    # "apa itu sayit" adalah pintu bantuan yang diumumkan sambutan, jadi ejaannya
+    # harus longgar: STT menulis nama aplikasi ini bermacam-macam.
+    BANTUAN: {"bantuan": 2, "bisa apa": 2, "bantu apa": 2, "cara pakai": 2, "cara menggunakan": 2,
+              "apa itu sayit": 2, "apa itu say it": 2, "apa itu sai it": 2, "apa itu seyit": 2,
+              "belum paham": 2, "apa itu aplikasi ini": 2},
 }
 
 SUFFIXES = ("nya", "kah", "lah")
