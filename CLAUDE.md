@@ -245,7 +245,7 @@ Langkah lengkapnya di `docs/deploy.md`.
 |---|---|---|---|
 | Akurasi kedaluwarsa | **81%** (13 benar / 1 salah / 2 diam) | >= 70% | **TERCAPAI** |
 | CER dokumen | 15,3% (9,0% pada 11 foto bagus) | <= 15% | meleset 0,3 poin |
-| Akurasi uang (total diucapkan) | **68,8%** (k-fold bersih, 48 foto, ambang 0,30) | >= 85% | meleset 16 poin |
+| Akurasi uang (total diucapkan) | **84,0%** (k-fold v2, 81 foto, ambang 0,30) | >= 85% | meleset 1 poin |
 | Latensi uang / kendali | 1,4 s / 1,3 s | <= 8 s | **LOLOS** |
 | Latensi dokumen / kedaluwarsa | 11,5 s / 11,4 s | <= 8 s | **penyimpangan diterima** |
 
@@ -253,6 +253,25 @@ Langkah lengkapnya di `docs/deploy.md`.
 mesin OCR dipisah per modul - dokumen EasyOCR, kedaluwarsa PaddleOCR + `mobile_det`;
 `expiry.preprocess_chain: hanya_resize` (resize WAJIB ada, ia pengendali latensi);
 `resize.max_side: 1600`; `rotate_retry: [180, 90, 270]`; `zone_score_min: 0.40`.
+
+**Hasil k-fold v2 (26-10), 81 foto: BENAR 68 / SALAH 13 / DIAM 0 = 84,0%.** Naik dari
+68,8% (48 foto). Per kelas: **5000 melonjak 0,29 -> 0,952**, 2000 0,789, 100000 0,846.
+Yang kini terlemah justru **10000 (0,700)** dan **1000 (0,750)** - dua kelas yang TIDAK
+ditambah fotonya. Itu konfirmasi bersih bahwa menambah foto per kelas memang bekerja.
+
+**Arah kesalahan BERBALIK dan ini lebih penting daripada angkanya: DIAM 11 -> 0,
+SALAH 4 -> 13, presisi JATUH 89,2% -> 84,0%.** Sistem kini hampir tidak pernah diam dan
+menyebut nominal keliru 16% dari waktu. PRD 8.9 memihak presisi, jadi sapuan ambang
+(sel 11b) wajib dijalankan sebelum `score_min` dikunci ulang.
+
+**Dua koreksi yang belum diterapkan ke angka 84,0% itu:**
+1. Dataset di Drive berisi **81** label, bukan 80: `5000_dipegang_ (3).txt` ikut terunggah
+   padahal sengaja dihapus di laptop. Foto itu dua lembar, satu yang dilabeli - merusak
+   latihan (lembar kedua jadi "bukan uang") sekaligus pengujian (deteksi benar dinilai salah).
+2. Evaluasi notebook belum memakai `relative_score_min` sampai 26-10, jadi 84,0% **terlalu
+   pesimis**: 5 dari 13 jawaban salah berpola "1 lembar lawan 2", persis yang dibuang aturan itu.
+Jalankan ulang sel 10-11 dengan notebook terbaru (bobot lipatan sudah tersimpan, tidak
+melatih ulang) sebelum angka mana pun masuk laporan.
 
 **Kerja berikutnya, berurutan:**
 1. **Modul uang 68,8% lawan target 85%** (k-fold bersih, 48 foto, ambang 0,30).
