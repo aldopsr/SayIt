@@ -307,10 +307,31 @@ dibuktikan: foto yang dipotong **tepat pada tanggalnya** pun 0 benar dari 5 pada
 pengukuran lama. Cetakan dot-matrix dan inkjet pada kemasan memang sulit. Lompatan ke
 81% datang dari mengganti mesin OCR, bukan dari membidik lebih baik.
 
-**Dokumen.** CER 15,3% meleset 0,3 poin dari target, dan penyebabnya sempit: dua foto
-lama yang sebenarnya **tangkapan layar**, bukan foto kertas (CER 76,9% dan 22,0%).
-**Pada 11 foto sesi yang bagus CER-nya 9,0%**, jauh di bawah target. Mengganti dua foto
-itu dengan foto asli kemungkinan besar menuntaskannya — perkiraan kerja 20 menit.
+**Dokumen.** CER 15,3% meleset 0,3 poin dari target, dan penyebabnya sempit: **dua dari
+13 foto uji bukan foto kertas.** Diperiksa satu per satu pada 28 Oktober, dan
+penyebabnya ternyata **berbeda**:
+
+- `ketentuan_makalah` (CER **76,9%**) adalah **foto layar monitor**. Hurufnya kecil pada
+  bingkai 2592x1068 dan ada pantulan, sehingga OCR benar-benar gagal — keluarannya
+  `"1 13 kelompok 2 tup. judul mpul kau pengantar penddhuhun lur bcbkang."`
+- `open_recruitment` (CER **22,0%**) adalah **tangkapan layar WhatsApp**. Di sini OCR
+  justru bekerja baik; yang menghukumnya adalah **antarmuka yang ikut terbaca** — jam,
+  nama grup, nama peserta, potongan nomor telepon. Semuanya tidak ada di teks acuan,
+  jadi dihitung sebagai sisipan salah.
+
+**Pada 11 foto kertas sungguhan CER-nya 9,0%** (median 7,2%, terbaik 1,9%), jauh di
+bawah target.
+
+**Penggantinya sudah disiapkan** di `data/uji_dokumen/cetak/`: halaman siap cetak
+dengan isi yang sama persis dengan kedua dokumen lama, berikut teks acuannya yang sudah
+dibuktikan identik. Tinggal dicetak, dipotret, dan diukur ulang — memotret adalah
+langkah yang hanya bisa dilakukan anggota tim.
+
+**Titik impasnya longgar:** kedua foto baru boleh ber-CER sampai **47,8% masing-masing**
+dan target 15% tetap lolos. Andai keduanya serata foto kertas lain, rerata 13 dokumen
+menjadi 9,0%; andai seburuk foto kertas terburuk yang ada (21,9%), menjadi 11,0%.
+**Kedua angka itu perkiraan, bukan pengukuran**, dan tidak boleh masuk laporan sebelum
+foto barunya benar-benar diukur.
 
 ### Penyimpangan dari PRD yang diterima dengan sengaja
 
