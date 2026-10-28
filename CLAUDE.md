@@ -245,7 +245,7 @@ Langkah lengkapnya di `docs/deploy.md`.
 |---|---|---|---|
 | Akurasi kedaluwarsa | **81%** (13 benar / 1 salah / 2 diam) | >= 70% | **TERCAPAI** |
 | CER dokumen | 15,3% (9,0% pada 11 foto bagus) | <= 15% | meleset 0,3 poin |
-| Akurasi uang (total diucapkan) | **84,0%** (k-fold v2, 81 foto, ambang 0,30) | >= 85% | meleset 1 poin |
+| Akurasi uang (total diucapkan) | **90,1%** (73 benar / 8 salah / 0 diam, k-fold v2, 81 foto, ambang 0,30) | >= 85% | **TERCAPAI** |
 | Latensi uang / kendali | 1,4 s / 1,3 s | <= 8 s | **LOLOS** |
 | Latensi dokumen / kedaluwarsa | 11,5 s / 11,4 s | <= 8 s | **penyimpangan diterima** |
 
@@ -254,24 +254,27 @@ mesin OCR dipisah per modul - dokumen EasyOCR, kedaluwarsa PaddleOCR + `mobile_d
 `expiry.preprocess_chain: hanya_resize` (resize WAJIB ada, ia pengendali latensi);
 `resize.max_side: 1600`; `rotate_retry: [180, 90, 270]`; `zone_score_min: 0.40`.
 
-**Hasil k-fold v2 (26-10), 81 foto: BENAR 68 / SALAH 13 / DIAM 0 = 84,0%.** Naik dari
-68,8% (48 foto). Per kelas: **5000 melonjak 0,29 -> 0,952**, 2000 0,789, 100000 0,846.
-Yang kini terlemah justru **10000 (0,700)** dan **1000 (0,750)** - dua kelas yang TIDAK
-ditambah fotonya. Itu konfirmasi bersih bahwa menambah foto per kelas memang bekerja.
+**AKURASI UANG 90,1% - TARGET PRD TERCAPAI** (73 benar / 8 salah / 0 diam dari 81 foto,
+k-fold v2, ambang 0,30). Bobot `money_kfold_v2_final` **sudah dipasang** 28-10
+(MD5 `bc09a6fc2c9fedbb38c39aa8aba44672`; model lama di `models/best_money_SEBELUM_v2.pt`).
+Riwayat: 65,7% -> 68,8% -> 84,0% -> **90,1%**. Lompatan terakhir BUKAN dari model
+melainkan dari memperbaiki ALAT UKURNYA - evaluasi notebook tidak memakai
+`relative_score_min`. Kelima kesalahan "1 lembar lawan 2" hilang seluruhnya.
+**Delapan kesalahan tersisa semuanya 1 lembar dijawab 1 lembar** (murni salah kenal
+kelas), jadi pasca-pemrosesan sudah habis tuasnya. Terlemah: **1000 (3/4), 10000 (8/10),
+50000 (5/6), 2000 (16/19)**; 100000 dan 20000 sempurna.
+`score_min` tetap **0,30**: 0,15-0,30 identik (73/8/0), 0,35 memberi 72/7/2.
 
-**Arah kesalahan BERBALIK dan ini lebih penting daripada angkanya: DIAM 11 -> 0,
-SALAH 4 -> 13, presisi JATUH 89,2% -> 84,0%.** Sistem kini hampir tidak pernah diam dan
-menyebut nominal keliru 16% dari waktu. PRD 8.9 memihak presisi, jadi sapuan ambang
-(sel 11b) wajib dijalankan sebelum `score_min` dikunci ulang.
+**KEPUTUSAN YANG MASIH TERBUKA - CLAHE.** Rangkaian `uang` masih `[resize, clahe]`.
+Notebook melatih pada gambar ASLI, aplikasi menerapkan CLAHE saat inferensi, jadi
+**angka 90,1% itu diukur TANPA CLAHE sementara aplikasi berjalan DENGAN CLAHE**.
+Terukur: v1 pada 32 foto bersih 65,6% (dengan) lawan 87,5% (tanpa); v2 pada 81 foto
+tercemar 96,3% lawan 97,5%, latensi 46,9 ms lawan 30,8 ms. Selisih kecil pada v2 itu
+**tidak bisa dipercaya** - ke-81 fotonya ikut melatih v2. Pengukuran BERSIH untuk v2
+belum ada. Jangan ubah config tanpa menyetujuinya dengan pemilik proyek.
 
-**Dua koreksi yang belum diterapkan ke angka 84,0% itu:**
-1. Dataset di Drive berisi **81** label, bukan 80: `5000_dipegang_ (3).txt` ikut terunggah
-   padahal sengaja dihapus di laptop. Foto itu dua lembar, satu yang dilabeli - merusak
-   latihan (lembar kedua jadi "bukan uang") sekaligus pengujian (deteksi benar dinilai salah).
-2. Evaluasi notebook belum memakai `relative_score_min` sampai 26-10, jadi 84,0% **terlalu
-   pesimis**: 5 dari 13 jawaban salah berpola "1 lembar lawan 2", persis yang dibuang aturan itu.
-Jalankan ulang sel 10-11 dengan notebook terbaru (bobot lipatan sudah tersimpan, tidak
-melatih ulang) sebelum angka mana pun masuk laporan.
+Laporan status untuk tim: `docs/status-proyek.md` (28-10), memuat daftar angka USANG
+(65,7% / 68,8% / 87,5% / 84,0%) supaya tidak beredar lagi di draf laporan.
 
 **Kerja berikutnya, berurutan:**
 1. **Modul uang 68,8% lawan target 85%** (k-fold bersih, 48 foto, ambang 0,30).
