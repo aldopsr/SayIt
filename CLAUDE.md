@@ -265,13 +265,20 @@ kelas), jadi pasca-pemrosesan sudah habis tuasnya. Terlemah: **1000 (3/4), 10000
 50000 (5/6), 2000 (16/19)**; 100000 dan 20000 sempurna.
 `score_min` tetap **0,30**: 0,15-0,30 identik (73/8/0), 0,35 memberi 72/7/2.
 
-**KEPUTUSAN YANG MASIH TERBUKA - CLAHE.** Rangkaian `uang` masih `[resize, clahe]`.
-Notebook melatih pada gambar ASLI, aplikasi menerapkan CLAHE saat inferensi, jadi
-**angka 90,1% itu diukur TANPA CLAHE sementara aplikasi berjalan DENGAN CLAHE**.
-Terukur: v1 pada 32 foto bersih 65,6% (dengan) lawan 87,5% (tanpa); v2 pada 81 foto
-tercemar 96,3% lawan 97,5%, latensi 46,9 ms lawan 30,8 ms. Selisih kecil pada v2 itu
-**tidak bisa dipercaya** - ke-81 fotonya ikut melatih v2. Pengukuran BERSIH untuk v2
-belum ada. Jangan ubah config tanpa menyetujuinya dengan pemilik proyek.
+**CLAHE SUDAH DIBUANG dari rangkaian `uang` (28-10): `[resize, clahe]` -> `[resize]`.**
+Sebabnya ketidakcocokan latih-pakai - notebook melatih pada gambar ASLI, aplikasi dulu
+menerapkan CLAHE saat inferensi, sehingga tolok ukur 90,1% selalu diukur TANPA CLAHE
+sementara aplikasi berjalan DENGAN CLAHE. Diukur ulang dengan config sungguhan pada
+81 foto: **79 benar / 2 salah / 0 diam = 97,5%** (dari 96,3%), dan **latensi modul turun
+36%**: 88,4 ms -> 56,4 ms. Angka 97,5% itu TERCEMAR (semua foto ikut melatih v2) -
+yang sah untuk laporan tetap k-fold **90,1%**. Bukti terkuat tetap v1 pada 32 foto
+bersih: 65,6% lawan 87,5%. Rasio latensi (34-36%) lebih layak dikutip daripada
+milidetiknya, yang bergerak antar-sesi tergantung beban laptop.
+Langkah `clahe` **tidak dihapus**: tetap di `STEPS`, tetap dipakai rangkaian `dokumen`,
+dan uji ablasi per langkah dipindah ke rangkaian itu (`tests/test_preprocess.py`).
+
+Rangkaian `uang` sekarang **`[resize]` saja**. `resize` WAJIB tetap ada: ia pengendali
+latensi untuk foto HP 3024x4032.
 
 Laporan status untuk tim: `docs/status-proyek.md` (28-10), memuat daftar angka USANG
 (65,7% / 68,8% / 87,5% / 84,0%) supaya tidak beredar lagi di draf laporan.

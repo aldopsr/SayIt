@@ -321,7 +321,10 @@ def test_rangkaian_bawaan_lengkap(cfg):
 
 def test_rangkaian_uang_berjalan(cfg):
     hasil = P.run_chain(foto_uang(), cfg, "uang")
-    assert hasil.steps == ["resize", "clahe"]
+    # CLAHE sengaja TIDAK ada di sini sejak 28-10: model dilatih pada gambar asli,
+    # jadi menerapkannya saat inferensi membuat distribusi pakai != distribusi latih.
+    # Lihat docs/keputusan-teknis.md. Jangan tambahkan kembali tanpa mengukur ulang.
+    assert hasil.steps == ["resize"]
     assert hasil.notes["chain"] == "uang"
     assert max(hasil.image.shape[:2]) == cfg["vision"]["preprocess"]["steps"]["resize"]["max_side"]
 
@@ -357,10 +360,22 @@ def test_binarisasi_tetap_bekerja_bila_dipasang(cfg, teks_dot_matrix):
 
 
 def test_langkah_bisa_dimatikan_satu_per_satu(cfg):
+    """Basis uji ablasi per langkah: saklar `enabled` tiap langkah harus benar-benar
+    memotong langkah itu dan mencatatnya di `skipped`.
+
+    Dulu diuji lewat `clahe` pada rangkaian `uang`; sejak CLAHE dibuang dari rangkaian
+    itu (28-10) pengujiannya pindah ke `clahe` pada rangkaian `dokumen`, yang masih
+    memakainya. Yang dijaga adalah MEKANISMENYA, bukan rangkaian tertentu.
+    """
     cfg["vision"]["preprocess"]["steps"]["clahe"]["enabled"] = False
-    hasil = P.run_chain(foto_uang(), cfg, "uang")
-    assert hasil.steps == ["resize"]
+    foto, _ = foto_kertas_miring()
+    hasil = P.run_chain(foto, cfg, "dokumen")
+    assert "clahe" not in hasil.steps
     assert "clahe" in hasil.skipped
+    # saklarnya selektif: langkah lain tetap berjalan. (Tidak menyebut langkah
+    # tertentu karena `skipped` juga memuat langkah yang kebetulan tidak perlu
+    # bekerja pada foto uji ini - `resize` pada gambar yang sudah kecil, misalnya.)
+    assert hasil.steps, "mematikan clahe ikut mematikan langkah lain"
 
 
 def test_seluruh_pra_pemrosesan_bisa_dimatikan(cfg):

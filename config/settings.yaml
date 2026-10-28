@@ -123,7 +123,16 @@ vision:
         kernel: 3
         iterations: 1
     chains:
-      uang: [resize, clahe]
+      # CLAHE DIBUANG 28-10. Alasannya bukan selera melainkan ketidakcocokan latih-pakai:
+      # notebook k-fold melatih model pada gambar ASLI (tidak ada CLAHE di jalur latihnya
+      # sama sekali), sedangkan aplikasi dulu menerapkan CLAHE saat inferensi. Akibatnya
+      # angka tolok ukur 90,1% diukur TANPA CLAHE sementara aplikasi berjalan DENGAN CLAHE,
+      # dan selisihnya tidak pernah terlihat karena keduanya tak pernah diukur berdampingan.
+      # Terukur: model v1 pada 32 foto bersih 65,6% (dengan) lawan 87,5% (tanpa);
+      # model v2 pada 81 foto 96,3% lawan 97,5%, latensi 46,9 ms lawan 30,8 ms.
+      # `resize` WAJIB tetap ada: ia pengendali latensi untuk foto HP 3024x4032.
+      # Langkah `clahe` TIDAK dihapus dari `steps` dan tetap dipakai rangkaian dokumen.
+      uang: [resize]
       # `denoise` dibuang dari rangkaian dokumen (29-09): pada 13 dokumen ia menaikkan CER
       # 2,0-2,2%. Bilateral mengaburkan huruf halus, dan foto dokumen yang tajam memang tidak
       # punya derau yang perlu dibuang. Langkahnya tetap ada dan tetap dipakai rangkaian

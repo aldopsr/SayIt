@@ -345,7 +345,9 @@ def test_detector_menjalankan_pra_pemrosesan(cfg):
     f = pabrik(kotak=[], skor=[], kelas=[])
     d = M.MoneyDetector(cfg, model_factory=f)
     hasil = d.detect(np.zeros((1800, 2400, 3), np.uint8))
-    assert hasil.notes["preprocess_steps"] == ["resize", "clahe"]
+    # CLAHE dibuang dari rangkaian `uang` 28-10: model dilatih pada gambar asli,
+    # jadi menerapkannya saat inferensi membuat distribusi pakai != distribusi latih.
+    assert hasil.notes["preprocess_steps"] == ["resize"]
     # foto 2400 piksel sudah diperkecil sebelum sampai ke model
     assert f.model.panggilan[-1]["shape"][1] == cfg["vision"]["preprocess"]["steps"]["resize"]["max_side"]
 

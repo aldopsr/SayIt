@@ -409,16 +409,16 @@ sebagai `models/best_money_SEBELUM_v2.pt`.
 
 ### b. Apakah CLAHE masih digunakan dalam aplikasi?
 
-**Ya, masih.** Rangkaian pra-pemrosesan uang masih `[resize, clahe]`.
-**Dan ini keputusan yang masih terbuka**, bukan keputusan yang sudah diambil.
+**Tidak lagi. CLAHE dibuang pada 28 Oktober 2026.** Rangkaian pra-pemrosesan uang
+sekarang `[resize]` saja.
 
 Duduk perkaranya: **notebook melatih model pada gambar ASLI** — tidak ada CLAHE di jalur
-latihnya sama sekali — sedangkan **aplikasi menerapkan CLAHE saat inferensi**. Jadi
-distribusi gambar saat dipakai berbeda dari saat dilatih.
+latihnya sama sekali — sedangkan **aplikasi dulu menerapkan CLAHE saat inferensi**.
+Distribusi gambar saat dipakai karena itu berbeda dari saat dilatih.
 
-Akibatnya **angka 90,1% itu diukur TANPA CLAHE**, sementara aplikasi berjalan DENGAN
-CLAHE. Selama ini keduanya tidak pernah diukur berdampingan, jadi selisihnya tidak
-terlihat.
+Akibatnya **angka 90,1% selalu diukur TANPA CLAHE**, sementara aplikasi berjalan DENGAN
+CLAHE. Keduanya tidak pernah diukur berdampingan, jadi selisihnya tidak pernah terlihat
+sampai 28 Oktober.
 
 Yang sudah terukur:
 
@@ -429,10 +429,20 @@ Yang sudah terukur:
 | `resize + clahe` | v2 | 81 foto (tercemar) | 96,3%, 46,9 ms |
 | `resize` saja | v2 | 81 foto (tercemar) | 97,5%, **30,8 ms** |
 
-**Kejujuran yang penting:** pada model v2 selisihnya kecil (1,2 poin), tetapi angka itu
-diukur pada foto yang **semuanya ikut melatih model**, jadi hafalan menutupi efeknya.
-**Untuk v2 belum ada pengukuran CLAHE yang bersih.** Yang kuat tetap bukti v1
-(+21,9 poin) ditambah mekanisme yang masuk akal dan latensi yang 34% lebih cepat.
+Setelah dibuang, diukur ulang dengan config sungguhan pada 81 foto:
+**79 benar / 2 salah / 0 diam = 97,5%** (sebelumnya 78/2/1 = 96,3%), dan **latensi modul
+uang turun 36%**: 88,4 ms menjadi 56,4 ms.
+
+**Kejujuran yang penting:** 97,5% itu diukur pada foto yang **semuanya ikut melatih
+model**, jadi bukan akurasi sistem - angka yang sah untuk laporan tetap **90,1%** dari
+validasi silang. Pada v2 selisih CLAHE hanya 1,2 poin, jauh dari 21,9 poin pada v1,
+karena hafalan menutupi efeknya. **Pengukuran CLAHE yang bersih untuk v2 belum ada.**
+Yang menopang keputusan ini: bukti v1 pada data bersih, mekanismenya yang jelas
+(model dilatih pada gambar asli), latensi yang jauh lebih cepat, dan tidak ada satu
+pun pengukuran di mana CLAHE lebih baik.
+
+Angka latensi mutlaknya bergerak antar-sesi tergantung beban laptop; **yang layak
+dikutip adalah rasionya (34-36% lebih cepat)**, bukan milidetiknya.
 
 **Catatan untuk nilai mata kuliah:** membuang CLAHE dari rangkaian `uang` **tidak
 menghapus teknik pengolahan citra klasik dari proyek**. Langkahnya tetap ada,
