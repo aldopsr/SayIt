@@ -156,8 +156,12 @@ Yang masih terbuka: latensi PaddleOCR - lihat **Titik sambung**.
 Sudah ada: 35 foto uji uang sendiri di `data/uji_sendiri/` (1000 2, 2000 4, 5000 5, 10000 7, 20000 5, 50000 6,
 100000 6). Dua latar: meja kayu dan dipegang di depan laptop. Berkas asli iPhone ada di `data/uji_sendiri/asli/`
 (HEIC, sudah dikonversi; boleh dihapus).
-**Label YOLO (diperbarui 23-10): 81 gambar, 80 label berisi, 0 kosong, 81 kotak, ketujuh kelas**
-(1000:4, 2000:21, 5000:20, 10000:10, 20000:7, 50000:6, 100000:13) di `data/label_sendiri/`.
+**Label YOLO (diperbarui 29-10): 81 gambar, 81 label berisi, 0 kosong, 82 kotak, ketujuh kelas**
+PERHATIAN: `5000_dipegang_ (3).txt` yang SENGAJA dihapus 23-10 **sudah kembali ada**,
+kemungkinan ikut tersalin balik dari Drive. Kotaknya menutupi 99,87% lebar bingkai dan
+foto itu berisi DUA lembar - jadi anotasinya cacat ganda, dan ia IKUT melatih serta
+menguji model v2. Angka 90,1% dihitung dengan foto itu di dalamnya.
+(1000:4, 2000:21, 5000:21, 10000:10, 20000:7, 50000:6, 100000:13) di `data/label_sendiri/`.
 Tambahan 23-10 (+33 foto) sengaja **diarahkan ke tiga kelas terlemah k-fold**
 (5000 0,29 / 2000 0,50 / 100000 0,50), bukan merata: 2000 8->21, 5000 7->20, 100000 6->13.
 1000 (hanya 4 kotak) kini kelas terlemah berikutnya kalau hasilnya tetap buruk.
