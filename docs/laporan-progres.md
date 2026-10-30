@@ -1,7 +1,8 @@
 # Laporan Progres SayIt
 
 **Mata kuliah:** Pengolahan Citra dan Visi Komputer — TRPL, Sekolah Vokasi IPB
-**Tanggal:** 28 September 2026
+**Tanggal:** 30 Oktober 2026
+**Laporan sebelumnya:** 28 September 2026
 
 ---
 
@@ -16,285 +17,287 @@ Tiga hal yang bisa ditanyakan:
    beberapa lembar.
 2. **"Tolong bacakan tulisannya"** — membacakan isi dokumen atau surat.
 3. **"Kapan kedaluwarsanya?"** — membacakan tanggal kedaluwarsa pada kemasan, sekaligus
-   menyebut masih berlaku berapa hari lagi.
+   menyebut masih berapa lama lagi.
 
 Semua jawaban keluar sebagai suara, karena pengguna tidak melihat layar.
 
 ---
 
-## 2. Posisi sekarang secara singkat
+## 2. Ringkasan perubahan sejak laporan 28 September
 
-**Perangkat lunaknya sudah jadi dan bisa dijalankan dari ujung ke ujung.** Yang sedang
-kami kerjakan sekarang adalah **mengukur seberapa bagus hasilnya** dan memperbaiki
-bagian yang lemah.
+Satu bulan terakhir hampir seluruhnya berisi **pengukuran dan perbaikan**, bukan menulis
+fitur baru. Perubahan terbesarnya:
+
+| Hal | 28 September | 30 Oktober |
+| :--- | :--- | :--- |
+| Akurasi nominal uang | 71% (35 foto) | **90,1%** (81 foto, validasi silang) — **target tercapai** |
+| Akurasi tanggal kedaluwarsa | belum diukur | **81%** (16 kemasan) — **target tercapai** |
+| Akurasi membaca dokumen | belum diukur | **galat 15,3%** (13 dokumen) — meleset 0,3 poin |
+| Antarmuka | Streamlit (halaman uji) | **Aplikasi web PWA** yang bisa dipasang di HP |
+| Pembaca tulisan | EasyOCR untuk semua | dipisah per modul setelah uji banding |
+| Pengujian otomatis | 481 | **648** |
+| Keputusan teknis tercatat | 102 | **319** |
+| Foto uang sendiri untuk uji | 35 | **81** |
+
+**Dua dari tiga target akurasi PRD kini tercapai.** Yang ketiga meleset tipis dan
+penyebabnya sudah diketahui persis (Bagian 5.4).
+
+---
+
+## 3. Posisi sekarang
+
+**Perangkat lunaknya selesai dan sudah berjalan sebagai aplikasi web yang bisa dipakai
+dari HP.** Yang tersisa sebagian besar bukan menulis program lagi, melainkan pengujian
+dengan pengguna dan penyusunan dokumen akhir.
 
 | Bagian | Status |
 | :--- | :--- |
 | Pengenalan suara (pertanyaan pengguna) | Selesai dan terukur |
-| Pengolahan citra (inti mata kuliah) | Selesai dan terukur |
-| Pengenalan nominal uang | Berjalan, akurasi masih di bawah target |
-| Membacakan dokumen | Berjalan, belum diukur |
-| Membaca tanggal kedaluwarsa | Berjalan, model pencari tanggal baru selesai dilatih |
+| Pengolahan citra (inti mata kuliah) | Selesai, dan **sudah diuji ablasi** |
+| Pengenalan nominal uang | Selesai, **target tercapai** |
+| Membacakan dokumen | Selesai, meleset tipis dari target |
+| Membaca tanggal kedaluwarsa | Selesai, **target tercapai** |
 | Menjawab dengan suara | Selesai |
-| Aplikasi antarmuka | Selesai |
-| Laporan dan demo akhir | Belum mulai |
+| Aplikasi web (PWA) | Selesai dan berjalan |
+| Uji coba oleh pengguna | **Belum dilakukan** |
+| Laporan, video demo, slide | Baru mulai (jurnal sudah disusun) |
 
-Perkiraan keseluruhan: **sekitar 70% selesai.** Sisanya sebagian besar bukan menulis
-program lagi, melainkan mengumpulkan data uji, mengukur, dan menyusun dokumen.
-
----
-
-## 3. Teknologi yang dipakai
-
-| Bagian | Alat | Penjelasan singkat |
-| :--- | :--- | :--- |
-| Bahasa pemrograman | Python 3.11 | — |
-| **Pengolahan citra** | **OpenCV** | Memperbaiki foto sebelum dikenali: memperjelas kontras, mengurangi bintik, meluruskan foto yang miring, menajamkan tulisan |
-| Deteksi uang | YOLOv8 | Mencari letak uang di foto lalu menebak nominalnya |
-| Pencari tanggal kedaluwarsa | YOLOv8 (model kedua) | Menemukan letak tanggal pada kemasan, agar tidak perlu membaca seluruh foto |
-| Membaca tulisan | EasyOCR | Mengubah tulisan di foto menjadi teks |
-| Suara ke teks | faster-whisper | Mengubah pertanyaan lisan pengguna menjadi tulisan |
-| Teks ke suara | gTTS | Membacakan jawaban |
-| Antarmuka | Streamlit | Halaman web sederhana untuk memotret, bertanya, dan mendengar jawaban |
-| Pelatihan model | Google Colab | Melatih kedua model (uang dan pencari tanggal) memakai GPU gratis |
-
-### Mana yang kami latih sendiri, mana yang memakai yang sudah ada
-
-Pembedaan ini kami sampaikan terbuka supaya tidak ada salah paham tentang ruang lingkup
-pekerjaan kami.
-
-**Dilatih sendiri — dua model:**
-
-| Model | Tugas | Catatan |
-| :--- | :--- | :--- |
-| Pengenal nominal uang | Menemukan uang di foto dan menebak nominalnya | Dilatih ulang tiga kali berdasarkan temuan evaluasi |
-| Pencari tanggal kedaluwarsa | Menemukan letak tanggal pada kemasan | Baru selesai |
-
-Keduanya memakai **transfer learning**: kami tidak merancang arsitektur jaringan saraf
-baru, melainkan memulai dari model umum yang sudah tersedia lalu melatihnya ulang untuk
-mengenali objek yang kami butuhkan. Ini cara yang lazim dan sesuai untuk lingkup
-prototipe.
-
-Bagian terberatnya justru bukan proses pelatihannya, melainkan **menyiapkan datanya**:
-membuang label yang tertukar, membuang salinan foto yang berulang, memastikan foto yang
-mirip tidak terpisah antara data latih dan data uji, serta memilih variasi pelatihan yang
-tepat.
-
-**Memakai yang sudah tersedia — tidak kami latih:**
-
-| Komponen | Keterangan |
-| :--- | :--- |
-| Pengenalan suara (faster-whisper) | Model siap pakai, kami hanya menyetel parameternya |
-| Pembacaan tulisan (EasyOCR) | Model siap pakai |
-| Pengucapan jawaban (gTTS) | Layanan dari Google |
-
-**Bukan machine learning sama sekali — kami tulis sendiri sebagai program biasa:**
-
-Seluruh tahap pengolahan citra (perbaikan kontras, reduksi derau, koreksi perspektif dan
-kemiringan, binarisasi, morfologi), pemeriksaan kualitas foto, pembacaan format tanggal,
-pengenalan maksud pertanyaan, penjumlahan beberapa lembar uang, dan pengubahan angka
-menjadi kata.
-
-Bagian inilah yang paling erat dengan mata kuliah, dan seluruhnya dapat dinyalakan atau
-dimatikan satu per satu untuk keperluan uji ablasi.
-
-### Bagian pengolahan citra klasik
-
-Ini bagian yang paling ditekankan mata kuliah, dan seluruhnya sudah selesai serta
-bisa dinyalakan atau dimatikan satu per satu untuk keperluan uji ablasi:
-
-| Teknik | Gunanya | Bukti sudah berfungsi |
-| :--- | :--- | :--- |
-| Penyeragaman ukuran | Menyamakan skala foto dari kamera berbeda | Ambang deteksi buram jadi tidak bergantung resolusi |
-| CLAHE (perbaikan kontras) | Menolong foto yang kurang cahaya | Foto redup: sebaran kecerahan naik dari 4,9 menjadi 12,9 |
-| Reduksi derau | Menghilangkan bintik-bintik | Galat turun dari 19,8 menjadi 5,2 |
-| Koreksi perspektif | Meluruskan kertas yang difoto miring | Keempat sudut kertas ditemukan dengan meleset kurang dari 1 piksel |
-| Koreksi kemiringan | Memutar tulisan agar mendatar | Diuji pada −12° sampai +12°, sisa kemiringan 0,00° |
-| Binarisasi adaptif | Memisahkan tulisan dari latar walau cahaya tidak rata | Tulisan tetap terbaca di sisi gelap maupun terang |
-| Operasi morfologi | Menyambung cetakan titik-titik pada kemasan | Dari 138 titik terpisah menjadi 3 baris utuh |
-
-### Pemeriksaan kualitas foto
-
-Sebelum diproses, foto diperiksa dulu: terlalu buram, terlalu gelap, terlalu silau, atau
-resolusinya terlalu kecil. Kalau tidak layak, pengguna langsung diberi tahu lewat suara
-supaya bisa memotret ulang — bukan dibiarkan menunggu lalu mendapat jawaban yang salah.
+Perkiraan keseluruhan: **sekitar 85% selesai.**
 
 ---
 
-## 4. Hasil pengukuran sejauh ini
+## 4. Hasil pengukuran
 
-Angka di bawah ini **diukur dengan foto yang kami potret sendiri**, bukan dengan data
-bawaan dari internet. Alasannya dijelaskan di Bagian 5.
+Seluruh angka di bawah **diukur dengan foto yang kami potret sendiri**, bukan dengan data
+bawaan dari internet. Alasannya ada di Bagian 5.1.
 
 | Yang diukur | Target | Hasil | Keterangan |
 | :--- | :---: | :---: | :--- |
-| Mengenali pertanyaan lisan | salah ≤ 25% | **salah 7–8%** | Tercapai |
-| Waktu menjawab pertanyaan uang | — | **0,2 detik** | Cepat |
-| Waktu membacakan dokumen | ≤ 8 detik | **5,1 detik** | Tercapai |
-| Waktu menjawab tanggal kedaluwarsa | ≤ 8 detik | **0,8 detik** | Tercapai, tetapi baru diukur pada gambar buatan |
-| **Menebak nominal uang** | **≥ 85%** | **71%** | **Belum tercapai** |
-| Membacakan isi dokumen | salah ≤ 15% | belum diukur | Menunggu foto uji |
-| Membaca tanggal kedaluwarsa | ≥ 70% | belum diukur | Menunggu foto uji |
+| **Menebak nominal uang** | ≥ 85% | **90,1%** | **Tercapai** |
+| **Membaca tanggal kedaluwarsa** | ≥ 70% | **81%** | **Tercapai** |
+| Membacakan isi dokumen | galat ≤ 15% | galat 15,3% | Meleset 0,3 poin |
+| Mengenali pertanyaan lisan | salah ≤ 25% | salah 7–8% | Tercapai |
+| Waktu menjawab pertanyaan uang | ≤ 8 detik | 1,4 detik | Tercapai |
+| Waktu menjawab perintah suara | ≤ 8 detik | 1,3 detik | Tercapai |
+| Waktu membacakan dokumen | ≤ 8 detik | 11,5 detik | **Menyimpang, disengaja** |
+| Waktu menjawab tanggal kedaluwarsa | ≤ 8 detik | 11,4 detik | **Menyimpang, disengaja** |
 | Uji coba oleh pengguna | ≥ 80% | belum dilakukan | Direncanakan |
 
-### Rincian pengenalan uang (35 foto)
+### Cara kami melaporkan akurasi
 
-| Nominal | Jumlah foto | Benar | Salah | Tidak dijawab |
-| ---: | ---: | ---: | ---: | ---: |
-| 100.000 | 6 | **6** | 0 | 0 |
-| 20.000 | 5 | **5** | 0 | 0 |
-| 10.000 | 7 | 6 | 1 | 0 |
-| 5.000 | 5 | 3 | 0 | 2 |
-| 2.000 | 4 | 2 | 2 | 0 |
-| 1.000 | 2 | 1 | 0 | 1 |
-| **50.000** | 6 | **2** | 1 | 3 |
-| **Total** | **35** | **25 (71%)** | 4 | 6 |
+Kami **tidak pernah** melaporkan akurasi sebagai satu persentase saja, melainkan selalu
+dipisah menjadi **benar / salah / tidak menjawab**.
 
-Catatan penting: bila sistem tidak yakin, ia **menolak menjawab** dan meminta pengguna
-memotret ulang, bukan menebak asal. Untuk pengguna tunanetra ini disengaja — jawaban
-yang salah lebih berbahaya daripada tidak menjawab, karena pengguna tidak punya cara
-memeriksa kebenarannya.
+Alasannya bukan gaya penulisan. Bagi pengguna tunanetra, nominal atau tanggal yang
+**salah** jauh lebih berbahaya daripada sistem yang **diam**, karena ia tidak punya cara
+memeriksanya. Dua kondisi dengan persentase sama bisa sangat berbeda bahayanya.
 
-Kelemahan terbesar saat ini ada pada uang **50.000**. Penyebabnya sedang ditelusuri.
+| Modul | Benar | Salah | Tidak menjawab | Jumlah |
+| :--- | ---: | ---: | ---: | ---: |
+| Uang | **73** | 8 | 0 | 81 foto |
+| Tanggal kedaluwarsa | **13** | 1 | 2 | 16 kemasan |
+
+### Rincian pengenalan uang per nominal
+
+| Nominal | Benar dari | Catatan |
+| ---: | :---: | :--- |
+| 100.000 | **13 / 13** | Sempurna |
+| 20.000 | **7 / 7** | Sempurna |
+| 5.000 | 20 / 21 | Naik tajam; dulu kelas terlemah |
+| 2.000 | 16 / 19 | |
+| 50.000 | 5 / 6 | |
+| 10.000 | 8 / 10 | Kini salah satu yang terlemah |
+| 1.000 | 3 / 4 | Data latihnya paling sedikit (4 foto) |
+
+Delapan kesalahan yang tersisa **semuanya** berupa satu lembar yang nominalnya tertukar,
+bukan kesalahan menghitung jumlah lembar.
+
+### Bagaimana akurasi uang diukur
+
+Memakai **validasi silang lima lipatan**: foto dibagi lima kelompok, model dilatih lima
+kali, dan setiap foto diuji **tepat sekali oleh model yang belum pernah melihatnya**.
+
+Pembagian kelompoknya berdasarkan **kemiripan visual**, bukan nama berkas, supaya dua
+foto yang hampir sama tidak terpisah antara data latih dan data uji. Tanpa penjagaan
+ini, angkanya akan terlihat jauh lebih bagus daripada kenyataannya.
 
 ---
 
-## 5. Temuan penting selama pengerjaan
+## 5. Temuan penting
 
-Bagian ini menurut kami yang paling bernilai, karena menunjukkan proses kerja, bukan
-sekadar hasil akhir.
+Bagian ini menurut kami yang paling bernilai, karena menunjukkan proses kerja.
 
 ### 5.1 Angka bagus dari data internet ternyata menyesatkan
 
-Model pengenalan uang pertama kami mendapat nilai **96,7%** saat diuji dengan data dari
-internet. Terdengar sangat bagus. Namun ketika diuji dengan **foto yang kami potret
-sendiri**, hasilnya hanya **20%**.
+Model pertama kami mendapat **96,7%** dengan data dari internet, tetapi hanya **20%**
+dengan foto yang kami potret sendiri. Penyebabnya data uji dari internet berasal dari
+sumber yang sama dengan data latihnya.
 
-Penyebabnya: data uji dari internet berasal dari sumber yang sama dengan data latihnya,
-sehingga model hanya "mengenali kembali" foto yang mirip. Foto kami dengan kamera HP,
-di atas meja kayu, dengan cahaya ruangan, adalah dunia yang sama sekali berbeda.
+Sejak itu semua angka yang kami laporkan berasal dari foto sendiri. Temuan ini berulang
+sepanjang proyek dan menjadi prinsip kerja kami.
 
-**Pelajaran:** angka evaluasi hanya berarti bila data ujinya mewakili pemakaian
-sebenarnya. Sejak itu, semua angka yang kami laporkan berasal dari foto sendiri.
+### 5.2 Kenaikan terbesar bulan ini datang dari memperbaiki ALAT UKURNYA
 
-### 5.2 Model tidak pernah diajari melihat objek miring
+Ini temuan paling penting bulan Oktober, dan layak disampaikan apa adanya.
 
-Saat ditelusuri, ternyata proses pelatihan berjalan **tanpa variasi rotasi** — pengaturan
-bawaannya memang begitu, dan kami tidak menyadarinya. Akibatnya model hanya mengenali
-uang yang terpotret tegak.
+Pada 26 Oktober hasil pengukuran menunjukkan **84,0%**. Setelah ditelusuri, ternyata
+**program pengukurannya tidak menjalankan seluruh langkah yang dijalankan aplikasi**:
+satu aturan penyaring yang ada di aplikasi tidak ikut dipakai saat mengukur.
 
-Ini fatal untuk aplikasi kami: **pengguna tunanetra tidak bisa membidik kamera.** Sudut
-acak bukan kasus tepi, melainkan keadaan normal.
+Petunjuknya terlihat dari pola kesalahannya — lima dari tiga belas kesalahan berbentuk
+"satu lembar dijawab dua lembar", misalnya Rp100.000 dijawab Rp102.000. Itu persis pola
+yang dirancang dibuang oleh aturan tersebut.
 
-Setelah pelatihan diulang dengan variasi rotasi, akurasi naik dari **20% menjadi 50%**,
-dan yang lebih penting, jawabannya menjadi stabil — foto yang sama diputar ke 13 sudut
-berbeda kini memberi jawaban yang sama, padahal sebelumnya berubah-ubah.
+Setelah alat ukurnya disamakan dengan aplikasi, kelima kesalahan itu **hilang seluruhnya**
+dan angkanya menjadi **90,1%**.
 
-Setelah data latih ditambah lagi, akurasinya naik menjadi **71%**.
+**Modelnya sama persis.** Kenaikan 84,0% → 90,1% **bukan** karena model membaik,
+melainkan karena pengukurannya sebelumnya salah. Ini kami catat eksplisit supaya tidak
+diklaim sebagai keberhasilan pelatihan.
 
-### 5.3 Kesimpulan dari sampel kecil bisa menyesatkan
+### 5.3 Perbaikan citra yang justru merugikan
 
-Ketika kami baru punya 5 foto uji, hasil percobaan sempat menyimpulkan hal yang kemudian
-**terbukti terbalik** setelah fotonya bertambah menjadi 20, lalu berubah lagi di 35 foto.
+CLAHE adalah teknik perbaikan kontras, dan secara teori seharusnya menolong.
 
-Karena itu semua kesimpulan sekarang kami sertai jumlah sampelnya, dan kesimpulan dari
-data yang terlalu sedikit kami tandai sebagai belum bisa dipercaya.
+Ternyata tidak. Model dilatih memakai **gambar asli**, sedangkan aplikasi menerapkan
+CLAHE sebelum mengenali. Akibatnya gambar yang dilihat model saat dipakai berbeda dari
+yang dilihat saat belajar.
 
-### 5.4 Memilih antara "salah menjawab" dan "tidak menjawab"
+| Kondisi | Akurasi | Waktu |
+| :--- | ---: | ---: |
+| Dengan CLAHE | 65,6% | 88,4 ms |
+| Tanpa CLAHE | **87,5%** | **56,4 ms** |
 
-Sistem memberi nilai keyakinan pada setiap tebakan. Bila nilainya di bawah ambang
-tertentu, sistem menolak menjawab dan meminta pengguna memotret ulang.
+*(diukur pada 32 foto yang belum pernah dilihat model)*
 
-Kami menguji tujuh nilai ambang yang berbeda pada 35 foto:
+CLAHE dibuang dari jalur uang pada 28 Oktober — akurasi naik dan waktunya **36% lebih
+cepat**.
+
+Yang perlu ditegaskan untuk mata kuliah: **tekniknya tidak dihapus dari proyek.** Ia
+tetap ada, tetap dipakai untuk jalur dokumen, dan sekarang justru punya **bukti ablasi
+terukur**. Hasil ablasi yang negatif tetap hasil ablasi, dan menurut kami lebih berbobot
+daripada klaim tanpa pengukuran.
+
+### 5.4 Dua foto uji dokumen ternyata bukan foto kertas
+
+Akurasi dokumen meleset 0,3 poin dari target. Setelah ditelusuri, penyebabnya sempit:
+**dua dari 13 foto uji bukan foto kertas**, dan penyebabnya pun berbeda.
+
+| Berkas | Galat | Sebab |
+| :--- | ---: | :--- |
+| `ketentuan_makalah` | 76,9% | **Foto layar monitor.** Huruf kecil, ada pantulan. Pembacaan benar-benar gagal |
+| `open_recruitment` | 22,0% | **Tangkapan layar WhatsApp.** Pembacaannya justru bagus, tetapi ikut membaca jam, nama grup, dan nomor telepon |
+
+Pada **11 foto kertas sungguhan, galatnya hanya 9,0%** — jauh di bawah target.
+
+Penggantinya sudah disiapkan: halaman siap cetak dengan isi yang sama persis, berikut
+teks acuannya. Tinggal dicetak dan dipotret. Hitungan kami menunjukkan kedua foto baru
+boleh ber-galat sampai 47,8% dan target tetap lolos, jadi hampir foto kertas apa pun
+sudah cukup.
+
+### 5.5 Dua kesalahan program yang hanya ketahuan lewat alat bantu
+
+Pada notebook pelatihan ditemukan dua masalah yang **tidak menghasilkan pesan error sama
+sekali** — keduanya hanya membuat angkanya salah diam-diam:
+
+1. Foto yang belum dilabeli ikut masuk sebagai contoh **"tidak ada uang di gambar ini"**,
+   sehingga model diajari kebalikan dari yang benar.
+2. Bila pelatihan diulang tanpa mengganti nama percobaan, program **melewati pelatihan**
+   dan diam-diam menilai model lama memakai data baru.
+
+Keduanya diperbaiki. Untuk masalah kedua ditambahkan penjaga: setiap putaran kini
+menyimpan sidik jari dari daftar datanya, dan program **berhenti keras** bila sidiknya
+tidak cocok.
+
+Penjaga itu kemudian berguna di luar tujuan aslinya — ia menjadi satu-satunya bukti
+yang bisa diperiksa bahwa kelima putaran memakai pembagian yang benar-benar berbeda dan
+setiap foto diuji tepat sekali.
+
+### 5.6 Memilih antara "salah menjawab" dan "tidak menjawab"
+
+Sistem menolak menjawab bila keyakinannya di bawah ambang tertentu. Kami menyapu delapan
+nilai ambang:
 
 | Ambang | Benar | Salah | Tidak menjawab |
 | ---: | ---: | ---: | ---: |
-| 0,20–0,30 | 25 | **5** | 5 |
-| **0,35–0,45** | **25** | **4** | 6 |
-| 0,50 (rencana awal) | 24 | 4 | 7 |
-| 0,60 | 19 | 3 | 13 |
+| 0,15 – **0,30** | **73** | 8 | 0 |
+| 0,35 | 72 | 7 | 2 |
+| 0,40 | 71 | 7 | 3 |
+| 0,50 | 70 | 7 | 4 |
+| 0,60 | 63 | 6 | 12 |
 
-Kami memilih **0,40**. Alasannya bukan karena akurasinya paling tinggi — selisihnya
-hanya satu foto dari 35 dan itu terlalu kecil untuk disimpulkan. Alasannya karena pada
-rentang itu **jumlah jawaban yang salah paling sedikit**.
+Kami memilih **0,30**. Menaikkannya ke 0,35 menukar satu jawaban benar dengan dua kali
+diam, hanya untuk mengurangi satu jawaban salah.
 
-Pertimbangannya khusus untuk pengguna tunanetra: mereka tidak punya cara memeriksa
-apakah jawaban sistem benar. Sistem yang berkata "saya tidak yakin, coba foto ulang"
-jauh lebih aman daripada sistem yang menyebut nominal yang keliru dengan percaya diri.
+### 5.7 Membaca seluruh foto ternyata boros
 
-### 5.5 Membaca seluruh foto ternyata boros
+Untuk tanggal kedaluwarsa, model kedua mencari **letak tanggal** lebih dulu, lalu hanya
+bagian itu yang dibaca. Mematikannya memperburuk waktu dari 11,4 detik menjadi 27,3
+detik.
 
-Awalnya, untuk mencari tanggal kedaluwarsa, sistem membaca **seluruh tulisan** di foto
-kemasan lalu mencari mana yang berbentuk tanggal. Cara ini berhasil, tetapi lambat:
-sekitar 3,7 detik.
+Yang penting dicatat: cara ini **tidak menaikkan akurasi sama sekali** (81% dengan
+maupun tanpa). Ia murni penghemat waktu, dan kami melaporkannya begitu.
 
-Kami melatih model kedua yang tugasnya hanya **menemukan letak tanggal**, lalu memotong
-bagian itu saja untuk dibaca. Hasilnya **0,8 detik** — sekitar 4,6 kali lebih cepat
-untuk jawaban yang sama.
+### 5.8 Penghambat tanggal kedaluwarsa bukan pembidikan, melainkan jenis cetakannya
 
-Model ini baru selesai dilatih dan belum diuji dengan foto kemasan sungguhan.
+Dugaan awal kami: pengguna tunanetra tidak bisa membidik, jadi tanggalnya tidak terfoto
+dengan baik. **Dugaan ini terbantah.** Foto yang dipotong tepat pada tanggalnya pun
+nol benar dari lima.
 
-### 5.6 Pemeriksaan kualitas foto sempat menolak dokumen yang sah
-
-Ambang "foto terlalu terang" yang kami rencanakan ternyata menolak foto dokumen biasa,
-karena kertas putih memang punya tingkat kecerahan tinggi. Padahal fotonya jelas dan
-tulisannya terbaca.
-
-Ambangnya kami koreksi, dan penjaga utamanya diganti menjadi proporsi piksel yang
-benar-benar "terbakar" cahaya. Perubahan ini beserta alasannya dicatat.
-
-### 5.7 Kesalahan program yang ditemukan lewat pengukuran
-
-Saat menyiapkan alat ukur, ditemukan bahwa penulisan `BB 12/2027` — bentuk yang sangat
-umum pada kemasan — gagal dibaca sama sekali, padahal `12/2027` berhasil. Penyebabnya
-huruf **B** termasuk huruf yang sering tertukar dengan angka pada hasil OCR, sehingga
-program salah mengenali batas tanggalnya.
-
-Kesalahan ini ditemukan sebelum pengujian dengan foto asli, sehingga tidak sempat
-merusak hasil pengukuran.
+Penyebab sebenarnya adalah cetakan titik-titik (dot-matrix) pada kemasan yang memang
+sulit dibaca. Akurasi naik dari 19% menjadi 81% setelah **mengganti mesin pembaca
+tulisan**, bukan setelah memperbaiki pembidikan.
 
 ---
 
 ## 6. Mutu pengerjaan
 
-- **481 pengujian otomatis**, seluruhnya lulus. Setiap kali ada perubahan, semuanya
-  dijalankan ulang untuk memastikan tidak ada yang rusak.
-- **102 keputusan teknis tercatat** di `docs/keputusan-teknis.md`, masing-masing disertai
-  bukti angka dan batasannya.
-- Semua angka pengaturan berada di satu berkas konfigurasi, bukan tersebar di kode,
-  sehingga uji ablasi cukup dilakukan dengan mengubah satu baris.
+- **648 pengujian otomatis**, seluruhnya lulus. Dijalankan ulang setiap ada perubahan.
+- **319 keputusan teknis tercatat** di `docs/keputusan-teknis.md`, masing-masing disertai
+  angka dan batasannya — termasuk keputusan yang kemudian terbukti salah dan dibatalkan.
+- Semua angka pengaturan berada di satu berkas konfigurasi, sehingga uji ablasi cukup
+  dilakukan dengan mengubah satu baris.
 - Pengujian dapat berjalan **tanpa model dan tanpa internet**, sehingga anggota tim lain
   bisa ikut mengembangkan tanpa mengunduh berkas besar.
 
 ---
 
-## 7. Yang belum selesai
+## 7. Keterbatasan yang kami sadari
 
-| Pekerjaan | Keterangan |
+Kami sampaikan terbuka karena menurut kami ini bagian dari kejujuran laporan.
+
+| Keterbatasan | Penjelasan |
 | :--- | :--- |
-| Foto uji dokumen dan kemasan | Dibutuhkan untuk dua pengukuran yang belum ada, sekaligus untuk menyetel model pencari tanggal |
-| Menguji model pencari tanggal dengan foto asli | Modelnya sudah jadi, tetapi baru diuji dengan gambar buatan |
-| Memperbaiki pengenalan uang 50.000 | Kelemahan terbesar saat ini |
-| Uji coba oleh pengguna | Dilakukan dengan mata tertutup sebagai pengganti |
-| Laporan akhir, video demo, slide | Tahap terakhir |
-
-### Keterbatasan yang kami sadari
-
-- Antarmuka web yang kami pakai **belum sepenuhnya ramah pembaca layar**. Jawaban dan
-  status sudah diumumkan dengan suara, tetapi urutan navigasi keyboard masih mengikuti
-  bawaan alatnya. Hal ini sudah dinyatakan sejak awal sebagai batasan prototipe.
-- Pengujian pengenalan suara baru melibatkan **satu penutur**, sehingga angkanya
-  optimistis untuk pengguna lain.
-- Aplikasi ini **tidak memeriksa keaslian uang**, dan hal itu disampaikan kepada pengguna.
+| **Penghitungan banyak lembar belum terbukti** | Programnya ada dan berjalan, tetapi data ujinya **hanya satu foto**. Belum bisa diklaim |
+| **Satu anotasi cacat ikut terpakai** | Satu foto berisi dua lembar tetapi labelnya hanya satu, dan kotaknya menutupi hampir seluruh bingkai. Ia ikut melatih dan menguji model. Bila dikeluarkan, akurasinya 90,0% atau 91,25% |
+| **Waktu menjawab melampaui target** | Dokumen dan kedaluwarsa 11,4–11,5 detik lawan target 8 detik. Tiga cara mempercepatnya sudah dicoba dan semuanya mengorbankan akurasi |
+| **Tidak ada panduan arah kamera** | Foto diperiksa **setelah** dipotret, belum ada tuntunan suara **saat** membidik |
+| **Belum ada uji pengguna** | Belum dilakukan sama sekali |
+| **Pengujian suara satu penutur** | Angkanya optimistis untuk pengguna lain |
+| **Server masih di laptop** | Dijalankan dari laptop pengembang lewat ngrok, belum hosting tetap |
+| **Tahun emisi tidak dibedakan** | Model mengenali tujuh nominal, bukan emisi 2016 dan 2022 secara terpisah |
+| Tidak memeriksa keaslian uang | Disampaikan kepada pengguna |
 
 ---
 
 ## 8. Rencana terdekat
 
-1. Memotret foto uji dokumen dan kemasan, lalu menjalankan dua pengukuran yang belum ada.
-2. Menguji model pencari tanggal dengan foto kemasan sungguhan, lalu menyetel
-   ambang keyakinannya. Percepatan dari 3,7 detik menjadi 0,8 detik sudah terukur,
-   tetapi baru pada gambar buatan.
-3. Menambah data latih untuk nominal yang masih lemah.
-4. Uji coba pengguna dengan mata tertutup.
-5. Menyusun laporan akhir, video demo, dan slide.
+1. **Uji coba pengguna** dengan mata tertutup, lima tugas, disertai kuesioner SUS.
+   Ini satu-satunya target PRD yang belum tersentuh sama sekali.
+2. **Mencetak dan memotret dua dokumen pengganti**, lalu mengukur ulang. Bahannya sudah
+   siap; perkiraan kerja 20 menit.
+3. **Menambah foto uang** untuk nominal 1.000 dan 10.000 yang kini paling lemah.
+4. Menyusun **laporan akhir, video demo, dan slide**. Jurnal sudah disusun dan seluruh
+   angkanya sudah dilampirkan beserta data mentahnya.
+
+---
+
+## Lampiran — berkas rujukan
+
+| Berkas | Isi |
+| :--- | :--- |
+| `docs/status-proyek.md` | Status rinci per fitur, lengkap dengan daftar angka yang sudah usang |
+| `docs/keputusan-teknis.md` | Riwayat 319 keputusan beserta angkanya |
+| `docs/PRD_SayIt_v2_1.md` | Persyaratan lengkap |
+| `Jurnal SayIt/` | Naskah jurnal beserta lampiran data mentah |
+| `docs/jurnal_bahan/` | Keluaran mentah eksperimen model uang |
