@@ -1,0 +1,129 @@
+# Potongan config/settings.yaml - hanya bagian yang memengaruhi modul uang.
+# Diambil dari berkas yang BENAR-BENAR dipakai aplikasi pada 30 Oktober 2026.
+# Tidak ada kunci rahasia di berkas ini (sudah diperiksa).
+
+  preprocess:
+    enabled: true
+    steps:
+      resize:                   # normalisasi ukuran, rasio dipertahankan, hanya memperkecil
+        enabled: true
+        max_side: 1600
+      clahe:                    # perbaikan kontras pada kanal L (ruang warna LAB)
+        enabled: true
+        clip_limit: 2.0
+        tile_grid: 8
+      denoise:
+        enabled: true
+        method: bilateral       # "bilateral" (cepat, default tim) atau "nlm" (lebih bersih, jauh lebih lambat)
+        bilateral:
+          diameter: 9
+          sigma_color: 75
+          sigma_space: 75
+        nlm:
+          h: 18                 # disetel pada derau sintetis sigma 25 (h=10 kurang kuat); cek ulang dengan foto asli
+          template_window: 7
+          search_window: 21
+      perspective:              # deteksi kontur kertas (Canny + approxPolyDP) lalu warp
+        enabled: true
+        blur_ksize: 5
+        canny_low: 50
+        canny_high: 150
+        approx_epsilon_ratio: 0.02
+        # Dinaikkan dari 0,25 (29-09) setelah ablasi pada 13 dokumen. Pada 0,25 langkah ini
+        # menyala di 1 dari 13 foto dan ketiganya salah: `r (5).JPG` dikira memuat kertas
+        # seluas 26,2% bidang, lalu dipotong dari 1200x1600 menjadi 793x649 sehingga sebagian
+        # besar halaman hilang (CER foto itu 42,7%, padahal tanpa pra-pemrosesan 3,1%).
+        # Nol deteksi benar, satu deteksi salah. Pada 0,50 salah kenal itu hilang dan CER
+        # rerata turun 20,2% -> 17,2%.
+        min_area_ratio: 0.50    # kandidat kertas minimal 50% luas gambar, agar objek kecil tidak ikut
+        max_area_ratio: 0.95    # di atas ini yang "ditemukan" adalah bingkai gambar, bukan kertas (terbukti pada citra acak: 0,977)
+      deskew:                   # koreksi kemiringan dari minAreaRect
+        enabled: true
+        max_angle_deg: 15.0     # di atas ini dianggap salah ukur, rotasi dibatalkan
+        min_angle_deg: 0.3      # di bawah ini tidak usah diputar, rotasi hanya menambah blur
+      upscale:                  # pembesaran crop kedaluwarsa
+        enabled: true
+        factor: 2.0
+        interpolation: cubic
+      threshold:                # adaptive thresholding (Gaussian)
+        enabled: true
+        block_size: 31          # wajib ganjil
+        c: 10
+      morphology:               # menyambung titik cetakan dot-matrix
+        enabled: true
+        op: close               # "close" atau "dilate"
+        kernel: 3
+        iterations: 1
+    chains:
+      # CLAHE DIBUANG 28-10. Alasannya bukan selera melainkan ketidakcocokan latih-pakai:
+      # notebook k-fold melatih model pada gambar ASLI (tidak ada CLAHE di jalur latihnya
+      # sama sekali), sedangkan aplikasi dulu menerapkan CLAHE saat inferensi. Akibatnya
+      # angka tolok ukur 90,1% diukur TANPA CLAHE sementara aplikasi berjalan DENGAN CLAHE,
+      # dan selisihnya tidak pernah terlihat karena keduanya tak pernah diukur berdampingan.
+      # Terukur: model v1 pada 32 foto bersih 65,6% (dengan) lawan 87,5% (tanpa);
+      # model v2 pada 81 foto 96,3% lawan 97,5%, latensi 46,9 ms lawan 30,8 ms.
+      # `resize` WAJIB tetap ada: ia pengendali latensi untuk foto HP 3024x4032.
+      # Langkah `clahe` TIDAK dihapus dari `steps` dan tetap dipakai rangkaian dokumen.
+      uang: [resize]
+      # `denoise` dibuang dari rangkaian dokumen (29-09): pada 13 dokumen ia menaikkan CER
+      # 2,0-2,2%. Bilateral mengaburkan huruf halus, dan foto dokumen yang tajam memang tidak
+      # punya derau yang perlu dibuang. Langkahnya tetap ada dan tetap dipakai rangkaian
+      # kedaluwarsa, tempat cetakan dot-matrix memang berderau.
+      dokumen: [resize, perspective, deskew, clahe]
+      # Binarisasi dan morfologi DIBUANG 30-09. Diuji lima rangkaian pada 9 potongan zona
+      # dari foto kemasan sungguhan: `kedaluwarsa` lama (upscale+clahe+denoise+threshold+
+      # morphology) memberi 0 benar dan hampir selalu menghasilkan teks kosong atau nyaris
+      # kosong ('', '4 95.', '(,', 'IU.', '{.', 'EX.'). `upscale+clahe` memberi 2 benar.
+      # Threshold menghapus cetakan dot-matrix alih-alih menyambungnya - kebalikan dari
+      # dugaan PRD 8.8 langkah 3. Langkahnya tetap ada di `steps` bila mau dicoba lagi.
+      kedaluwarsa: [upscale, clahe]
+      # Hanya normalisasi ukuran, tanpa perbaikan citra apa pun. Dibuat 02-10 setelah
+      # pengukuran NFR-01: mematikan pra-pemrosesan kedaluwarsa demi akurasi ternyata
+      # juga mematikan `resize`, sehingga foto 3024x4032 utuh masuk ke PaddleOCR dan
+      # latensinya meledak sampai 116 detik. Langkah `resize` bukan hanya perbaikan
+      # citra - ia pengendali latensi, dan harus tetap ada.
+      hanya_resize: [resize]
+
+  # Modul uang (PRD 8.6). Bobot tidak ikut Git; lihat models/README.md.
+  money:
+    weights: models/best_money.pt
+    device: cpu                 # "cuda" bila ingin memakai GPU NVIDIA
+    imgsz: 640
+    max_det: 50
+    augment: false              # test-time augmentation; lihat sapuan 06-10 di keputusan-teknis
+    # Buang deteksi yang skornya di bawah (rasio x skor tertinggi di foto itu).
+    # 0 mematikan. Disetel dari sapuan 22-10; lihat docs/keputusan-teknis.md.
+    relative_score_min: 0.80
+    # PRD 8.9 menulis 0,5. Dipakai 0,30 setelah SAPUAN K-FOLD BERSIH (22-10):
+    # tiap foto dinilai model yang belum pernah melihatnya, 48 foto layak nilai.
+    #
+    #   ambang   BENAR  SALAH  DIAM   akurasi  presisi
+    #     0,25     34      5     9     70,8%    87,2%
+    #     0,30     33      4    11     68,8%    89,2%   <- dipakai
+    #     0,40     32      4    12     66,7%    88,9%   <- nilai lama
+    #     0,50     29      3    16     60,4%    90,6%
+    #
+    # Dipilih 0,30, bukan 0,25 yang akurasinya lebih tinggi: 0,25 menukar satu
+    # jawaban BENAR dengan satu jawaban SALAH, dan PRD 8.9 mengutamakan presisi
+    # di atas recall. Bagi pengguna tunanetra nominal yang keliru lebih berbahaya
+    # daripada sistem yang diam - ia tidak punya cara memeriksanya.
+    # Terhadap nilai lama 0,40, pilihan ini menang di KEDUA kolom sekaligus.
+    #
+    # Catatan: hanya 5 dari 12 DIAM bisa diselamatkan dengan menurunkan ambang.
+    # Sisanya tidak punya deteksi sama sekali bahkan di 0,15 - itu batas model,
+    # bukan batas ambang, dan hanya bisa diperbaiki dengan data atau model baru.
+    score_min: 0.30
+    nested_area_ratio: 0.85     # kotak yang >= 85% luasnya di dalam kotak sekelas dianggap uang yang sama
+    # Kotak sekelas yang tumpang tindih >= ambang ini digabung (NMS per kelas).
+    # DIMATIKAN (0) secara bawaan. Mekanismenya ada dan ada tesnya, tetapi sapuan
+    # 06-10 pada 35 foto menunjukkan **nol efek** pada ambang 0,20 sampai 0,70:
+    # salah hitung lembar yang ditemukan ternyata BUKAN kotak ganda atas lembar yang
+    # sama, melainkan deteksi di wilayah foto yang berbeda (IoU hanya 0,198), jadi
+    # penggabungan IoU tidak menyentuhnya. Dibiarkan mati karena risikonya pada foto
+    # BANYAK LEMBAR belum bisa diuji - dua lembar bertumpuk bisa tergabung menjadi
+    # satu, dan kita belum punya foto banyak lembar untuk membuktikannya aman.
+    same_class_iou: 0.0
+    conflict_iou: 0.5           # dua kelas berbeda tumpang tindih di atas ini -> hasil ditandai tidak yakin
+    preprocess_chain: uang      # kosongkan (null) bila citra sudah diproses oleh pemanggil
+
+  # Parser tanggal kedaluwarsa (PRD 8.8.1).
