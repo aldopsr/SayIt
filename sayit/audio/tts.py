@@ -1,7 +1,7 @@
-"""Text-to-Speech hibrida (keputusan Fase 0: gTTS).
+"""Text-to-Speech hibrida. Mesinnya dipilih di config (`tts.engine`): edge atau gtts.
 
 - Clip  -> diputar dari file MP3 di assets/tts (dibuat sekali oleh scripts/build_tts_cache.py)
-- Text  -> disintesis gTTS saat itu juga (butuh internet). Tanpa internet, diganti pesan "butuh_internet".
+- Text  -> disintesis saat itu juga (butuh internet). Tanpa internet, diganti pesan "butuh_internet".
 - Pause -> hening
 
 Hasil akhirnya satu array audio mono, sehingga bisa diputar langsung atau disimpan sebagai WAV
@@ -41,6 +41,22 @@ def gtts_save(text: str, path: Path, lang: str = "id", tld: str = "com", timeout
     from gtts import gTTS
     path.parent.mkdir(parents=True, exist_ok=True)
     gTTS(text, lang=lang, tld=tld, lang_check=False, timeout=timeout).save(str(path))
+
+
+def edge_save(text: str, path: Path, voice: str = "id-ID-GadisNeural",
+              rate: str = "+0%", timeout: float = 8) -> None:
+    """Suara neural Microsoft Edge. Keluarannya MP3 24 kHz mono, sama seperti gTTS.
+
+    `save_sync` dipakai, bukan `asyncio.run`: server FastAPI memanggil render() dari
+    dalam endpoint async, dan asyncio.run() di dalam event loop yang sedang jalan akan
+    melempar RuntimeError. save_sync menjalankannya di thread sendiri.
+    """
+    import edge_tts
+    path.parent.mkdir(parents=True, exist_ok=True)
+    edge_tts.Communicate(text, voice, rate=rate, connect_timeout=int(timeout)).save_sync(str(path))
+
+
+ENGINES = {"gtts": gtts_save, "edge": edge_save}
 
 
 # dipakai bersama dengan sayit/audio/io.py agar logikanya tidak bercabang
@@ -85,11 +101,11 @@ def _trim_silence(audio: np.ndarray, sr: int, threshold: float = 0.01, keep_ms: 
 
 
 class SpeechRenderer:
-    def __init__(self, cfg: dict, online: bool | None = None, synth=gtts_save):
+    def __init__(self, cfg: dict, online: bool | None = None, synth=None):
         self.cfg = cfg["tts"]
         self.clip_dir = project_path(self.cfg["cache_dir"])
         self.online = online          # None = cek koneksi otomatis saat dibutuhkan
-        self._synth = synth
+        self._synth = synth or ENGINES[self.cfg.get("engine", "edge")]
         self.sr = DEFAULT_SR
 
     # ------------------------------------------------------------------ koneksi & sintesis
@@ -98,8 +114,20 @@ class SpeechRenderer:
         return internet_available() if self.online is None else self.online
 
     def _synth_kwargs(self) -> dict:
+        timeout = self.cfg.get("timeout_s", 8)
+        if self.cfg.get("engine", "edge") == "edge":
+            return {"voice": self.cfg.get("voice", "id-ID-GadisNeural"),
+                    "rate": self.cfg.get("rate", "+0%"), "timeout": timeout}
         return {"lang": self.cfg.get("lang", "id"), "tld": self.cfg.get("tld", "com"),
-                "timeout": self.cfg.get("timeout_s", 8)}
+                "timeout": timeout}
+
+    def warmup(self) -> bool:
+        """Bayar biaya sambungan pertama saat memuat, bukan saat pengguna menunggu.
+
+        Sintesis pertama edge-tts 4-8 detik (membangun sesi), berikutnya 0,6 detik.
+        Tanpa ini biaya itu jatuh tepat di pembacaan dokumen pertama.
+        """
+        return self._render_text("ya") is not None
 
     def clip_path(self, key: str) -> Path:
         return self.clip_dir / f"{key}.mp3"

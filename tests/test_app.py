@@ -153,6 +153,9 @@ class PenyuaraPalsu:
     def __init__(self, cfg, online=None, **k):
         self.online = online
 
+    def warmup(self):
+        return False      # tidak ada jaringan di tes
+
     def render(self, utt):
         # bukan hening total: st.audio membagi dengan amplitudo puncak,
         # dan array nol membuatnya membagi dengan nol

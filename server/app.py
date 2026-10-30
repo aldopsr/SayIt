@@ -64,6 +64,7 @@ async def klip_wajib_divalidasi(request, call_next):
 @app.on_event("startup")
 def muat():
     status.update(pipeline.load())
+    penyuara.warmup()
 
 
 def _wav_b64(audio: np.ndarray, sr: int) -> str:

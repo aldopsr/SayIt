@@ -94,6 +94,7 @@ def main() -> int:
     p = Pipeline(cfg, transcriber=Transcriber(cfg))
     status = p.load()
     penyuara = SpeechRenderer(cfg)
+    penyuara.warmup()      # sintesis pertama edge-tts 4-8 detik; jangan masuk ke sampel NFR-01
     muat_s = time.perf_counter() - t
     print(f"  selesai dalam {muat_s:.1f} detik", flush=True)
     for k, v in status.items():
