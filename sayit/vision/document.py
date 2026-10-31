@@ -414,14 +414,16 @@ class DocumentReader:
     def _perlu_putar(self, hasil: DocumentResult) -> bool:
         """Apakah bacaan ini cukup mencurigakan untuk membayar percobaan rotasi?
 
-        Ambangnya SENGAJA konservatif. Pada 13 dokumen (31-10) skor rata-rata
-        foto tegak dan foto bersudut keliru BERTUMPANG: tegak serendah 0,678,
-        keliru setinggi 0,784 - jadi tidak ada ambang mutlak yang memisahkan
-        keduanya. 0,75 memilih sisi yang murah: 10 dari 13 foto terbalik
-        terdeteksi, dan hanya 1 dari 13 foto tegak ikut membayar 4x lintasan
-        (yaitu `ketentuan_makalah`, foto layar monitor yang memang diganti).
-        Tiga foto terbalik yang terlewat dibacakan apa adanya - itu kerugian
-        yang diterima supaya foto tegak tidak melambat empat kali.
+        Ambangnya 0,75, dikalibrasi 31-10 pada 14 foto buku dari HP pengguna -
+        lima di antaranya terpotret miring tanpa disengaja, jadi datanya bukan
+        rotasi buatan skrip. Pemisahannya BERSIH: foto tegak berskor serendah
+        0,768, foto miring setinggi 0,715, dan 0,75 jatuh di celah itu. Hasil:
+        5/5 foto miring terdeteksi, 0/9 foto tegak salah terpicu.
+
+        Yang terpicu salah hanya muncul pada gambar beresolusi kecil bukan-HP
+        (papantulis/plang, 310x142 sampai 613x377), yang skornya memang rendah
+        karena OCR hampir tidak membaca apa pun di situ - rotasi pada foto
+        semacam itu merugikan latensi tanpa memulihkan apa-apa.
         """
         ambang = self.d.get("rotate_trigger_score")
         if ambang is None:

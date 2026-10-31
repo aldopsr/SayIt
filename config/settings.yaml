@@ -278,12 +278,15 @@ vision:
     # gambar memulihkannya ke 15,3%, sama persis dengan baseline tegak.
     # Yang gagal pada gambar terbalik adalah DETEKSI (193 kotak lawan 887).
     rotate_retry: [180, 90, 270]
-    # Pemicunya: skor rata-rata baris di bawah ambang ini. SENGAJA konservatif.
-    # Rentang skor foto tegak dan foto bersudut keliru BERTUMPANG (tegak serendah
-    # 0,678; keliru setinggi 0,784), jadi tidak ada ambang mutlak yang memisahkan
-    # keduanya. 0,75 memilih sisi murah: 10/13 foto terbalik terdeteksi, hanya
-    # 1/13 foto tegak ikut membayar 4x lintasan. Kosongkan (null) untuk mematikan.
-    # BELUM dikalibrasi pada foto yang sengaja dipotret terbalik oleh pengguna.
+    # Pemicunya: skor rata-rata baris di bawah ambang ini.
+    # DIKALIBRASI 31-10 pada 14 foto buku dari HP pengguna, 5 di antaranya
+    # terpotret miring tanpa disengaja. Pemisahannya BERSIH: foto tegak serendah
+    # 0,768, foto miring setinggi 0,715 - celah 0,053, dan 0,75 jatuh di dalamnya.
+    # Hasilnya 5/5 foto miring terdeteksi, 0/9 foto tegak salah terpicu.
+    # Pemulihannya besar: 16->133, 26->180, 49->160, 46->167, 79->247 kata.
+    # Pada 13 dokumen yang diputar buatan celahnya jauh lebih tipis (0,009), jadi
+    # angka ini berdiri di atas foto HP sungguhan, bukan dokumen yang diputar skrip.
+    # Kosongkan (null) untuk mematikan.
     rotate_trigger_score: 0.75
     gpu: false                  # kode harus tetap jalan di laptop tanpa GPU
     model_dir: models/easyocr   # disimpan di dalam proyek, diabaikan Git
