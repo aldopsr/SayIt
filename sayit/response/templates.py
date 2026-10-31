@@ -69,6 +69,12 @@ FIXED_PHRASES: dict[str, str] = {
     "tidak_ada_uang": "Saya tidak menemukan uang kertas di foto. Pastikan uang berada di tengah dan tidak tertutup jari.",
     "tidak_yakin_uang": "Saya tidak yakin dengan nominal uang ini. Coba foto ulang dengan uang terbuka penuh.",
     "tidak_ada_tulisan": "Saya tidak menemukan tulisan yang bisa dibaca. Coba foto ulang lebih dekat dan lebih terang.",
+    # Beda dengan di atas: tulisannya KETEMU, tetapi bacaannya terlalu meragukan
+    # untuk dibacakan. Membacakan kata acak dengan nada seyakin jawaban benar
+    # lebih berbahaya daripada mengaku tidak jelas - pengguna tunanetra tidak
+    # bisa memeriksanya sendiri. Kalimatnya menyebut TINDAKAN BERIKUTNYA.
+    "tulisan_kurang_jelas": ("Tulisannya kurang jelas terbaca. Coba foto ulang lebih dekat, "
+                             "tegak lurus, dan pastikan tulisannya tidak tertutup bayangan."),
     # Galat unggahan berkas: nama berkasnya sengaja tidak disebut supaya kalimatnya
     # tetap bisa jadi klip tersimpan. Pengguna sudah tahu berkas mana yang dipilihnya.
     "berkas_tidak_didukung": ("Jenis berkas itu tidak didukung. Pilih berkas gambar, PDF, "

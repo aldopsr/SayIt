@@ -256,10 +256,24 @@ Langkah lengkapnya di `docs/deploy.md`.
 | Metrik | Hasil | Target | |
 |---|---|---|---|
 | Akurasi kedaluwarsa | **81%** (13 benar / 1 salah / 2 diam) | >= 70% | **TERCAPAI** |
-| CER dokumen | 15,3% (9,0% pada 11 foto bagus) | <= 15% | meleset 0,3 poin |
+| CER dokumen | **14,89%** (31-10, koreksi kemiringan baris) | <= 15% | **TERCAPAI** |
 | Akurasi uang (total diucapkan) | **90,1%** (73 benar / 8 salah / 0 diam, k-fold v2, 81 foto, ambang 0,30) | >= 85% | **TERCAPAI** |
 | Latensi uang / kendali | 1,4 s / 1,3 s | <= 8 s | **LOLOS** |
 | Latensi dokumen / kedaluwarsa | 11,5 s / 11,4 s | <= 8 s | **penyimpangan diterima** |
+
+**Modul tulisan, pembaruan 31-10 (urutan bacaan + penjaga mutu):**
+- **CER 15,30% -> 14,89%, target PRD tercapai.** Dari `line_slope_correct`: kemiringan baris
+  ditaksir dari kotak OCR sendiri, lalu `y` diluruskan sebelum dikelompokkan. 3 dokumen membaik,
+  10 tetap, **0 memburuk**. Akarnya: `deskew` SALAH UKUR pada foto buku karena `minAreaRect`
+  mengukur bentuk halaman dan meja, bukan baris teks.
+- **Penjaga mutu `unclear_score_min: 0.75`**: bacaan meragukan dijawab "tulisannya kurang jelas"
+  alih-alih dibacakan. Pada 35 foto: 6/8 bacaan buruk tertangkap, **0/27 bacaan baik salah ditandai**.
+  Foto mentega (OCR rusak) kini tidak dibacakan. Penanda kedua (rasio) TIDAK TERBUKTI, dimatikan.
+- **`layout_mode: tersebar`** sebagai bawaan. `auto` dari `document_found` DITOLAK - memilih persis
+  terbalik (tersebar untuk seluruh 13 dokumen A4, dokumen untuk 2 papan nama).
+- **BELUM SELESAI: urutan bacaan foto buku masih kacau.** Sebabnya sudah diketahui dan tercatat:
+  foto bentangan DUA halaman melengkung berlawanan, jadi satu kemiringan global (-0,028) jauh
+  meleset dari kemiringan baris sungguhan (-0,095). Jangan diklaim selesai.
 
 **Konfigurasi terkunci (jangan diubah tanpa mengukur ulang):**
 mesin OCR dipisah per modul - dokumen EasyOCR, kedaluwarsa PaddleOCR + `mobile_det`;

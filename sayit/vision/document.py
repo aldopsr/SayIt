@@ -56,6 +56,10 @@ class TextBox:
         return (self.box[1] + self.box[3]) / 2
 
     @property
+    def center_x(self) -> float:
+        return (self.box[0] + self.box[2]) / 2
+
+    @property
     def height(self) -> float:
         return self.box[3] - self.box[1]
 
@@ -66,6 +70,10 @@ class DocumentResult:
     chunks: list[str] = field(default_factory=list)
     boxes: list[TextBox] = field(default_factory=list)      # yang lolos ambang skor
     notes: dict[str, Any] = field(default_factory=dict)
+    # Bacaan berhasil tetapi mutunya diragukan - lihat `bacaan_meragukan`.
+    # Disimpan sebagai field, bukan dihitung ulang, karena penilaiannya butuh
+    # config sedangkan `chunk_utterance` sengaja tidak menerima config.
+    unclear: bool = False
 
     @property
     def found(self) -> bool:
@@ -110,7 +118,53 @@ def filter_by_score(boxes: Sequence[TextBox], score_min: float) -> list[TextBox]
 
 # --------------------------------------------------------------------------- baris dan paragraf
 
-def group_lines(boxes: Sequence[TextBox], tolerance_ratio: float) -> list[list[TextBox]]:
+def estimate_text_slope(boxes: Sequence[TextBox], gap_ratio: float,
+                       max_slope: float) -> float:
+    """Kemiringan baris teks (dy/dx) ditaksir dari kotak yang bersebelahan mendatar.
+
+    Dibutuhkan karena `deskew` SALAH UKUR pada foto buku yang dipegang: ia
+    memakai `minAreaRect` atas seluruh piksel, sehingga bentuk yang dominan
+    adalah halaman dan latar meja, bukan baris teksnya - persis jebakan yang
+    sudah ditulis di docstring-nya sendiri. Akibatnya terukur 31-10 pada
+    `tulisanbukubaru (2)`: satu baris membentang dari y=99 di kiri sampai y=56
+    di kanan, miring sekitar 6 derajat, dan pengelompokan baris menyisipkan
+    baris-baris yang berbeda menjadi "cara yang dapat digunakan untuk mencegah
+    3b. Ada beberapa berdarah".
+
+    Kotak OCR sendiri sudah memuat jawabannya, jadi taksiran ini tidak perlu
+    menyentuh citra sama sekali. Dipakai MEDIAN atas pasangan bersebelahan:
+    pasangan yang menyeberang baris memberi kemiringan liar, dan median
+    membuang keduanya tanpa perlu ambang.
+    """
+    if len(boxes) < 2:
+        return 0.0
+    tinggi = median([b.height for b in boxes if b.height > 0] or [1.0])
+    batas_celah = gap_ratio * tinggi
+
+    kemiringan = []
+    for a in boxes:
+        # tetangga terdekat di kanan yang masih masuk akal sebagai kata berikutnya
+        kanan = [b for b in boxes
+                 if b.left > a.left
+                 and 0 <= b.left - a.box[2] <= batas_celah
+                 and abs(b.center_y - a.center_y) <= tinggi]
+        if not kanan:
+            continue
+        b = min(kanan, key=lambda w: w.left)
+        dx = b.center_x - a.center_x
+        if dx > 0:
+            kemiringan.append((b.center_y - a.center_y) / dx)
+
+    if not kemiringan:
+        return 0.0
+    s = float(median(kemiringan))
+    # Taksiran liar dibuang: teks yang benar-benar miring lebih dari ini bukan
+    # urusan pengelompokan baris, melainkan urusan percobaan ulang rotasi.
+    return s if abs(s) <= max_slope else 0.0
+
+
+def group_lines(boxes: Sequence[TextBox], tolerance_ratio: float,
+                slope: float = 0.0) -> list[list[TextBox]]:
     """Kelompokkan kotak teks menjadi baris, lalu urutkan tiap baris dari kiri ke kanan.
 
     Toleransi dihitung relatif terhadap tinggi huruf, bukan piksel tetap, agar
@@ -125,9 +179,15 @@ def group_lines(boxes: Sequence[TextBox], tolerance_ratio: float) -> list[list[T
     tinggi = median([b.height for b in boxes if b.height > 0] or [1.0])
     toleransi = tolerance_ratio * tinggi
 
+    # Pada teks miring, pusat vertikal mentah menyesatkan: ujung kanan sebuah
+    # baris bisa lebih tinggi daripada awal baris berikutnya. `y` diluruskan
+    # dulu terhadap kemiringan supaya perbandingannya kembali sah.
+    def y_lurus(w: TextBox) -> float:
+        return w.center_y - slope * w.center_x
+
     baris: list[list[TextBox]] = []
-    for w in sorted(boxes, key=lambda w: (w.center_y, w.left)):
-        if baris and abs(w.center_y - median([x.center_y for x in baris[-1]])) <= toleransi:
+    for w in sorted(boxes, key=lambda w: (y_lurus(w), w.left)):
+        if baris and abs(y_lurus(w) - median([y_lurus(x) for x in baris[-1]])) <= toleransi:
             baris[-1].append(w)
         else:
             baris.append([w])
@@ -151,36 +211,177 @@ def group_paragraphs(lines: Sequence[Sequence[TextBox]], gap_ratio: float) -> li
     return paragraf
 
 
-def compose_text(boxes: Sequence[TextBox], cfg: dict) -> str:
+# --------------------------------------------------------------------------- gugus spasial
+
+def box_gap(a: TextBox, b: TextBox) -> tuple[float, float]:
+    """Jarak KOSONG mendatar dan tegak antara dua kotak; 0 bila keduanya bertindih."""
+    dx = max(0.0, max(a.left, b.left) - min(a.box[2], b.box[2]))
+    dy = max(0.0, max(a.top, b.top) - min(a.bottom, b.bottom))
+    return dx, dy
+
+
+def group_clusters(boxes: Sequence[TextBox], x_gap_ratio: float,
+                   y_gap_ratio: float) -> list[list[TextBox]]:
+    """Kelompokkan kotak menjadi gugus teks yang berdekatan (single-linkage).
+
+    Dibutuhkan karena `group_lines` membandingkan pusat vertikal di SELURUH lebar
+    bingkai. Pada kertas A4 satu kolom itu benar, tetapi pada kemasan, papan tulis,
+    atau papan nama dua blok teks yang kebetulan sejajar tingginya akan digabung
+    menjadi satu baris dan dibacakan berselang-seling. Contoh nyata pada foto
+    mentega: "kedekatan BlueBand sebagai enak banan karena rasa bertekstur lemout".
+
+    Ambangnya relatif terhadap tinggi huruf, sama seperti aturan baris, supaya
+    berlaku untuk foto dekat maupun jauh.
+    """
+    if not boxes:
+        return []
+    tinggi = median([b.height for b in boxes if b.height > 0] or [1.0])
+    batas_x, batas_y = x_gap_ratio * tinggi, y_gap_ratio * tinggi
+
+    # ponytail: O(n^2) atas kotak setingkat BARIS - satu halaman padat memberi
+    # ratusan, bukan puluhan ribu. Pakai indeks spasial bila pernah jadi penghambat.
+    sisa = list(boxes)
+    gugus: list[list[TextBox]] = []
+    while sisa:
+        aktif, sisa = [sisa[0]], sisa[1:]
+        i = 0
+        while i < len(aktif):
+            dekat, jauh = [], []
+            for kandidat in sisa:
+                dx, dy = box_gap(aktif[i], kandidat)
+                (dekat if dx <= batas_x and dy <= batas_y else jauh).append(kandidat)
+            aktif += dekat
+            sisa = jauh
+            i += 1
+        gugus.append(aktif)
+    return gugus
+
+
+def order_clusters(clusters: Sequence[Sequence[TextBox]], band_ratio: float) -> list[list[TextBox]]:
+    """Urutkan gugus seperti orang membaca: atas ke bawah, lalu kiri ke kanan.
+
+    Membandingkan tepi atas mentah membuat dua gugus bersebelahan yang selisih
+    beberapa piksel terbaca dalam urutan acak. Karena itu tepi atasnya dibulatkan
+    ke pita setinggi `band_ratio` x tinggi huruf lebih dulu: gugus dalam pita yang
+    sama dianggap sebaris dan diurutkan dari kiri.
+    """
+    if not clusters:
+        return []
+    tinggi = median([w.height for g in clusters for w in g if w.height > 0] or [1.0])
+    pita = max(1.0, band_ratio * tinggi)
+
+    def kunci(g: Sequence[TextBox]) -> tuple[int, float]:
+        return (int(min(w.top for w in g) // pita), min(w.left for w in g))
+
+    return [list(g) for g in sorted(clusters, key=kunci)]
+
+
+# --------------------------------------------------------------------------- penyusunan teks
+
+def _teks_satu_gugus(boxes: Sequence[TextBox], d: dict) -> list[str]:
+    """Paragraf-paragraf dari satu gugus, memakai aturan baris yang sama."""
+    miring = 0.0
+    if d.get("line_slope_correct"):
+        miring = estimate_text_slope(boxes, float(d["line_slope_gap_ratio"]),
+                                     float(d["line_slope_max"]))
+    baris = group_lines(boxes, float(d["line_tolerance_ratio"]), miring)
+    paragraf = group_paragraphs(baris, float(d["paragraph_gap_ratio"]))
+    keluar = []
+    for p in paragraf:
+        isi = " ".join(" ".join(w.text for w in b) for b in p).strip()
+        if isi:
+            keluar.append(isi)
+    return keluar
+
+
+def compose_text(boxes: Sequence[TextBox], cfg: dict, mode: str = "dokumen") -> str:
     """Susun kotak teks menjadi teks utuh: baris digabung, paragraf dipisah titik.
 
     Paragraf yang tidak diakhiri tanda baca diberi titik, supaya `split_chunks`
     di `response/templates.py` bisa memotong per kalimat dan suaranya tidak
     terdengar menyambung tanpa jeda.
+
+    Dua mode tata letak, karena satu aturan tidak muat untuk keduanya:
+
+    - `dokumen`: teks mengalir satu kolom dari kiri atas. Berlaku untuk kertas,
+      halaman buku, surat.
+    - `tersebar`: teks berupa blok-blok terpisah yang letaknya tidak berurutan -
+      kemasan, papan tulis, papan nama. Tiap gugus disusun sendiri lalu
+      diurutkan atas ke bawah, kiri ke kanan.
+
+    Mode `dokumen` sengaja TIDAK melewati pengelompokan gugus, supaya hasil yang
+    sudah terukur pada 13 dokumen (CER 15,3%) tidak ikut berubah.
     """
     d = cfg["vision"]["document"]
-    baris = group_lines(boxes, float(d["line_tolerance_ratio"]))
-    paragraf = group_paragraphs(baris, float(d["paragraph_gap_ratio"]))
+    if mode == "tersebar":
+        gugus = group_clusters(boxes, float(d["cluster_x_gap_ratio"]),
+                               float(d["cluster_y_gap_ratio"]))
+        gugus = order_clusters(gugus, float(d["cluster_band_ratio"]))
+        keluar = [isi for g in gugus for isi in _teks_satu_gugus(g, d)]
+    else:
+        keluar = _teks_satu_gugus(boxes, d)
 
-    keluar = []
-    for p in paragraf:
-        isi = " ".join(" ".join(w.text for w in b) for b in p).strip()
-        if not isi:
-            continue
-        if isi[-1] not in ".!?:,;":
-            isi += "."
-        keluar.append(isi)
-    return " ".join(keluar)
+    # Titik di ujung tiap paragraf memberi jeda saat dibacakan. Pada mode
+    # tersebar jeda itu justru yang memisahkan satu blok teks dari blok lain.
+    return " ".join(isi if isi[-1] in ".!?:,;" else isi + "." for isi in keluar)
 
 
-def build_result(boxes: Sequence[TextBox], cfg: dict) -> DocumentResult:
+def build_result(boxes: Sequence[TextBox], cfg: dict, mode: str = "dokumen") -> DocumentResult:
     """Dari kotak hasil OCR menjadi teks dan potongan siap baca."""
     d = cfg["vision"]["document"]
     kuat = filter_by_score(boxes, float(d["text_score_min"]))
-    teks = compose_text(kuat, cfg)
+    teks = compose_text(kuat, cfg, mode)
     potongan = split_chunks(teks, max_words=int(d["max_words_per_chunk"])) if teks else []
-    catatan = {"raw_boxes": len(boxes), "kept_boxes": len(kuat), "chunks": len(potongan)}
+    catatan = {"raw_boxes": len(boxes), "kept_boxes": len(kuat),
+               "chunks": len(potongan), "layout_mode": mode}
     return DocumentResult(text=teks, chunks=potongan, boxes=kuat, notes=catatan)
+
+
+def bacaan_meragukan(hasil: DocumentResult, cfg: dict) -> tuple[bool, dict]:
+    """Apakah bacaan ini terlalu meragukan untuk dibacakan seolah-olah benar?
+
+    Membacakan susunan kata acak dengan nada seyakin jawaban benar lebih
+    berbahaya bagi pengguna tunanetra daripada berkata "tulisannya kurang
+    jelas" - pengguna tidak punya cara memeriksanya sendiri. Modul uang dan
+    tanggal sudah punya penjaga semacam ini; modul tulisan belum.
+
+    Dua penanda, dan masing-masing cukup:
+
+    1. **Skor rata-rata baris rendah.** Penanda langsung bahwa mesin OCR
+       sendiri tidak yakin.
+    2. **Sedikit baris yang lolos ambang skor dibanding yang terdeteksi.**
+       Ini sengaja ditambahkan karena penanda pertama BUTA pada satu kasus
+       nyata: foto papan nama yang hanya menghasilkan satu kata tetapi berskor
+       0,769. Rasio tidak menghukum teks yang memang pendek - papan nama yang
+       terbaca jelas akan meloloskan hampir semua kotaknya.
+
+    Keduanya dapat dimatikan sendiri-sendiri (null di config) supaya bisa
+    diablasi terpisah.
+    """
+    d = cfg["vision"]["document"]
+    catatan: dict[str, Any] = {}
+    if not hasil.found:
+        return False, catatan          # "tidak ada tulisan" sudah punya jawabannya sendiri
+
+    alasan = []
+    ambang_skor = d.get("unclear_score_min")
+    if ambang_skor is not None and hasil.boxes:
+        rata = float(np.mean([b.score for b in hasil.boxes]))
+        catatan["mean_score"] = rata
+        if rata < float(ambang_skor):
+            alasan.append("skor_rendah")
+
+    ambang_rasio = d.get("unclear_kept_ratio_min")
+    mentah = int(hasil.notes.get("raw_boxes") or 0)
+    if ambang_rasio is not None and mentah:
+        rasio = len(hasil.boxes) / mentah
+        catatan["kept_ratio"] = rasio
+        if rasio < float(ambang_rasio):
+            alasan.append("banyak_terbuang")
+
+    if alasan:
+        catatan["unclear_reason"] = alasan
+    return bool(alasan), catatan
 
 
 def result_dari_teks(teks: str, cfg: dict, sumber: str = "teks") -> DocumentResult:
@@ -202,6 +403,10 @@ def chunk_utterance(hasil: DocumentResult, index: int = 0) -> Utterance:
     """Ujaran untuk satu potongan. `index` dikelola pemanggil lewat intent LANJUT."""
     if not hasil.found:
         return fixed("tidak_ada_tulisan")
+    # Penjaga mutu diperiksa SEBELUM potongan pertama, bukan sebelum tiap
+    # potongan: sekali dinyatakan kurang jelas, tidak ada yang dibacakan.
+    if hasil.unclear:
+        return fixed("tulisan_kurang_jelas")
     if index >= hasil.total_chunks:
         return fixed("tidak_ada_lanjutan")
     return document_chunk_response(hasil.chunks[index], has_more=index + 1 < hasil.total_chunks)
@@ -397,7 +602,7 @@ class DocumentReader:
         hasil = self._read_once(image, preprocess)
         sudut = [int(s) for s in (self.d.get("rotate_retry") or [])]
         if not sudut or not self._perlu_putar(hasil):
-            return hasil
+            return self._nilai_mutu(hasil)
 
         # Pemilih "kata terbanyak" diukur 31-10 pada 13 dokumen: menebak sudut
         # benar 13/13, setara batas atas oracle. Sudut keliru menghasilkan banyak
@@ -409,6 +614,17 @@ class DocumentReader:
         derajat, hasil = max(kandidat, key=lambda k: len(k[1].text.split()))
         hasil.notes["rotated_deg"] = derajat
         hasil.notes["rotations_tried"] = sudut
+        return self._nilai_mutu(hasil)
+
+    def _nilai_mutu(self, hasil: DocumentResult) -> DocumentResult:
+        """Pasang penanda mutu pada hasil AKHIR, sesudah rotasi diselesaikan.
+
+        Urutannya penting: rotasi memperbaiki mutu bacaan, jadi menilai sebelum
+        rotasi akan menyatakan foto miring "kurang jelas" padahal ia bisa pulih
+        sepenuhnya - terukur 31-10, pemulihannya sampai 8x jumlah kata.
+        """
+        hasil.unclear, catatan = bacaan_meragukan(hasil, self.cfg)
+        hasil.notes.update(catatan)
         return hasil
 
     def _perlu_putar(self, hasil: DocumentResult) -> bool:
@@ -442,7 +658,23 @@ class DocumentReader:
             catatan_pra = {"preprocess_steps": hasil_pra.steps, **hasil_pra.notes}
 
         kotak, elapsed = self.ocr_boxes(image)
-        hasil = build_result(kotak, self.cfg)
+        hasil = build_result(kotak, self.cfg, self._mode_tata_letak(catatan_pra))
         hasil.notes.update(catatan_pra)
         hasil.notes["ocr_s"] = elapsed
         return hasil
+
+    def _mode_tata_letak(self, catatan_pra: dict) -> str:
+        """Pilih aturan urutan bacaan: `dokumen` atau `tersebar`.
+
+        Petunjuknya sudah ada dan gratis: koreksi perspektif mencari lembar
+        kertas dan mencatat `document_found`. Kertas ketemu berarti teksnya
+        mengalir satu kolom; tidak ketemu berarti foto kemasan, papan tulis,
+        atau papan nama - teksnya tersebar dan aturan dokumen merusaknya.
+
+        Bila langkah perspektif dimatikan, petunjuknya tidak ada, dan modenya
+        jatuh ke `dokumen` - yaitu perilaku yang sudah terukur sebelumnya.
+        """
+        pilihan = str(self.d.get("layout_mode", "auto")).lower()
+        if pilihan in ("dokumen", "tersebar"):
+            return pilihan
+        return "tersebar" if catatan_pra.get("document_found") is False else "dokumen"

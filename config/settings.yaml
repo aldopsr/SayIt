@@ -294,9 +294,57 @@ vision:
     text_score_min: 0.4         # PRD 8.9. Catatan: EasyOCR mengembalikan kotak setingkat BARIS,
                                 # jadi yang dibuang adalah satu baris utuh, bukan satu kata
     line_tolerance_ratio: 0.6   # dua kata sebaris bila beda pusat vertikalnya < rasio ini x tinggi huruf
+    # Luruskan kemiringan baris sebelum dikelompokkan, ditaksir dari kotak OCR
+    # sendiri. `deskew` tidak bisa menggantikan ini: ia memakai minAreaRect atas
+    # seluruh piksel, jadi pada foto buku yang dipegang ia mengukur bentuk
+    # halaman dan meja, bukan baris teksnya. Terukur 31-10: satu baris membentang
+    # dari y=99 ke y=56 (miring ~6 derajat) dan baris-baris saling menyisip.
+    line_slope_correct: true
+    line_slope_gap_ratio: 3.0   # celah mendatar maksimum antar-kata sebaris, x tinggi huruf
+    line_slope_max: 0.35        # taksiran di atas ini dianggap liar dan dibuang (~19 derajat)
     paragraph_gap_ratio: 1.6    # jarak antar-baris di atas rasio ini dianggap ganti paragraf
     max_words_per_chunk: 40     # PRD 8.7, potongan yang dibacakan sekali jalan
     preprocess_chain: dokumen   # kosongkan (null) bila citra sudah diproses pemanggil
+
+    # --- urutan bacaan -------------------------------------------------------
+    # `auto` SUDAH DIUKUR DAN DITOLAK (31-10). Gagasannya memilih dari
+    # `document_found` milik koreksi perspektif, tetapi hasilnya PERSIS TERBALIK:
+    # kertas "ditemukan" pada 2 foto papan nama, dan TIDAK ditemukan pada
+    # seluruh 13 dokumen A4. Penyebabnya `perspective.min_area_ratio` 0,50 yang
+    # memang sengaja dibuat ketat, jadi sinyal itu tidak pernah menyala pada
+    # foto dokumen sungguhan. Nilainya tetap diterima untuk ablasi, tetapi
+    # jangan dipakai sebagai bawaan.
+    #
+    # Bawaannya `tersebar` karena pada 13 dokumen beracuan ia hanya berbeda
+    # 0,05 poin CER dari mode `dokumen` (15,30% lawan 15,25%) - dalam derau -
+    # sementara pada teks tersebar ia memperbaiki urutan bacaan.
+    layout_mode: tersebar       # auto | dokumen | tersebar
+    # Ambang gugus mode `tersebar`, relatif terhadap tinggi huruf. Dua kotak
+    # masuk satu gugus bila jarak kosongnya di bawah keduanya.
+    cluster_x_gap_ratio: 1.5
+    cluster_y_gap_ratio: 1.0
+    # Gugus yang tepi atasnya jatuh di pita setinggi ini dianggap sebaris dan
+    # dibaca dari kiri ke kanan.
+    cluster_band_ratio: 2.0
+
+    # --- penjaga mutu bacaan -------------------------------------------------
+    # Bacaan yang lolos tetapi meragukan dijawab "tulisannya kurang jelas"
+    # alih-alih dibacakan apa adanya.
+    #
+    # DIKALIBRASI 31-10 pada 35 foto (13 dokumen beracuan + 22 foto lain):
+    # ambang 0,75 menangkap 6 dari 8 bacaan buruk dan SALAH MENANDAI 0 dari 27
+    # bacaan baik. Termasuk yang tertangkap: `ketentuan_makalah`, satu-satunya
+    # dokumen ber-CER 76,9%. Dua yang lolos adalah bacaan nyaris kosong tetapi
+    # berskor tinggi (1-2 kata). Marginnya tipis: buruk tertinggi 0,746 lawan
+    # baik terendah 0,768. Di 0,78 sudah ada 2 bacaan baik yang salah ditandai.
+    unclear_score_min: 0.75
+    # Penanda kedua (rasio baris lolos terhadap yang terdeteksi) TIDAK TERBUKTI
+    # dan karena itu dimatikan. Diukur pada data yang sama: pada ambang 0,40 ia
+    # menangkap 3 bacaan buruk, tetapi KETIGANYA sudah tertangkap oleh skor -
+    # nol tambahan. Menaikkannya ke 0,45 mulai salah menandai bacaan baik.
+    # Kodenya ditahan karena sudah berteskan, tetapi jangan dinyalakan tanpa
+    # mengukur ulang: pada data ini ia tidak membayar dirinya sendiri.
+    unclear_kept_ratio_min:
 
   # Modul kedaluwarsa (PRD 8.8).
   # PERINGATAN: bobot deteksi zona BELUM ADA (datasetnya belum dibuat). Selama file

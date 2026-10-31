@@ -63,7 +63,8 @@ def test_kata_berskor_rendah_dibuang(cfg):
             DOC.TextBox("buram", 0.2, (60, 0, 110, 20))]
     hasil = DOC.build_result(kata, cfg)
     assert hasil.text == "jelas."
-    assert hasil.notes == {"raw_boxes": 2, "kept_boxes": 1, "chunks": 1}
+    assert hasil.notes == {"raw_boxes": 2, "kept_boxes": 1, "chunks": 1,
+                           "layout_mode": "dokumen"}
 
 
 def test_tepat_di_ambang_diterima(cfg):
@@ -456,3 +457,210 @@ def test_rotate_image_dipakai_bersama_modul_kedaluwarsa():
     """Satu implementasi saja: expiry mengekspor ulang nama dari document."""
     from sayit.vision import expiry as E
     assert E.rotate_image is DOC.rotate_image
+
+
+# --------------------------------------------------------------------------- urutan bacaan
+
+def kotak(teks, x, y, w=60, h=20, skor=0.9):
+    return DOC.TextBox(teks, skor, (x, y, x + w, y + h))
+
+
+def test_dua_blok_sejajar_tidak_dibaca_berselang_seling(cfg):
+    """Inilah bug yang memunculkan 'kedekatan BlueBand sebagai enak banan'.
+
+    Dua blok teks terpisah jauh mendatar tetapi sejajar tingginya. Mode dokumen
+    menggabungkannya jadi satu baris; mode tersebar membacanya satu per satu.
+    """
+    kiri = [kotak("Petunjuk", 0, 0), kotak("Penyimpanan", 0, 25)]
+    kanan = [kotak("Baik", 600, 0), kotak("digunakan", 600, 25)]
+    semua = kiri + kanan
+
+    assert DOC.compose_text(semua, cfg, "dokumen") == "Petunjuk Baik Penyimpanan digunakan."
+    assert DOC.compose_text(semua, cfg, "tersebar") == "Petunjuk Penyimpanan. Baik digunakan."
+
+
+def test_gugus_diurutkan_atas_ke_bawah_lalu_kiri_ke_kanan(cfg):
+    atas = [kotak("judul", 300, 0)]
+    bawah_kiri = [kotak("kiri", 0, 400)]
+    bawah_kanan = [kotak("kanan", 600, 400)]
+    teks = DOC.compose_text(atas + bawah_kanan + bawah_kiri, cfg, "tersebar")
+    assert teks == "judul. kiri. kanan."
+
+
+def test_mode_dokumen_tidak_berubah_perilakunya(cfg):
+    """Penjaga regresi: CER 15,3% pada 13 dokumen diukur dengan jalur ini."""
+    baris_teks = baris("Surat Keterangan Nomor Satu", y=0)
+    assert DOC.compose_text(baris_teks, cfg, "dokumen") == "Surat Keterangan Nomor Satu."
+
+
+def test_gugus_kosong_aman(cfg):
+    assert DOC.group_clusters([], 1.5, 1.0) == []
+    assert DOC.order_clusters([], 2.0) == []
+    assert DOC.compose_text([], cfg, "tersebar") == ""
+
+
+def test_jarak_kotak_nol_bila_bertindih():
+    a = DOC.TextBox("a", 0.9, (0, 0, 100, 20))
+    b = DOC.TextBox("b", 0.9, (50, 10, 150, 30))
+    assert DOC.box_gap(a, b) == (0.0, 0.0)
+    jauh = DOC.TextBox("c", 0.9, (300, 100, 400, 120))
+    dx, dy = DOC.box_gap(a, jauh)
+    assert (dx, dy) == (200.0, 80.0)
+
+
+def test_mode_auto_membaca_kertas_ditemukan(cfg):
+    """Logika `auto` tetap ada untuk ablasi, walau bawaannya bukan itu."""
+    c = copy.deepcopy(cfg)
+    c["vision"]["document"]["layout_mode"] = "auto"
+    r = DOC.DocumentReader(c, reader_factory=pabrik())
+    assert r._mode_tata_letak({"document_found": True}) == "dokumen"
+    assert r._mode_tata_letak({"document_found": False}) == "tersebar"
+    # perspektif dimatikan: tidak ada petunjuk, jatuh ke perilaku lama
+    assert r._mode_tata_letak({}) == "dokumen"
+
+
+def test_bawaan_tersebar_bukan_auto(cfg):
+    """`auto` DITOLAK datanya 31-10: memilih persis terbalik.
+
+    `document_found` menyala pada 2 foto papan nama dan mati pada seluruh 13
+    dokumen A4, karena `perspective.min_area_ratio` 0,50 sengaja ketat. Mode
+    `tersebar` dipakai sebagai bawaan: pada 13 dokumen bedanya hanya 0,05 poin
+    CER (15,30% lawan 15,25%), sementara pada teks tersebar ia memperbaiki urutan.
+    """
+    assert cfg["vision"]["document"]["layout_mode"] == "tersebar"
+    r = DOC.DocumentReader(cfg, reader_factory=pabrik())
+    assert r._mode_tata_letak({"document_found": True}) == "tersebar"
+
+
+def test_mode_bisa_dipaksa_untuk_ablasi(cfg):
+    for paksa in ("dokumen", "tersebar"):
+        c = copy.deepcopy(cfg)
+        c["vision"]["document"]["layout_mode"] = paksa
+        r = DOC.DocumentReader(c, reader_factory=pabrik())
+        assert r._mode_tata_letak({"document_found": True}) == paksa
+        assert r._mode_tata_letak({"document_found": False}) == paksa
+
+
+# --------------------------------------------------------------------------- penjaga mutu
+
+def hasil_palsu(skor, mentah, lolos=None):
+    kotak_kuat = [DOC.TextBox(f"k{i}", skor, (0, i * 25, 60, i * 25 + 20))
+                  for i in range(lolos if lolos is not None else mentah)]
+    return DOC.DocumentResult(text="k0.", chunks=["k0."], boxes=kotak_kuat,
+                              notes={"raw_boxes": mentah})
+
+
+def test_ambang_penjaga_mutu_memakai_nilai_terkalibrasi(cfg):
+    """0,75 dikalibrasi 31-10 pada 35 foto: 6/8 bacaan buruk tertangkap, 0/27 baik salah ditandai.
+
+    Marginnya tipis (buruk tertinggi 0,746 lawan baik terendah 0,768), jadi
+    mengubah angka ini WAJIB disertai pengukuran ulang pada kedua sisi.
+    """
+    d = cfg["vision"]["document"]
+    assert d["unclear_score_min"] == 0.75
+    # penanda rasio TIDAK TERBUKTI - nol tambahan di atas penanda skor
+    assert d["unclear_kept_ratio_min"] is None
+
+
+def test_penjaga_mutu_bisa_dimatikan_seluruhnya(cfg):
+    c = copy.deepcopy(cfg)
+    c["vision"]["document"]["unclear_score_min"] = None
+    c["vision"]["document"]["unclear_kept_ratio_min"] = None
+    assert DOC.bacaan_meragukan(hasil_palsu(0.2, 10, 1), c)[0] is False
+
+
+def test_skor_rendah_dinyatakan_meragukan(cfg):
+    c = copy.deepcopy(cfg)
+    c["vision"]["document"]["unclear_score_min"] = 0.7
+    meragukan, catatan = DOC.bacaan_meragukan(hasil_palsu(0.5, 5), c)
+    assert meragukan is True
+    assert catatan["unclear_reason"] == ["skor_rendah"]
+    assert DOC.bacaan_meragukan(hasil_palsu(0.9, 5), c)[0] is False
+
+
+def test_banyak_kotak_terbuang_dinyatakan_meragukan(cfg):
+    """Penanda kedua menangkap kasus yang skornya BUTA: skor tinggi, isi sedikit."""
+    c = copy.deepcopy(cfg)
+    c["vision"]["document"]["unclear_kept_ratio_min"] = 0.5
+    meragukan, catatan = DOC.bacaan_meragukan(hasil_palsu(0.95, 20, lolos=2), c)
+    assert meragukan is True
+    assert catatan["unclear_reason"] == ["banyak_terbuang"]
+    assert DOC.bacaan_meragukan(hasil_palsu(0.95, 20, lolos=18), c)[0] is False
+
+
+def test_tidak_ada_tulisan_bukan_urusan_penjaga_mutu(cfg):
+    """Foto tanpa tulisan sudah punya jawabannya sendiri; jangan ditimpa."""
+    c = copy.deepcopy(cfg)
+    c["vision"]["document"]["unclear_score_min"] = 0.9
+    assert DOC.bacaan_meragukan(DOC.DocumentResult(), c)[0] is False
+
+
+def test_bacaan_meragukan_menjawab_kurang_jelas_bukan_isi():
+    hasil = DOC.DocumentResult(text="kata acak.", chunks=["kata acak."], unclear=True)
+    assert DOC.chunk_utterance(hasil) == T.fixed("tulisan_kurang_jelas")
+
+
+def test_bacaan_jelas_tetap_dibacakan():
+    hasil = DOC.DocumentResult(text="isi benar.", chunks=["isi benar."])
+    assert DOC.chunk_utterance(hasil) != T.fixed("tulisan_kurang_jelas")
+
+
+# --------------------------------------------------------------------------- kemiringan baris
+
+def baris_miring(teks, y0, slope, x0=200, lebar=90, jarak=20, tinggi=30):
+    """Satu baris teks yang menurun/menanjak sebesar `slope` (dy/dx)."""
+    kata, x = [], x0
+    for w in teks.split():
+        y = y0 + slope * (x + lebar / 2 - x0)
+        kata.append(DOC.TextBox(w, 0.9, (x, y, x + lebar, y + tinggi)))
+        x += lebar + jarak
+    return kata
+
+
+def test_kemiringan_ditaksir_dari_kotak(cfg):
+    kotak_miring = baris_miring("satu dua tiga empat lima", y0=100, slope=-0.1)
+    s = DOC.estimate_text_slope(kotak_miring, 3.0, 0.35)
+    assert s == pytest.approx(-0.1, abs=0.01)
+
+
+def test_kemiringan_nol_pada_teks_lurus(cfg):
+    assert DOC.estimate_text_slope(baris("satu dua tiga", y=0), 3.0, 0.35) == 0.0
+    assert DOC.estimate_text_slope([], 3.0, 0.35) == 0.0
+    assert DOC.estimate_text_slope([DOC.TextBox("x", 0.9, (0, 0, 10, 10))], 3.0, 0.35) == 0.0
+
+
+def test_taksiran_liar_dibuang():
+    """Di atas batas, urusannya percobaan ulang rotasi - bukan pengelompokan baris."""
+    curam = baris_miring("satu dua tiga empat", y0=0, slope=0.9)
+    assert DOC.estimate_text_slope(curam, 3.0, 0.35) == 0.0
+
+
+def test_dua_baris_miring_tidak_saling_menyisip(cfg):
+    """Cacat nyata pada `tulisanbukubaru (2)`, dikecilkan jadi kasus uji.
+
+    Dua baris miring 6 derajat. Tanpa koreksi, ujung kanan baris pertama jatuh
+    lebih tinggi daripada awal baris kedua, dan keduanya tercampur.
+    """
+    atas = baris_miring("Ada beberapa cara yang dapat", y0=200, slope=-0.1)
+    bawah = baris_miring("Pertama adalah memberantas tempat biak", y0=240, slope=-0.1)
+    semua = atas + bawah
+
+    tercampur = DOC.group_lines(semua, 0.6)                 # tanpa koreksi
+    lurus = DOC.group_lines(semua, 0.6, slope=-0.1)         # dengan koreksi
+
+    assert [" ".join(w.text for w in b) for b in lurus] == [
+        "Ada beberapa cara yang dapat",
+        "Pertama adalah memberantas tempat biak",
+    ]
+    assert len(tercampur) != 2 or [" ".join(w.text for w in b) for b in tercampur] != [
+        "Ada beberapa cara yang dapat",
+        "Pertama adalah memberantas tempat biak",
+    ]
+
+
+def test_koreksi_kemiringan_bisa_dimatikan(cfg):
+    c = copy.deepcopy(cfg)
+    c["vision"]["document"]["line_slope_correct"] = False
+    miring = baris_miring("satu dua tiga empat lima enam", y0=100, slope=-0.12)
+    assert DOC.compose_text(miring, c, "dokumen") != "satu dua tiga empat lima enam."
+    assert DOC.compose_text(miring, cfg, "dokumen") == "satu dua tiga empat lima enam."
