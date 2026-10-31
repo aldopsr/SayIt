@@ -1,216 +1,191 @@
-# Rencana menaikkan kelayakan modul dokumen
+# Rencana: membacakan tulisan apa pun dari foto
 
 **Disusun 31 Oktober 2026. Waktu tersedia: 2–3 hari.**
 
----
-
-## Duduk perkaranya: masalahnya BUKAN akurasi
-
-Ini perlu diluruskan lebih dulu, karena mengubah seluruh arah rencana.
-
-Akurasi dokumen **sudah pernah tercapai**. Diukur 2 Oktober pada 13 dokumen yang sama:
-
-| Mesin | CER | Target ≤15% | Latensi per halaman |
-| :--- | ---: | :--- | ---: |
-| EasyOCR (dipakai sekarang) | 15,3% | meleset 0,3 poin | **7,3 detik** |
-| **PaddleOCR** | **9,4%** | **TERCAPAI** | **41,8 detik** |
-
-PaddleOCR lebih baik di **11 dari 13** dokumen. Lompatan terbesarnya justru pada
-`ketentuan_makalah`, foto yang selama ini menyeret rata-rata: **76,9% → 11,3%**.
-
-**Jadi yang menghalangi bukan ketepatan, melainkan 41,8 detik.** Untuk pengguna tunanetra,
-menunggu 42 detik sebelum kata pertama dibacakan tidak dapat diterima.
-
-Dan latensi itu **tidak bisa ditekan lewat ukuran gambar**, karena biayanya per **baris
-teks**, bukan per piksel:
-
-| Ukuran | Latensi | CER |
-| ---: | ---: | ---: |
-| 800 px | 34,6 s | 15,2% (target gagal) |
-| 1200 px | 38,1 s | 10,0% |
-| 1600 px | 41,8 s | 9,4% |
-
-Memperkecil gambar hanya menghemat 7 detik tetapi mengorbankan targetnya.
-
-**Pertanyaan yang benar untuk 2–3 hari ke depan:** bagaimana mendapatkan ketepatan
-PaddleOCR pada latensi yang bisa diterima — bukan bagaimana menaikkan akurasi.
+> **Ralat lingkup.** Versi pertama rencana ini ditulis untuk "modul dokumen" — foto
+> kertas A4. Itu **terlalu sempit**. Sasaran sebenarnya: pengguna memotret **apa saja**
+> yang ada tulisannya — papan tulis, kemasan, papan nama, halaman buku, tulisan tangan —
+> dan sistem membacakannya. Seluruh rencana di bawah sudah disusun ulang untuk itu.
 
 ---
 
-## Tiga jalur, berurutan menurut biaya
+## Yang saya ukur hari ini: sistem sudah separuh jalan ke sana
 
-### Jalur 1 — Ganti dua foto uji yang bukan foto kertas (Hari 1 pagi, ~20 menit waktumu)
+Modul pembaca tulisan dijalankan pada **foto kemasan sungguhan** (20 foto yang sudah kita
+punya dari modul kedaluwarsa). Ini teks di dunia nyata, bukan kertas.
 
-Bahannya **sudah siap** di `data/uji_dokumen/cetak/`: dua halaman siap cetak berisi teks
-yang sama dengan dokumen lama, berikut teks acuannya yang sudah dibuktikan identik.
+| Foto | Kertas ditemukan? | Kotak teks | Waktu |
+| :--- | :--- | ---: | ---: |
+| ajinomoto | tidak | 14 | 8,7 s |
+| 20261008 | tidak | 16 | 8,7 s |
+| miesedap | tidak | 14 | 7,3 s |
+| mentega | tidak | 69 | 11,9 s |
 
-Dua foto itu bukan foto kertas sama sekali:
+**Kabar baik — tiga hal sudah benar:**
 
-| Berkas | CER | Sebenarnya apa |
+1. Koreksi perspektif **tidak merusak** foto bukan-kertas. Ia mencari lembar kertas,
+   tidak menemukan, lalu mengembalikan citra apa adanya. Arsitekturnya tidak menghalangi.
+2. Teks **memang terbaca**: "Petunjuk Penyimpanan", "Baik digunakan sebelum",
+   "KODE PRODUKSI", "Mi Kuah Rasa Bumbu Kari Kental", "membuat kue lebih mengembang".
+3. Waktunya 7–12 detik, sama seperti dokumen — tidak meledak.
+
+**Kabar buruk — dua masalah baru yang tidak ada pada kertas A4:**
+
+**a. Urutan bacaan jadi kacau.** Pada foto mentega keluarannya:
+
+> "kedekatan BlueBand sebagai enak banan karena rasa bertekstur lemout Menggunakan
+> membuat kue lebih mengembang kue: akan butter. kue yang wangi"
+
+Tiap kata benar, susunannya tidak. Pengelompokan baris dan paragraf dirancang untuk
+**tata letak dokumen** — teks mengalir kiri ke kanan, atas ke bawah. Pada kemasan,
+papan tulis, atau papan nama, teks tersebar dan aturan itu tidak berlaku.
+
+**b. Teks terbalik dibaca jadi sampah.** Contoh nyata: `"wejes BundoL uejues"` — itu
+tulisan terbalik yang dibaca huruf demi huruf apa adanya.
+
+Penyebabnya ketemu: **kedua saklar orientasi tidak dipakai.**
+
+| Saklar | Tempat | Status |
+| :--- | :--- | :--- |
+| `rotation_info` EasyOCR | `readtext(image, detail=1)` | **tidak dioper** |
+| `use_textline_orientation` PaddleOCR | `_buat_paddle()` | **dipaksa `False`** |
+
+Untuk pengguna tunanetra, **membacakan susunan kata yang kacau dengan nada seyakin
+jawaban benar lebih berbahaya daripada berkata "tulisannya kurang jelas"**. Prinsip ini
+sudah dipakai di modul uang dan tanggal; modul tulisan belum punya.
+
+---
+
+## Satu hal yang harus saya katakan terus terang: tulisan tangan
+
+**Tulisan tangan tidak akan selesai dalam 2–3 hari dengan model lokal.** Ini bukan soal
+penyetelan, melainkan soal model yang memang tidak ada.
+
+| Mesin | Dilatih untuk | Tulisan tangan? |
+| :--- | :--- | :--- |
+| EasyOCR | teks cetak dan teks pemandangan | **tidak ada model tulisan tangan** |
+| PaddleOCR | teks cetak dan teks pemandangan | **tidak ada model tulisan tangan** |
+| TrOCR (Microsoft) | tulisan tangan **Bahasa Inggris** | ada, tetapi ~1,3 GB, per baris, dan lambat di CPU |
+| Google Vision / Azure Read | cetak + tulisan tangan, banyak bahasa | **bisa**, tetapi berbayar, butuh internet, dan **fotonya dikirim ke pihak ketiga** |
+
+Catatan penting soal pilihan terakhir: selama ini yang dikirim keluar hanya **teks** (ke
+Google lewat gTTS, kini ke Microsoft lewat edge-tts). Mengirim **fotonya** adalah langkah
+privasi yang jauh lebih besar — foto bisa memuat wajah, alamat, dokumen pribadi. Dataset
+kita sendiri sudah terbukti memuat wajah orang dan layar berisi data pihak lain.
+
+Jadi ada **persimpangan yang harus kamu putuskan**, bukan saya:
+
+| Pilihan | Tulisan tangan | Biaya | Privasi | Muat 2–3 hari? |
+| :--- | :--- | :--- | :--- | :--- |
+| **A. Teks cetak di mana saja** (papan tulis spidol, kemasan, papan nama, buku, label) | tidak | nol | foto tetap di laptop | **ya** |
+| **B. A + tulisan tangan lewat API awan** | ya | berbayar | **foto keluar** | ya, tetapi butuh akun dan kartu |
+| **C. A + TrOCR lokal** | sebagian, Inggris | nol | aman | **tidak realistis** |
+
+**Saran saya: ambil A sekarang**, dan tulis tulisan tangan sebagai keterbatasan yang
+disadari. A sudah mencakup papan tulis (asal pakai spidol, bukan tulisan tangan sambung),
+kemasan, papan nama, buku, dan label — yaitu sebagian besar yang ditemui pengguna.
+
+---
+
+## Rencana untuk pilihan A
+
+### Hari 1 — orientasi dan urutan bacaan (dampak terbesar)
+
+**1a. Nyalakan deteksi orientasi baris.** Oper `rotation_info=[90, 180, 270]` ke EasyOCR,
+dan `use_textline_orientation=True` untuk PaddleOCR, keduanya lewat config supaya bisa
+diablasi. Ini langsung menyerang `"wejes BundoL uejues"`.
+
+**1b. Pisahkan aturan urutan bacaan.** Tambah mode tata letak di config:
+
+| Mode | Untuk | Aturan |
+| :--- | :--- | :--- |
+| `dokumen` | kertas, halaman buku | seperti sekarang: baris dan paragraf rapat |
+| `tersebar` | kemasan, papan tulis, papan nama | kelompokkan menurut gugus spasial, urutkan atas→bawah, dan **beri jeda antar-gugus saat dibacakan** |
+
+Pemilihan modenya otomatis dari petunjuk yang sudah ada: `document_found` dari koreksi
+perspektif, ditambah sebaran kotak teks. Kalau kertas ketemu → `dokumen`; kalau tidak →
+`tersebar`.
+
+**1c. Ukur.** Jalankan pada 20 foto kemasan + 13 dokumen, bandingkan sebelum–sesudah.
+
+### Hari 2 — penjaga mutu bacaan
+
+**2a. Ambang keyakinan untuk teks.** Kalau rata-rata skor kotak di bawah ambang, atau
+kotak yang lolos terlalu sedikit, sistem berkata **"tulisannya kurang jelas, coba foto
+lebih dekat"** alih-alih membacakan kata acak. Konsisten dengan modul uang dan tanggal.
+
+**2b. Ablasi pra-pemrosesan untuk foto bukan-kertas.** Rangkaian `dokumen` memuat koreksi
+perspektif dan deskew yang dirancang untuk kertas. Pada foto tersebar, keduanya mungkin
+tidak berguna atau merugikan. **Belum pernah diukur.** Ini juga menjawab pertanyaan
+ablasi mata kuliah dengan data baru.
+
+**2c. Tuas PaddleOCR yang belum dicoba.** `text_recognition_model_name` tidak diteruskan
+dari config — hanya model deteksi yang diteruskan, padahal penghambatnya tahap
+pengenalan per baris. PaddleOCR lebih tepat (CER 9,4% lawan 15,3%) tetapi 41,8 detik.
+Kalau `PP-OCRv5_mobile_rec` menurunkannya ke 10–15 detik, modul ini naik kelas seluruhnya.
+
+### Hari 3 — ukur, kunci, catat
+
+Ukur akhir pada kedua jenis foto, kunci config, perbarui `keputusan-teknis.md`,
+`status-proyek.md`, dan laporan progres.
+
+---
+
+## Masalah yang belum punya jawaban: bagaimana mengukurnya
+
+Metrik sekarang adalah **CER pada 13 dokumen A4**. Metrik itu **tidak mengukur sama
+sekali** apa yang kamu mau. Tidak ada gunanya CER turun ke 9% kalau foto papan tulis
+tetap dibacakan terbalik.
+
+Yang dibutuhkan: **data uji kecil tapi beragam**. Pilihan, urut biaya:
+
+**a. Pakai yang sudah ada — gratis, hari ini juga.** 20 foto kemasan sudah ada, tinggal
+ditulis teks acuannya. Itu teks dunia nyata yang sah: cetak kecil, melengkung, cahaya
+tidak rata, sebagian terbalik.
+
+**b. Potret ~10 foto baru — sekitar 15 menit.** Jauh lebih murah daripada sesi foto
+dokumen, dan inilah yang paling menentukan. Saran isinya:
+
+| Jenis | Jumlah | Catatan |
 | :--- | ---: | :--- |
-| `ketentuan_makalah` | 76,9% | foto **layar monitor**, huruf kecil, ada pantulan |
-| `open_recruitment` | 22,0% | **tangkapan layar WhatsApp**; OCR-nya bagus, tetapi ikut membaca jam, nama grup, nomor telepon |
+| Papan tulis bertulisan spidol | 3 | satu lurus, satu menyudut, satu agak jauh |
+| Papan nama / petunjuk arah | 2 | |
+| Halaman buku atau majalah | 2 | |
+| Label atau struk | 2 | |
+| **Tulisan tangan** | **1** | hanya untuk membuktikan batasnya, bukan untuk dikejar |
 
-Pada **11 foto kertas sungguhan, CER-nya 9,0%**.
+Acuannya tinggal diketik — kalimat di papan tulis biasanya pendek.
 
-**Perkiraan hasil:** rerata 13 dokumen turun ke sekitar **9–11%** dengan EasyOCR, latensi
-tetap 7,3 detik. Titik impasnya longgar — kedua foto baru boleh ber-CER sampai **47,8%**
-dan target tetap lolos.
+**c. Dataset publik** — tetap tidak ada yang cocok. CORD (struk Indonesia), FUNSD
+(formulir Inggris), SROIE (struk Inggris). Dipakai sebagai bukti sekunder saja.
 
-**Peringatan yang wajib masuk laporan:** ini **tidak membuat modelnya lebih baik**, ini
-membuat **data ujinya jujur**. Mengganti foto uji yang di luar lingkup (tangkapan layar
-bukan foto dokumen) sah, tetapi penguji jurnal akan menanyakannya, jadi harus dinyatakan
-terbuka beserta CER foto lamanya.
-
----
-
-### Jalur 2 — Tuas PaddleOCR yang belum pernah dicoba (Hari 1 siang – Hari 2)
-
-**Ini bagian yang paling berpeluang mengubah keadaan, dan belum pernah diuji sama sekali.**
-
-Yang sudah diketahui: biaya PaddleOCR ada di tahap **pengenalan per baris**, bukan
-deteksi. Yang sudah dilakukan tim: mengganti model **deteksi** ke `PP-OCRv5_mobile_det`.
-
-Masalahnya, itu mempercepat tahap yang **bukan** penghambatnya.
-
-Diperiksa hari ini di `sayit/vision/document.py`: pabrik PaddleOCR hanya meneruskan
-`text_detection_model_name`. Padahal pustakanya (paddleocr 3.7.0) juga menerima:
-
-| Parameter | Status sekarang |
-| :--- | :--- |
-| `text_detection_model_name` | diteruskan (sudah `mobile_det`) |
-| **`text_recognition_model_name`** | **tidak diteruskan — belum pernah dicoba** |
-| **`text_recognition_batch_size`** | **tidak diteruskan — belum pernah dicoba** |
-
-Jadi model **pengenalan** masih memakai versi bawaan yang berat, dan baris-baris teks
-dikenali satu per satu tanpa pengelompokan.
-
-**Yang dikerjakan:**
-
-1. Teruskan kedua parameter itu dari config (~6 baris di `_buat_paddle`, plus tesnya).
-2. Ukur kombinasi berikut pada 13 dokumen yang sama, catat **CER dan latensi bersama-sama**:
-
-   | Kondisi | Model pengenalan | Batch |
-   | :--- | :--- | ---: |
-   | dasar (pembanding) | bawaan | bawaan |
-   | A | `PP-OCRv5_mobile_rec` | bawaan |
-   | B | `PP-OCRv5_mobile_rec` | 8 |
-   | C | `PP-OCRv5_mobile_rec` | 16 |
-   | D | bawaan | 16 |
-
-**Kalau berhasil:** misalnya 41,8 detik turun ke 10–15 detik dengan CER tetap 9–11% —
-modul dokumen langsung tercapai targetnya dengan margin lebar, dan Jalur 3 tidak perlu.
-
-**Kalau gagal:** kita tahu pasti bahwa latensi PaddleOCR memang tidak bisa ditawar, dan
-itu sendiri temuan yang layak ditulis.
-
-**Biaya:** sekitar 6 baris kode, lalu 5 kondisi × 13 dokumen. Berdasarkan 41,8 detik per
-halaman, sekitar **45 menit waktu mesin per kondisi** untuk yang lambat, jauh lebih cepat
-untuk yang mobile. Bisa ditinggal jalan.
-
-**Risiko yang perlu dijaga:** jangan mengukur CER tanpa latensi, atau sebaliknya. Proyek
-ini sudah tiga kali kena: akurasi dan latensi di modul ini saling terkait.
-
-**Aman dari efek samping:** mesin dokumen (`vision.document.engine`) sudah terpisah dari
-mesin kedaluwarsa (`vision.expiry.engine`) sejak 2 Oktober. Mengubah dokumen **tidak
-akan** merusak kedaluwarsa yang sudah 81%.
+**Tanpa (b), seluruh pekerjaan ini tidak bisa dibuktikan membaik.** Kita bisa memperbaiki
+orientasi dan urutan bacaan, tetapi tidak punya angka yang menunjukkannya.
 
 ---
 
-### Jalur 3 — Pembacaan bertahap (Hari 2–3, hanya bila Jalur 2 gagal)
+## Akibatnya pada PRD dan jurnal
 
-Kalau PaddleOCR tetap 35–42 detik, latensinya diubah dari **nyata** menjadi **terasa**:
-OCR bagian atas halaman dulu, **mulai membacakan**, lalu lanjutkan sisanya di belakang
-layar sementara pengguna masih mendengarkan bagian pertama.
+PRD menulis kemampuan kedua sebagai **"membacakan tulisan dokumen"**. Memperluasnya
+menjadi "membacakan tulisan apa pun" adalah **perubahan lingkup**, bukan perbaikan.
 
-Masuk akal karena jawaban dokumen memang sudah dipotong 40 kata per bagian dan sudah ada
-perintah LANJUT. Pengguna tidak pernah mendengar seluruh halaman sekaligus.
+Dua konsekuensi yang harus disadari:
 
-**Biaya:** paling mahal dari ketiganya — mengubah pipeline, menjaga urutan bacaan, dan
-menambah tes. Jangan dimulai sebelum Jalur 2 terjawab.
-
----
-
-## Pertanyaan datasetmu: jawaban jujurnya
-
-**Tidak ada dataset publik yang cocok** dengan kasus pakai kita, yaitu pengguna tunanetra
-memotret dokumen A4 Bahasa Indonesia dengan kamera HP. Yang ada mengukur sebaran yang
-berbeda.
-
-Tiga pilihan, berurutan menurut nilai per menit yang kamu habiskan:
-
-### a. Cetak lalu potret — paling murah dan paling sahih
-
-Ini yang sudah disiapkan untuk dua foto pengganti. **20 menit** untuk dua dokumen, dan
-hasilnya data sungguhan yang sebarannya cocok.
-
-Kalau ada 20 menit lagi, cetak 4–6 halaman tambahan dari berkas teks yang sudah kamu
-punya (misalnya `docs/PRD_SayIt_v2_1.md`), potret dengan variasi sudut dan cahaya, lalu
-salin berkas aslinya sebagai `.txt`. **Tidak perlu mengetik acuan sama sekali.**
-
-### b. Dokumen sintetis dari berkas sendiri — bisa tak terbatas, tanpa memotret
-
-Render berkas `.md` proyek sendiri menjadi halaman A4, lalu berikan kerusakan terkendali:
-buram, miring, perspektif, cahaya tidak rata, derau JPEG. Acuannya sempurna karena
-teksnya kita yang tulis.
-
-**Gunanya: uji ablasi dan uji regresi, BUKAN angka utama.** Proyek ini sudah pernah
-tertipu gambar sintetis — model zona dinilai "tidak bekerja" padahal datanya yang buruk,
-dan ambang skornya sempat dikalibrasi dari artefak gambar uji. Jangan diulang.
-
-Kelebihannya nyata: ini satu-satunya cara menjawab pertanyaan yang **belum pernah bisa
-dijawab** — "apakah pra-pemrosesan menolong foto BURUK?" Selama ini foto uji kita bagus
-semua, sehingga pra-pemrosesan tercatat netral. Dengan foto yang sengaja dibuat buruk,
-pertanyaan itu akhirnya bisa diuji.
-
-### c. Dataset publik — hanya sebagai pemeriksaan luar
-
-| Dataset | Isi | Cocoknya |
-| :--- | :--- | :--- |
-| **CORD** | struk belanja **Indonesia**, ada acuan teks | Bahasa paling dekat, tetapi jenis dokumennya salah |
-| **FUNSD** | 199 formulir pindaian Inggris, berderau, acuan per kata | Bagus untuk uji ketahanan pada pindaian rusak |
-| **SROIE** | struk Inggris, acuan teks | Mirip CORD, bahasa Inggris |
-
-Ketiganya **bukan pengganti**. Kalau dipakai, laporkan sebagai **bukti sekunder** dengan
-sebarannya disebut terbuka, dan jangan campur ke rerata 13 dokumen.
-
-**Saran saya:** pilihan (a) untuk angka utama, (b) untuk ablasi, dan (c) hanya kalau
-penguji jurnal memintanya.
-
----
-
-## Jadwal
-
-| Hari | Kerja | Siapa |
-| :--- | :--- | :--- |
-| 1 pagi | Cetak dan potret 2 dokumen pengganti, lalu ukur ulang | **kamu** (20 menit) |
-| 1 pagi | Sementara itu: teruskan `text_recognition_model_name` dan `text_recognition_batch_size` dari config, tambah tes | saya |
-| 1 siang | Jalankan 5 kondisi Jalur 2 pada 13 dokumen, catat CER + latensi | saya |
-| 1 sore | Putuskan: cukup dengan EasyOCR, atau pindah ke PaddleOCR mobile_rec | bersama |
-| 2 | Bila Jalur 2 berhasil: kunci config, ukur ulang penuh, perbarui dokumen. Bila gagal: mulai Jalur 3 | saya |
-| 2–3 | Bangun dokumen sintetis berkerusakan terkendali, jalankan ablasi pra-pemrosesan yang selama ini tidak terjawab | saya |
-| 3 | Ukur akhir, perbarui `keputusan-teknis.md`, `status-proyek.md`, dan laporan progres | saya |
-
----
-
-## Yang akan saya laporkan apa adanya
-
-- Bila targetnya tercapai hanya karena dua foto uji diganti, itu **ditulis sebagai begitu**,
-  bukan sebagai peningkatan model.
-- CER dilaporkan **per dokumen**, bukan hanya reratanya. Rerata di sini dikuasai satu-dua
-  berkas terburuk, dan itu menyesatkan.
-- Setiap angka disertai jumlah sampel dan mesin yang dipakai.
-- Bila Jalur 2 gagal, kegagalannya ditulis — itu menutup satu kemungkinan dan punya nilai
-  sendiri.
+1. Metrik PRD Bagian 11 (CER ≤15% pada dokumen) **tidak otomatis gugur** — ia tetap
+   diukur dan dilaporkan. Yang bertambah adalah metrik kedua untuk teks tersebar.
+2. Di jurnal, ini ditulis sebagai **perluasan yang disengaja beserta batasnya**, dengan
+   tulisan tangan dinyatakan terus terang sebagai di luar jangkauan.
 
 ---
 
 ## Keputusan yang saya butuhkan darimu
 
-1. **Setuju Jalur 2 dikerjakan lebih dulu?** Itu satu-satunya tuas yang benar-benar belum
-   dicoba, dan paling berpeluang mengubah keadaan.
-2. **Apakah kamu sempat mencetak dan memotret** dua dokumen pengganti besok pagi?
-   Tanpa itu, CER 15,3% akan tetap jadi angka laporan walaupun modelnya membaik.
-3. **Berapa halaman tambahan yang sanggup kamu potret?** Kalau bisa 4–6, data ujinya
-   menjadi jauh lebih meyakinkan. Kalau tidak sama sekali, kita jalan dengan 13 dokumen
-   dan menyatakan keterbatasannya.
+1. **Pilihan A, B, atau C?** Kalau tulisan tangan wajib ada, jawabannya API awan — dan
+   itu berarti foto pengguna keluar dari laptop. Keputusan itu milikmu, bukan saya.
+2. **Sanggup memotret ~10 foto beragam?** Sekitar 15 menit. Tanpa itu kita bisa
+   memperbaiki tetapi tidak bisa membuktikan.
+3. **Mulai dari mana?** Saran saya 1a (orientasi) — paling murah, dampaknya paling
+   terlihat, dan hasilnya langsung terdengar pada foto kemasan yang sudah ada.
+
+Sambil menunggu jawabanmu, saya bisa langsung mengerjakan 1a dan menulis teks acuan untuk
+20 foto kemasan, karena keduanya berguna pada pilihan mana pun.
