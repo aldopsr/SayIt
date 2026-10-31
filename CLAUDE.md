@@ -30,8 +30,12 @@
   kembali ke gTTS cukup ubah YAML lalu `build_tts_cache.py --force`. Desain hibrida tidak berubah:
   jawaban uang/tanggal/pesan tetap = klip MP3 tersimpan (offline); teks dokumen = sintesis langsung, tidak disimpan ke disk.
   Semua kalimat baru harus didaftarkan di `sayit/response/templates.py` (CLIP_TEXTS) lalu cache dibuat ulang.
-  **Sintesis pertama tiap proses 4-8 detik** (edge-tts membangun sesi), berikutnya 0,6 detik - karena itu
-  `SpeechRenderer.warmup()` dipanggil saat server dan panel uji memuat model, bukan saat pengguna menunggu.
+  **Sintesis pertama tiap proses ~9 detik** (edge-tts membangun sesi), berikutnya ~1,0 detik lawan gTTS
+  0,74 detik - karena itu `SpeechRenderer.warmup()` dipanggil saat server dan panel uji memuat model,
+  bukan saat pengguna menunggu. Angka 4-8 detik dan "setara gTTS" pada catatan 28-10 **sudah dikoreksi 31-10**.
+  Panjang jawaban uang **tidak berubah bermakna** (di bawah 1,5%); bacaan dokumen ~9% lebih singkat.
+  **Utang:** bila `warmup()` gagal (start tanpa internet, atau server hidup ulang di tengah sesi),
+  9 detik itu jatuh tepat di pembacaan dokumen pertama pengguna.
 - **Angka ke kata:** `sayit/response/terbilang.py` menghasilkan token; jangan ganti dengan num2words.
 - **Router intent:** aturan berbobot di `sayit/intent/`. Fuzzy hanya untuk kata kunci ≥ 6 huruf, intent kendali dicocokkan persis,
   akhiran -nya dipotong. Setiap kata kunci baru wajib disertai kasus uji di `tests/test_router.py`.
