@@ -259,7 +259,19 @@ vision:
       # kecapasin: server 10,9 s (800 px) / 18,5 s (1200 px); mobile 2,5 s pada kedua
       # ukuran, dan tanggalnya tetap terbaca. Kosongkan untuk memakai bawaan.
       text_detection_model_name: PP-OCRv5_mobile_det
+      # Model PENGENALAN. Biaya PaddleOCR pada dokumen padat teks ada di sini, bukan
+      # di deteksi: 41,8 detik/halaman (02-10), dan memperkecil gambar hampir tidak
+      # menolong karena biayanya per BARIS. Kosongkan untuk memakai bawaan.
+      text_recognition_model_name:
+      text_recognition_batch_size:
+      # Pengklasifikasi orientasi BARIS: menegakkan teks terbalik sebelum dikenali.
+      use_textline_orientation: false
     languages: [id, en]
+    # Sudut tambahan yang dicoba EasyOCR per baris teks. Kosong = mati.
+    # Pada foto dunia nyata teks terbalik terbaca jadi sampah ('wejes BundoL uejues');
+    # pada dokumen A4 hampir tidak berguna karena halamannya sudah tegak.
+    # SEDANG DIKALIBRASI 31-10 - jangan dinyalakan sebelum ablasinya selesai.
+    rotation_info: []
     gpu: false                  # kode harus tetap jalan di laptop tanpa GPU
     model_dir: models/easyocr   # disimpan di dalam proyek, diabaikan Git
     download_enabled: true      # false = hanya pakai bobot yang sudah ada, tidak menyentuh internet

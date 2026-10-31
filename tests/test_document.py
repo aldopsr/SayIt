@@ -349,3 +349,17 @@ def test_keluaran_paddle_memakai_dt_polys_bila_rec_polys_kosong(cfg):
     kotak = DOC.extract_boxes_paddle(mentah)
     assert [k.text for k in kotak] == ["EXP"]
     assert kotak[0].box == (1, 2, 3, 4)
+
+
+def test_rotation_info_mati_secara_bawaan(cfg):
+    """Ditolak datanya 31-10: pada dokumen tegak CER 15,3% -> 40,3% dan 13,5x lebih lambat.
+
+    Saklarnya tetap ada supaya bisa diablasi lagi, tetapi bawaannya WAJIB kosong.
+    """
+    assert DOC.DocumentReader(cfg)._rotasi_kwargs() == {}
+
+
+def test_rotation_info_dioper_bila_diisi(cfg):
+    c = copy.deepcopy(cfg)
+    c["vision"]["document"]["rotation_info"] = [90, 180, 270]
+    assert DOC.DocumentReader(c)._rotasi_kwargs() == {"rotation_info": [90, 180, 270]}

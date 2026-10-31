@@ -252,13 +252,25 @@ def _buat_paddle(d: dict):
     # kedua ukuran, dan tanggalnya tetap terbaca. Jadi `mobile` yang dipakai.
     if p.get("text_detection_model_name"):
         extra["text_detection_model_name"] = p["text_detection_model_name"]
+    # Model PENGENALAN sengaja bisa dipilih juga. Biaya PaddleOCR pada dokumen padat
+    # teks ada di tahap pengenalan PER BARIS (terukur 02-10: 41,8 detik/halaman, dan
+    # memperkecil gambar hampir tidak menolong karena biayanya bukan per piksel).
+    # Mengganti model deteksi saja - yang sudah dilakukan - mempercepat tahap yang
+    # bukan penghambatnya.
+    if p.get("text_recognition_model_name"):
+        extra["text_recognition_model_name"] = p["text_recognition_model_name"]
+    if p.get("text_recognition_batch_size"):
+        extra["text_recognition_batch_size"] = int(p["text_recognition_batch_size"])
     return PaddleOCR(
         lang=p.get("lang", "id"),
         ocr_version=p.get("ocr_version", "PP-OCRv5"),
         enable_mkldnn=bool(p.get("enable_mkldnn", False)),
         use_doc_orientation_classify=False,
         use_doc_unwarping=False,
-        use_textline_orientation=False,
+        # Pengklasifikasi orientasi BARIS: menegakkan teks terbalik sebelum dikenali.
+        # Dimatikan selama modul ini hanya membaca kertas A4; dinyalakan lewat config
+        # sejak sasarannya meluas ke tulisan di dunia nyata.
+        use_textline_orientation=bool(p.get("use_textline_orientation", False)),
         **extra,
     )
 
@@ -332,8 +344,20 @@ class DocumentReader:
         if self._factory is None and self.engine == "paddleocr":
             kotak = extract_boxes_paddle(self._reader.predict(image))
         else:
-            kotak = extract_boxes(self._reader.readtext(image, detail=1))
+            kotak = extract_boxes(self._reader.readtext(image, detail=1, **self._rotasi_kwargs()))
         return kotak, time.perf_counter() - t
+
+    def _rotasi_kwargs(self) -> dict:
+        """Sudut tambahan yang dicoba EasyOCR untuk tiap baris teks.
+
+        Pada foto dokumen hampir tidak berguna: halamannya sudah tegak dan deskew
+        meluruskan sisanya. Pada foto dunia nyata (kemasan, papan nama) justru
+        menentukan - teks terbalik terbaca huruf demi huruf menjadi sampah seperti
+        'wejes BundoL uejues'. Dibuat dapat dimatikan supaya bisa diuji ablasi, dan
+        karena tiap sudut tambahan membayar satu lintasan pengenalan lagi.
+        """
+        sudut = self.d.get("rotation_info") or []
+        return {"rotation_info": list(sudut)} if sudut else {}
 
     def read(self, image: np.ndarray, preprocess: bool = True) -> DocumentResult:
         """Baca seluruh tulisan pada satu foto. Selalu mengembalikan DocumentResult."""
