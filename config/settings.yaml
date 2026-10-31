@@ -272,6 +272,19 @@ vision:
     # pada dokumen A4 hampir tidak berguna karena halamannya sudah tegak.
     # SEDANG DIKALIBRASI 31-10 - jangan dinyalakan sebelum ablasinya selesai.
     rotation_info: []
+    # Percobaan ulang dengan memutar SELURUH gambar - bukan tiap baris. Diukur
+    # 31-10 pada 13 dokumen yang diputar 180 derajat: per-baris (rotation_info)
+    # hanya memulihkan CER 96,2% -> 68,8% dengan biaya 5,2x; memutar seluruh
+    # gambar memulihkannya ke 15,3%, sama persis dengan baseline tegak.
+    # Yang gagal pada gambar terbalik adalah DETEKSI (193 kotak lawan 887).
+    rotate_retry: [180, 90, 270]
+    # Pemicunya: skor rata-rata baris di bawah ambang ini. SENGAJA konservatif.
+    # Rentang skor foto tegak dan foto bersudut keliru BERTUMPANG (tegak serendah
+    # 0,678; keliru setinggi 0,784), jadi tidak ada ambang mutlak yang memisahkan
+    # keduanya. 0,75 memilih sisi murah: 10/13 foto terbalik terdeteksi, hanya
+    # 1/13 foto tegak ikut membayar 4x lintasan. Kosongkan (null) untuk mematikan.
+    # BELUM dikalibrasi pada foto yang sengaja dipotret terbalik oleh pengguna.
+    rotate_trigger_score: 0.75
     gpu: false                  # kode harus tetap jalan di laptop tanpa GPU
     model_dir: models/easyocr   # disimpan di dalam proyek, diabaikan Git
     download_enabled: true      # false = hanya pakai bobot yang sudah ada, tidak menyentuh internet

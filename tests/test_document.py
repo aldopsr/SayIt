@@ -363,3 +363,96 @@ def test_rotation_info_dioper_bila_diisi(cfg):
     c = copy.deepcopy(cfg)
     c["vision"]["document"]["rotation_info"] = [90, 180, 270]
     assert DOC.DocumentReader(c)._rotasi_kwargs() == {"rotation_info": [90, 180, 270]}
+
+
+# ------------------------------------------------------- percobaan ulang dengan memutar gambar
+
+class ReaderPerSudut:
+    """OCR tiruan yang jawabannya bergantung bentuk citra.
+
+    Meniru temuan 31-10: gambar terbalik hampir tidak TERDETEKSI (193 kotak
+    lawan 887), jadi yang kembali sedikit dan skornya rendah. Di sini bentuk
+    citra menjadi penanda sudut, karena rotasi 90/270 menukar tinggi dan lebar.
+    """
+
+    def __init__(self, *args, **kwargs):
+        self.bentuk = []
+
+    def readtext(self, image, **kwargs):
+        self.bentuk.append(image.shape[:2])
+        tinggi, lebar = image.shape[:2]
+        if tinggi > lebar:      # tegak setelah diputar 90 derajat
+            return [([[10, 10], [300, 10], [300, 30], [10, 30]],
+                     "Rapat dimulai pukul sembilan pagi", 0.93)]
+        return [([[10, 10], [60, 10], [60, 30], [10, 30]], "wejes", 0.52)]
+
+
+def pabrik_per_sudut():
+    def buat(*args, **kwargs):
+        buat.reader = ReaderPerSudut(*args, **kwargs)
+        return buat.reader
+    return buat
+
+
+def tanpa_pra(c):
+    """Matikan pra-pemrosesan supaya bentuk citra tidak ikut diubah resize."""
+    c["vision"]["document"]["preprocess_chain"] = None
+    return c
+
+
+def test_gambar_dengan_skor_rendah_diputar_dan_pulih(cfg):
+    """Bacaan berskor rendah memicu rotasi, dan jawaban berkata terbanyak yang dipakai."""
+    f = pabrik_per_sudut()
+    r = DOC.DocumentReader(tanpa_pra(cfg), reader_factory=f)
+    hasil = r.read(np.zeros((400, 900, 3), np.uint8))
+
+    assert hasil.text == "Rapat dimulai pukul sembilan pagi."
+    assert hasil.notes["rotated_deg"] in (90, 270)
+    assert hasil.notes["rotations_tried"] == [180, 90, 270]
+    assert len(f.reader.bentuk) == 4                 # satu lintasan awal + tiga sudut
+
+
+def test_bacaan_berskor_tinggi_tidak_membayar_rotasi(cfg):
+    """Foto yang sudah tegak harus menjawab di lintasan pertama.
+
+    Ini separuh alasan ambangnya konservatif: 4x lintasan pada foto tegak adalah
+    biaya sia-sia, dan latensi dokumen sudah menyimpang dari NFR-01.
+    """
+    f = pabrik(JAWABAN)                       # skor 0,95 dan 0,91
+    r = DOC.DocumentReader(cfg, reader_factory=f)
+    hasil = r.read(np.zeros((600, 800, 3), np.uint8))
+
+    assert len(f.reader.panggilan) == 1
+    assert "rotated_deg" not in hasil.notes
+
+
+def test_rotasi_bisa_dimatikan_lewat_config(cfg):
+    """Dua saklar, dan masing-masing cukup untuk mematikannya."""
+    for kunci, nilai in (("rotate_retry", []), ("rotate_trigger_score", None)):
+        c = tanpa_pra(copy.deepcopy(cfg))
+        c["vision"]["document"][kunci] = nilai
+        f = pabrik_per_sudut()
+        hasil = DOC.DocumentReader(c, reader_factory=f).read(np.zeros((400, 900, 3), np.uint8))
+        assert len(f.reader.bentuk) == 1, kunci
+        assert "rotated_deg" not in hasil.notes, kunci
+
+
+def test_ambang_pemicu_memakai_nilai_terkalibrasi(cfg):
+    """0,75 dikalibrasi 31-10 pada 13 dokumen; rentang tegak dan keliru bertumpang.
+
+    Kalau angka ini diubah, akurasi DAN latensi wajib diukur ulang bersamaan.
+    """
+    assert cfg["vision"]["document"]["rotate_trigger_score"] == 0.75
+    assert cfg["vision"]["document"]["rotate_retry"] == [180, 90, 270]
+
+
+def test_tanpa_kotak_sama_sekali_tetap_memicu_rotasi(cfg):
+    """OCR yang tidak mengembalikan apa pun adalah kasus paling mencurigakan."""
+    r = DOC.DocumentReader(cfg, reader_factory=pabrik())
+    assert r._perlu_putar(DOC.DocumentResult()) is True
+
+
+def test_rotate_image_dipakai_bersama_modul_kedaluwarsa():
+    """Satu implementasi saja: expiry mengekspor ulang nama dari document."""
+    from sayit.vision import expiry as E
+    assert E.rotate_image is DOC.rotate_image

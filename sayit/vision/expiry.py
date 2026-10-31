@@ -32,7 +32,8 @@ from sayit.config import project_path
 from sayit.response.templates import Utterance
 from sayit.vision import preprocess as pre
 from sayit.vision.date_parser import DateParseResult, expiry_utterance as _date_utterance, parse_expiry
-from sayit.vision.document import DocumentReader, TextBox, compose_text, filter_by_score
+from sayit.vision.document import (DocumentReader, TextBox, compose_text,
+                                   filter_by_score, rotate_image)
 from sayit.vision.money import as_float_array
 
 Box = tuple[float, float, float, float]
@@ -66,21 +67,9 @@ class ExpiryResult:
 
 # --------------------------------------------------------------------------- rotasi
 
-# Hanya kelipatan 90 derajat: cv2.rotate menukar piksel tanpa interpolasi, jadi
-# tidak ada detail cetakan yang hilang dan biayanya nyaris gratis.
-_PUTARAN = {90: cv2.ROTATE_90_CLOCKWISE,
-            180: cv2.ROTATE_180,
-            270: cv2.ROTATE_90_COUNTERCLOCKWISE}
-
-
-def rotate_image(image: np.ndarray, degrees: int) -> np.ndarray:
-    """Putar citra sebesar kelipatan 90 derajat searah jarum jam."""
-    derajat = int(degrees) % 360
-    if derajat == 0:
-        return image
-    if derajat not in _PUTARAN:
-        raise ValueError(f"Rotasi hanya kelipatan 90 derajat, bukan {degrees}.")
-    return cv2.rotate(image, _PUTARAN[derajat])
+# `rotate_image` pindah ke `vision/document.py` (31-10) karena modul dokumen juga
+# memutar seluruh gambar. Namanya tetap diekspor dari sini supaya pemanggil lama
+# dan tesnya tidak perlu berubah.
 
 
 # --------------------------------------------------------------------------- crop

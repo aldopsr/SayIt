@@ -23,6 +23,7 @@ from dataclasses import dataclass, field
 from statistics import median
 from typing import Any, Callable, Sequence
 
+import cv2
 import numpy as np
 
 from sayit.config import project_path
@@ -73,6 +74,25 @@ class DocumentResult:
     @property
     def total_chunks(self) -> int:
         return len(self.chunks)
+
+
+# --------------------------------------------------------------------------- rotasi
+
+# Hanya kelipatan 90 derajat: cv2.rotate menukar piksel tanpa interpolasi, jadi
+# tidak ada detail cetakan yang hilang dan biayanya nyaris gratis.
+_PUTARAN = {90: cv2.ROTATE_90_CLOCKWISE,
+            180: cv2.ROTATE_180,
+            270: cv2.ROTATE_90_COUNTERCLOCKWISE}
+
+
+def rotate_image(image: np.ndarray, degrees: int) -> np.ndarray:
+    """Putar citra sebesar kelipatan 90 derajat searah jarum jam."""
+    derajat = int(degrees) % 360
+    if derajat == 0:
+        return image
+    if derajat not in _PUTARAN:
+        raise ValueError(f"Rotasi hanya kelipatan 90 derajat, bukan {degrees}.")
+    return cv2.rotate(image, _PUTARAN[derajat])
 
 
 # --------------------------------------------------------------------------- bentuk kotak
@@ -360,9 +380,58 @@ class DocumentReader:
         return {"rotation_info": list(sudut)} if sudut else {}
 
     def read(self, image: np.ndarray, preprocess: bool = True) -> DocumentResult:
-        """Baca seluruh tulisan pada satu foto. Selalu mengembalikan DocumentResult."""
+        """Baca seluruh tulisan pada satu foto, memutar gambarnya bila perlu.
+
+        Percobaan ulang rotasi memutar SELURUH gambar, bukan tiap baris teks.
+        Keduanya sudah diukur pada 13 dokumen yang diputar 180 derajat (31-10):
+        `rotation_info` EasyOCR per baris hanya memulihkan CER 96,2% -> 68,8%
+        dengan biaya 5,2x, sedangkan memutar seluruh gambar memulihkannya ke
+        15,3% - sama persis dengan baseline tegak. Sebabnya: yang gagal pada
+        gambar terbalik adalah tahap DETEKSI (193 kotak lawan 887), dan deteksi
+        butuh gambar tegak. Memutar baris yang tidak pernah terdeteksi tidak
+        menolong apa pun.
+        """
         if image is None or image.size == 0:
             raise ValueError("Citra kosong.")
+
+        hasil = self._read_once(image, preprocess)
+        sudut = [int(s) for s in (self.d.get("rotate_retry") or [])]
+        if not sudut or not self._perlu_putar(hasil):
+            return hasil
+
+        # Pemilih "kata terbanyak" diukur 31-10 pada 13 dokumen: menebak sudut
+        # benar 13/13, setara batas atas oracle. Sudut keliru menghasilkan banyak
+        # potongan pendek tak bermakna; sudut benar menghasilkan kalimat utuh.
+        # Skor rata-rata hanya 12/13, jumlah kotak 12/13.
+        kandidat = [(0, hasil)]
+        for derajat in sudut:
+            kandidat.append((derajat, self._read_once(rotate_image(image, derajat), preprocess)))
+        derajat, hasil = max(kandidat, key=lambda k: len(k[1].text.split()))
+        hasil.notes["rotated_deg"] = derajat
+        hasil.notes["rotations_tried"] = sudut
+        return hasil
+
+    def _perlu_putar(self, hasil: DocumentResult) -> bool:
+        """Apakah bacaan ini cukup mencurigakan untuk membayar percobaan rotasi?
+
+        Ambangnya SENGAJA konservatif. Pada 13 dokumen (31-10) skor rata-rata
+        foto tegak dan foto bersudut keliru BERTUMPANG: tegak serendah 0,678,
+        keliru setinggi 0,784 - jadi tidak ada ambang mutlak yang memisahkan
+        keduanya. 0,75 memilih sisi yang murah: 10 dari 13 foto terbalik
+        terdeteksi, dan hanya 1 dari 13 foto tegak ikut membayar 4x lintasan
+        (yaitu `ketentuan_makalah`, foto layar monitor yang memang diganti).
+        Tiga foto terbalik yang terlewat dibacakan apa adanya - itu kerugian
+        yang diterima supaya foto tegak tidak melambat empat kali.
+        """
+        ambang = self.d.get("rotate_trigger_score")
+        if ambang is None:
+            return False
+        if not hasil.boxes:
+            return True
+        return float(np.mean([b.score for b in hasil.boxes])) < float(ambang)
+
+    def _read_once(self, image: np.ndarray, preprocess: bool = True) -> DocumentResult:
+        """Satu lintasan pra-pemrosesan + OCR, tanpa percobaan rotasi."""
         catatan_pra: dict[str, Any] = {}
         rantai = self.d.get("preprocess_chain")
         if preprocess and rantai:
