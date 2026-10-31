@@ -28,9 +28,11 @@ stt:
   max_no_speech_prob: 0.6       # segmen dengan peluang "tidak ada suara" di atas ini diabaikan
 
 tts:
-  engine: gtts                  # keputusan tim setelah uji dengar Fase 0
-  lang: id
-  tld: com
+  engine: edge                  # edge-tts: suara neural Microsoft, dipilih 28-10 karena jauh lebih manusiawi
+  voice: id-ID-GadisNeural      # hanya untuk engine edge (pilihan lain: id-ID-ArdiNeural)
+  rate: "+0%"                   # hanya untuk engine edge, mis. "-8%" untuk lebih lambat
+  lang: id                      # hanya untuk engine gtts
+  tld: com                      # hanya untuk engine gtts
   timeout_s: 8
   cache_dir: assets/tts         # klip tetap dan kata angka (dibuat oleh scripts/build_tts_cache.py)
   cache_dynamic_text: false     # teks dinamis (isi dokumen) TIDAK disimpan ke disk demi privasi

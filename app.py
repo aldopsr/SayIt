@@ -75,6 +75,7 @@ def penyuara(offline: bool) -> SpeechRenderer:
     kunci = f"tts_{offline}"
     if kunci not in st.session_state:
         st.session_state[kunci] = SpeechRenderer(load_config(), online=None if not offline else False)
+        st.session_state[kunci].warmup()
     return st.session_state[kunci]
 
 

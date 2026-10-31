@@ -25,9 +25,13 @@
 
 ## Keputusan yang sudah dikunci (jangan diubah tanpa diskusi)
 - **STT:** faster-whisper `small`, CPU int8, `language="id"`, VAD, dengan `initial_prompt`. Tanpa prompt WER naik 7% → 27%.
-- **TTS:** gTTS (pilihan tim setelah uji dengar; MMS-TTS tidak jelas, suara Windows hanya Inggris). Desain hibrida:
-  jawaban uang/tanggal/pesan tetap = klip MP3 tersimpan (offline); teks dokumen = gTTS langsung, tidak disimpan ke disk.
+- **TTS:** **edge-tts `id-ID-GadisNeural`** sejak 28-10 (suara neural, dipilih pengguna setelah uji dengar; gTTS
+  terdengar robotik). Mesinnya saklar config `tts.engine`: `edge` atau `gtts`, dan `gtts_save` tetap ada, jadi
+  kembali ke gTTS cukup ubah YAML lalu `build_tts_cache.py --force`. Desain hibrida tidak berubah:
+  jawaban uang/tanggal/pesan tetap = klip MP3 tersimpan (offline); teks dokumen = sintesis langsung, tidak disimpan ke disk.
   Semua kalimat baru harus didaftarkan di `sayit/response/templates.py` (CLIP_TEXTS) lalu cache dibuat ulang.
+  **Sintesis pertama tiap proses 4-8 detik** (edge-tts membangun sesi), berikutnya 0,6 detik - karena itu
+  `SpeechRenderer.warmup()` dipanggil saat server dan panel uji memuat model, bukan saat pengguna menunggu.
 - **Angka ke kata:** `sayit/response/terbilang.py` menghasilkan token; jangan ganti dengan num2words.
 - **Router intent:** aturan berbobot di `sayit/intent/`. Fuzzy hanya untuk kata kunci ≥ 6 huruf, intent kendali dicocokkan persis,
   akhiran -nya dipotong. Setiap kata kunci baru wajib disertai kasus uji di `tests/test_router.py`.

@@ -106,3 +106,22 @@ def test_rapikan_hanya_memengaruhi_yang_diucapkan():
     asli = "BAGIAN PERTAMA"
     assert to_plain_text([Text(asli)]) == asli
     assert rapikan_untuk_suara(asli) == "Bagian Pertama"
+
+
+def test_mesin_dipilih_dari_config(cfg):
+    edge = {**cfg, "tts": {**cfg["tts"], "engine": "edge"}}
+    r = TTS.SpeechRenderer(edge, online=True)
+    assert r._synth is TTS.edge_save
+    assert r._synth_kwargs() == {"voice": "id-ID-GadisNeural", "rate": "+0%", "timeout": 8}
+
+    gtts = {**cfg, "tts": {**cfg["tts"], "engine": "gtts"}}
+    r = TTS.SpeechRenderer(gtts, online=True)
+    assert r._synth is TTS.gtts_save
+    assert r._synth_kwargs() == {"lang": "id", "tld": "com", "timeout": 8}
+
+
+def test_warmup_sintesis_sekali_dan_diam_saat_offline(cfg):
+    calls = []
+    assert TTS.SpeechRenderer(cfg, online=True, synth=fake_synth(calls)).warmup()
+    assert len(calls) == 1
+    assert not TTS.SpeechRenderer(cfg, online=False, synth=fake_synth([])).warmup()
