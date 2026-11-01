@@ -518,6 +518,12 @@ export default function SayItPage() {
    *  pengguna - persis kebalikan dari maksud barge-in. */
   const hentikanSuara = () => {
     utteranceId.current++;
+    // Klipnya WAJIB dijeda di sini. utteranceId hanya membatalkan rantai alurnya;
+    // elemen <audio> tetap berbunyi sampai habis. Dulu ini tidak kelihatan karena
+    // ketukan langsung memicu klip berikutnya, dan putar() menjeda yang lama.
+    // Sejak ketukan saat sistem bicara hanya menyela tanpa memulai apa pun,
+    // tanpa baris ini menyela sama sekali tidak menghentikan suaranya.
+    audioRef.current?.pause();
     if (typeof window !== 'undefined') window.speechSynthesis?.cancel();
     isSpeechSynthesisSpeaking.current = false;
     setIsSpeaking(false);
@@ -1451,7 +1457,10 @@ export default function SayItPage() {
   } else if (isQuestionScreen) {
     orbPosStyle = {
       ...orbPosStyle,
-      top: '86%', 
+      // 86% saja memotong orb di layar pendek: setengah tingginya 117 px, jadi
+      // ia keluar bawah begitu tinggi layar < 836 px. Di laptop 573 px terpotong
+      // 37 px. Batas kedua menjaganya tetap di dalam, berapa pun tinggi layarnya.
+      top: 'min(86%, calc(100% - 125px))',
       transform: 'translate(-50%, -50%) scale(0.9)',
       opacity: 1,
     };
@@ -1484,6 +1493,9 @@ export default function SayItPage() {
         width: 'auto',
         maxWidth: '80%',
         objectFit: 'contain',
+        // Dibatasi sama dengan kartu jawaban supaya foto, kartu, dan tombol
+        // membentuk satu kolom di layar lebar, bukan tiga lebar yang berbeda.
+        maxWidth: 'min(80%, 560px)',
         borderRadius: '16px',
         transform: capturedMirror ? 'scaleX(-1)' : 'none',
         boxShadow: '0 10px 30px rgba(0,0,0,0.1)'
@@ -1771,7 +1783,7 @@ export default function SayItPage() {
           {/* Teks pertanyaan di bawah foto, orb ada di bawah teks (86%) */}
           {/* "kamu", bukan "anda": audio /foto mengucapkan "Apa yang ingin kamu
               tanyakan?", dan yang terdengar tidak boleh berbeda dari yang tertulis. */}
-          <h2 style={{ position: 'absolute', top: '66%', left: '24px', right: '24px', margin: 0, fontSize: '20px', fontWeight: '800', textAlign: 'center', color: 'black', lineHeight: 1.3 }}>
+          <h2 style={{ position: 'absolute', top: '66%', left: '24px', right: '24px', margin: '0 auto', maxWidth: '560px', fontSize: '20px', fontWeight: '800', textAlign: 'center', color: 'black', lineHeight: 1.3 }}>
             Apa yang ingin kamu tanyakan<br/>dari foto ini?
           </h2>
         </div>
@@ -1813,6 +1825,9 @@ export default function SayItPage() {
           {/* 3. CARD OUTPUT: tinggi mengikuti teks, scroll kalau lebih dari 40vh */}
           <div style={{
             width: '75%',
+            // Tanpa batas ini satu baris jawaban mencapai ~102 karakter di layar
+            // laptop (terukur 921 px pada lebar 1279). Nyaman dibaca 45-75.
+            maxWidth: '560px',
             boxSizing: 'border-box',
             flex: '0 0 auto',
             minHeight: '9vh',
@@ -1843,7 +1858,7 @@ export default function SayItPage() {
               sehingga aplikasinya tidak pernah menutup. Terbukti saat diuji. */}
           <div
             onClick={(e) => e.stopPropagation()}
-            style={{ width: '75%', display: 'flex', gap: '12px', marginTop: '20px', flex: '0 0 auto' }}
+            style={{ width: '75%', maxWidth: '560px', display: 'flex', gap: '12px', marginTop: '20px', flex: '0 0 auto' }}
           >
             <button 
               className="btn-icon"
@@ -1920,7 +1935,7 @@ export default function SayItPage() {
       >
         {/* Kartu jingga, sama persis dengan kartu jawaban di layar hasil */}
         <div style={{
-          width: '75%', boxSizing: 'border-box',
+          width: '75%', maxWidth: '560px', boxSizing: 'border-box',
           padding: '18px 20px',
           backgroundColor: JINGGA_TEKS,
           borderRadius: '16px',
@@ -1935,7 +1950,7 @@ export default function SayItPage() {
         </div>
 
         <p style={{
-          width: '75%', margin: '14px 0 0', fontSize: '14px', lineHeight: 1.5,
+          width: '75%', maxWidth: '560px', margin: '14px 0 0', fontSize: '14px', lineHeight: 1.5,
           textAlign: 'center', color: '#6b7280',
         }}>
           Sesi selesai. Tutup tab ini, atau ketuk Mulai lagi.
@@ -1947,7 +1962,7 @@ export default function SayItPage() {
         <button
           className="btn-icon"
           onClick={() => { aktifRef.current = performance.now(); pindah('INIT'); }}
-          style={{ width: '75%', flex: '0 0 auto', marginTop: '24px', flexDirection: 'row', gap: '10px', fontSize: '16px', fontWeight: 700 }}
+          style={{ width: '75%', maxWidth: '560px', flex: '0 0 auto', marginTop: '24px', flexDirection: 'row', gap: '10px', fontSize: '16px', fontWeight: 700 }}
         >
           <svg fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
             <path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8"/>
