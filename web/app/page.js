@@ -61,6 +61,39 @@ const IDLE_PERINGATAN_MS = 20000;
 // #f97316 tetap dipakai sebagai aksen yang tidak memuat apa pun: bingkai dan rana.
 const JINGGA_TEKS = '#c2410c';
 
+/* Mode demo: menjalankan SELURUH alur tanpa backend, untuk menguji tampilan dan
+   urutan layar ketika servernya tidak bisa dijalankan. Dinyalakan lewat ?demo=1.
+
+   Dibaca di tingkat modul, jadi nilainya false saat dirender di server dan true
+   di klien. Itu aman HANYA selama DEMO tidak pernah memengaruhi hasil render.
+   Kalau suatu saat dibutuhkan di JSX, lewatkan dulu lewat state (lihat `demo`
+   di bawah); dipakai langsung, hydration-nya gagal.
+
+   Jawaban dan suaranya PALSU. Jangan sekali-kali dipakai menilai akurasi,
+   latensi, atau mutu suara. */
+const DEMO = typeof window !== 'undefined'
+  && new URLSearchParams(window.location.search).get('demo') === '1';
+
+// Salinan kalimat klip yang diputar klien sendiri, dipakai HANYA di mode demo
+// karena /klip-teks tidak bisa dihubungi. Sumber kebenarannya tetap
+// sayit/response/templates.py; kalau di sana berubah, salinan ini ikut.
+const KLIP_DEMO = {
+  sambutan: 'Halo, ini SayIt. Sentuh layar di mana saja untuk memotret. Kalau belum paham, katakan: apa itu SayIt.',
+  sedang_memproses: 'Sebentar, sedang saya proses.',
+  kamera_depan: 'Kamera depan aktif.',
+  kamera_belakang: 'Kamera belakang aktif.',
+  kamera_tunggal: 'Perangkat ini hanya punya satu kamera. Kamu masih bisa memilih berkas dari penyimpanan.',
+  sentuh_untuk_berkas: 'Sentuh layar sekali untuk membuka daftar berkas.',
+  sampai_jumpa: 'Sampai jumpa.',
+};
+
+// Urutan jawaban palsu sesudah foto. Sengaja ditutup KELUAR supaya satu putaran
+// demo selalu sampai ke layar selesai tanpa perlu disetir.
+const JAWAB_DEMO = [
+  { intent: 'UANG', teks: 'Uang lima puluh ribu rupiah, dan dua lembar dua ribu rupiah. Totalnya lima puluh empat ribu rupiah. Mau saya ulangi, foto lagi, atau keluar?' },
+  { intent: 'KELUAR', teks: 'Terima kasih sudah memakai SayIt. Sampai jumpa.' },
+];
+
 /* --- basis API, header tunnel, dan pengemas WAV: dikembalikan apa adanya dari
    commit bfba151. Semuanya sudah pernah diuji lewat tunnel sungguhan, jadi
    ditulis ulang hanya akan mengulang jebakan yang sama. --- */
@@ -407,6 +440,7 @@ export default function SayItPage() {
   const [facingMode, setFacingMode] = useState('user'); // 'user' = kamera depan, 'environment' = kamera belakang
   const [capturedMirror, setCapturedMirror] = useState(true); // foto dari kamera depan ditampilkan mirror, kamera belakang & upload tidak
   const [orbSlot, setOrbSlot] = useState({ top: null, scale: 0.9 }); // posisi orb di layar hasil
+  const [demo, setDemo] = useState(false);     // DEMO, tetapi lewat state supaya hydrate tetap cocok
 
   // === REFS ===
   const videoRef = useRef(null);
@@ -430,6 +464,7 @@ export default function SayItPage() {
   const jawabanRef = useRef(null);                 // {audio, teks} jawaban terakhir, untuk ULANGI
   const suaraRef = useRef(null);                   // rekaman WAV yang menunggu dikirim
   const berkasMenunggu = useRef(false);            // "pilih berkas" diucapkan, menunggu sentuhan
+  const demoKe = useRef(0);                        // langkah jawaban palsu, lihat JAWAB_DEMO
 
   // === KELOMPOK LAYAR ===
   // Dideklarasikan di atas karena efek timer idle (spec 7) membacanya, dan const
@@ -491,6 +526,25 @@ export default function SayItPage() {
     window.speechSynthesis?.cancel();
     isSpeechSynthesisSpeaking.current = true;
     setIsSpeaking(true);
+
+    // Mode demo: tidak ada klip dari server. Suaranya dipinjam dari peramban
+    // supaya alurnya tetap terdengar, tetapi yang MENGGERAKKAN alur adalah timer,
+    // bukan onend speechSynthesis - yang terbukti bisa tidak pernah berbunyi.
+    if (DEMO) {
+      if (teks && window.speechSynthesis) {
+        const u = new SpeechSynthesisUtterance(teks);
+        u.lang = 'id-ID';
+        window.speechSynthesis.speak(u);
+      }
+      nanti(() => {
+        if (id !== utteranceId.current) return;
+        isSpeechSynthesisSpeaking.current = false;
+        setIsSpeaking(false);
+        if (lalu) nanti(() => pindah(lalu), 400);
+        if (selesai) selesai();
+      }, Math.min(9000, Math.max(1400, (teks ? teks.length : 20) * 65)));
+      return;
+    }
 
     const a = new Audio(src);
     audioRef.current = a;
@@ -604,6 +658,7 @@ export default function SayItPage() {
      jalur yang paling sering dipakai pengguna adalah satu-satunya yang tidak
      terlindungi. */
   useEffect(() => {
+    if (DEMO) { teksKlipRef.current = KLIP_DEMO; setDemo(true); return; }
     const h = kepalaApi();
     const opsi = { headers: h, cache: 'no-cache' };
 
@@ -650,6 +705,18 @@ export default function SayItPage() {
   //   lalu pemanggil membukanya lagi. Ini yang menjaga penyangga rekaman tidak
   //   tumbuh terus selama layar kamera dibiarkan terbuka.
   const dengarkan = (saatSelesai, { tungguSuara = false, batasSunyi = 0, heningMs = HENING_MS } = {}) => {
+    // Mode demo: tidak ada yang bisa menerjemahkan suaranya, jadi mikrofon tidak
+    // dibuka sama sekali. Pendengar layar kamera dikenali dari heningMs-nya yang
+    // pendek dan sengaja TIDAK pernah mendengar apa pun, supaya perintah palsu
+    // tidak muncul sendiri; layar pertanyaan dan menu menjawab setelah jeda,
+    // supaya alurnya berjalan sampai akhir tanpa disentuh.
+    if (DEMO) {
+      const gen = ++dengarGen.current;
+      hentiDengarRef.current = () => { dengarGen.current++; };
+      if (heningMs === HENING_PERINTAH_MS) return;
+      nanti(() => { if (gen === dengarGen.current) saatSelesai(new Blob(['demo'])); }, 2600);
+      return;
+    }
     if (!navigator.mediaDevices?.getUserMedia) {
       peringatkan('Mikrofon tidak tersedia di perangkat ini',
                   'Kamu masih bisa mengetuk layar untuk memotret ulang.');
@@ -779,7 +846,21 @@ export default function SayItPage() {
    *  Penandanya bukan status HTTP melainkan apakah badannya JSON SayIt: rewrite
    *  Next membalas 500 "Internal Server Error" teks biasa ketika backend mati,
    *  jadi status 500 tidak bisa dibedakan dari galat server sungguhan. */
+  /** Jawaban palsu untuk mode demo, bentuknya sama dengan balasan server asli. */
+  const jawabDemo = async (jalur) => {
+    await new Promise((r) => setTimeout(r, 700));   // beri waktu orb "memproses" terlihat
+    if (jalur === '/foto') {
+      demoKe.current = 0;
+      return { teks: 'Foto berhasil diambil. Apa yang ingin kamu tanyakan?', intent: 'FOTO', diterima: true, audio: null };
+    }
+    if (jalur === '/berkas') {
+      return { teks: 'Surat keterangan domisili atas nama pemohon. Mau saya ulangi, foto lagi, atau keluar?', intent: 'BACA', diterima: true, audio: null };
+    }
+    return { ...JAWAB_DEMO[Math.min(demoKe.current++, JAWAB_DEMO.length - 1)], audio: null };
+  };
+
   const kirim = async (jalur, form) => {
+    if (DEMO) return jawabDemo(jalur);
     // Batas waktu klien, sedikit DI BAWAH proxyTimeout Next (180 detik). Tanpa
     // ini permintaan yang benar-benar menggantung membisukan aplikasi tanpa
     // batas, dan pengguna tunanetra tidak punya cara tahu bahwa ia menunggu
@@ -841,6 +922,9 @@ export default function SayItPage() {
         })
         .catch(err => {
           console.error(err);
+          // Di mode demo alurnya harus tetap jalan walau perangkatnya tidak punya
+          // kamera sama sekali - yang sedang diuji tampilan dan urutan layarnya.
+          if (DEMO) { pindah('CAMERA_READY'); ucapkanKlip('sambutan'); return; }
           peringatkan('Kamera tidak bisa dibuka',
                       'Izinkan kamera di pengaturan situs peramban, lalu muat ulang halaman ini.');
         });
@@ -972,7 +1056,9 @@ export default function SayItPage() {
     let j;
     try {
       const form = new FormData();
-      form.append('foto', await (await fetch(imageUrl)).blob(), 'foto.jpg');
+      // Tanpa kamera (mode demo di perangkat tanpa kamera) imageUrl null, dan
+      // fetch(null) akan melempar lalu dilaporkan sebagai galat jaringan palsu.
+      if (imageUrl) form.append('foto', await (await fetch(imageUrl)).blob(), 'foto.jpg');
       j = await kirim('/foto', form);
     } catch {
       galatJaringan();
@@ -1520,6 +1606,19 @@ export default function SayItPage() {
       }}>
         SayIt
       </h1>
+
+      {/* Penanda mode demo. Tanpa ini jawaban palsu bisa disangka hasil sungguhan,
+          dan di proyek ini angka karangan adalah kesalahan yang mahal. */}
+      {demo && (
+        <div style={{
+          position: 'absolute', top: '8px', left: '8px', zIndex: 60,
+          padding: '6px 10px', borderRadius: '8px',
+          backgroundColor: '#7f1d1d', color: 'white',
+          fontSize: '12px', fontWeight: 700, lineHeight: 1,
+        }}>
+          MODE DEMO · jawaban palsu
+        </div>
+      )}
 
       {/* Pembaca Layar Wajib (SR) */}
       <div aria-live="assertive" aria-atomic="true">
