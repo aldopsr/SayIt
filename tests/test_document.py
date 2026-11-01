@@ -664,3 +664,50 @@ def test_koreksi_kemiringan_bisa_dimatikan(cfg):
     miring = baris_miring("satu dua tiga empat lima enam", y0=100, slope=-0.12)
     assert DOC.compose_text(miring, c, "dokumen") != "satu dua tiga empat lima enam."
     assert DOC.compose_text(miring, cfg, "dokumen") == "satu dua tiga empat lima enam."
+
+
+# --------------------------------------------------- pembentukan baris dengan rantai
+
+def test_rantai_menumpuk_simpangan_yang_melampaui_toleransi(cfg):
+    """Inilah yang `pita` tidak bisa: simpangan MENUMPUK sepanjang baris.
+
+    Tiap langkah hanya turun 15 px - di bawah toleransi 18 px - tetapi sepanjang
+    enam kata totalnya 75 px, lebih dari empat kali toleransi. `pita`
+    membandingkan terhadap nilai tengah baris berjalan, jadi ujung baris jatuh
+    di luar jangkauan dan terputus. `rantai` membandingkan terhadap kotak tepat
+    sebelumnya, jadi ia mengikuti berapa pun total simpangannya.
+
+    Toleransi per langkah tetap berlaku: `rantai` mengikuti lengkungan landai
+    sepanjang apa pun, bukan patahan tajam.
+    """
+    kata, x, y = [], 100, 400
+    for w in "satu dua tiga empat lima enam".split():
+        kata.append(DOC.TextBox(w, 0.9, (x, y, x + 80, y + 30)))
+        x += 100
+        y -= 15                          # 15 px < toleransi 0,6 x 30 = 18 px
+    rantai = DOC.group_lines_chain(kata, 0.6, 3.0)
+    assert [" ".join(w.text for w in b) for b in rantai] == ["satu dua tiga empat lima enam"]
+    # pita tanpa koreksi kemiringan terputus pada data yang sama
+    assert len(DOC.group_lines(kata, 0.6)) > 1
+
+
+def test_rantai_tidak_menyambung_melewati_celah_lebar(cfg):
+    """Celah mendatar lebar = halaman seberang atau kolom lain, bukan lanjutan baris."""
+    kiri = [DOC.TextBox("kiri", 0.9, (0, 100, 80, 130))]
+    jauh = [DOC.TextBox("seberang", 0.9, (900, 100, 980, 130))]
+    baris = DOC.group_lines_chain(kiri + jauh, 0.6, 3.0)
+    assert len(baris) == 2
+
+
+def test_rantai_kosong_aman():
+    assert DOC.group_lines_chain([], 0.6, 3.0) == []
+
+
+def test_bawaan_pengelompokan_baris_adalah_pita(cfg):
+    """`rantai` DIUKUR 31-10 dan hasilnya terbelah, jadi bawaannya belum diganti.
+
+    Pada 13 dokumen beracuan: 14,89% -> 14,94% (1 membaik, 2 memburuk, 10 tetap)
+    yaitu di dalam derau. Pada foto buku ia tampak lebih baik, tetapi itu
+    penilaian mata pada 2 foto tanpa teks acuan - belum cukup untuk mengunci.
+    """
+    assert cfg["vision"]["document"]["line_grouping"] == "pita"

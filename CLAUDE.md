@@ -271,9 +271,16 @@ Langkah lengkapnya di `docs/deploy.md`.
   Foto mentega (OCR rusak) kini tidak dibacakan. Penanda kedua (rasio) TIDAK TERBUKTI, dimatikan.
 - **`layout_mode: tersebar`** sebagai bawaan. `auto` dari `document_found` DITOLAK - memilih persis
   terbalik (tersebar untuk seluruh 13 dokumen A4, dokumen untuk 2 papan nama).
-- **BELUM SELESAI: urutan bacaan foto buku masih kacau.** Sebabnya sudah diketahui dan tercatat:
-  foto bentangan DUA halaman melengkung berlawanan, jadi satu kemiringan global (-0,028) jauh
-  meleset dari kemiringan baris sungguhan (-0,095). Jangan diklaim selesai.
+- **BELUM SELESAI: urutan bacaan foto buku masih kacau.** Dua dugaan sudah DIBANTAH datanya:
+  bukan "dua halaman melengkung berlawanan" (membelah halaman memberi -0,0276 lawan -0,0282,
+  nyaris sama), dan bukan "gugus menggumpal" (gugus sudah terpisah benar, 121 kotak lawan 18).
+  Penjelasan yang tersisa: halamannya **MELENGKUNG** - datar di tengah, menukik sampai -0,18
+  dekat jilidan - jadi satu angka kemiringan tidak akan pernah muat.
+- **`line_grouping: rantai` sudah ada tetapi BUKAN bawaan.** Menyambung kotak ke tetangga
+  terdekat tanpa taksiran kemiringan, jadi simpangan menumpuk sepanjang baris. Diukur:
+  13 dokumen A4 **14,89% -> 14,94%** (1 membaik, 2 memburuk, 10 tetap) = di dalam derau;
+  pada foto buku tampak lebih baik tetapi itu penilaian MATA pada 2 foto.
+  **Untuk menguncinya butuh teks acuan beberapa foto buku** - sesudah itu cukup satu baris config.
 
 **Konfigurasi terkunci (jangan diubah tanpa mengukur ulang):**
 mesin OCR dipisah per modul - dokumen EasyOCR, kedaluwarsa PaddleOCR + `mobile_det`;

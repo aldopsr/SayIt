@@ -194,6 +194,54 @@ def group_lines(boxes: Sequence[TextBox], tolerance_ratio: float,
     return [sorted(b, key=lambda w: w.left) for b in baris]
 
 
+def group_lines_chain(boxes: Sequence[TextBox], tolerance_ratio: float,
+                      gap_ratio: float) -> list[list[TextBox]]:
+    """Bentuk baris dengan MENGIKUTI tetangga terdekat, bukan membandingkan y global.
+
+    Dibuat setelah dua dugaan sebelumnya terbantah datanya (31-10):
+
+    - "dua halaman melengkung berlawanan" SALAH. Membelah halaman di selokan
+      terlebarnya hampir tidak mengubah taksiran kemiringan: -0,0276 untuk sisi
+      kiri lawan -0,0282 untuk seluruh halaman.
+    - "gugus menggumpal jadi satu" juga SALAH. Pengelompokan gugus sudah
+      memisahkan halaman seberang dengan benar (121 kotak lawan 18).
+
+    Yang tersisa sebagai penjelasan: halamannya MELENGKUNG, bukan miring rata.
+    Di tengah halaman barisnya hampir datar, mendekati jilidan ia menukik tajam,
+    sehingga satu angka kemiringan tidak akan pernah muat - median justru
+    memilih bagian yang paling datar karena itu yang paling banyak.
+
+    Karena itu di sini tidak ada taksiran kemiringan sama sekali. Tiap kotak
+    menyambung ke baris yang ujung kanannya PALING DEKAT dan masih sejajar
+    dengannya. Perbandingannya selalu terhadap kotak tepat sebelumnya, jadi
+    baris yang melengkung diikuti apa adanya seberapa pun lengkungnya.
+    """
+    if not boxes:
+        return []
+    tinggi = median([b.height for b in boxes if b.height > 0] or [1.0])
+    toleransi, batas_celah = tolerance_ratio * tinggi, gap_ratio * tinggi
+
+    baris: list[list[TextBox]] = []
+    for w in sorted(boxes, key=lambda w: (w.left, w.center_y)):
+        terbaik, selisih_terbaik = None, None
+        for b in baris:
+            ujung = b[-1]
+            celah = w.left - ujung.box[2]
+            if celah > batas_celah:
+                continue                    # terlalu jauh: baris lain, atau halaman seberang
+            selisih = abs(w.center_y - ujung.center_y)
+            if selisih <= toleransi and (selisih_terbaik is None or selisih < selisih_terbaik):
+                terbaik, selisih_terbaik = b, selisih
+        if terbaik is None:
+            baris.append([w])
+        else:
+            terbaik.append(w)
+
+    # Urutan bacaan antar-baris diambil dari kotak PERTAMA tiap baris: pada teks
+    # melengkung, tepi kiri jauh lebih dapat dipercaya daripada nilai tengahnya.
+    return sorted(baris, key=lambda b: (b[0].center_y, b[0].left))
+
+
 def group_paragraphs(lines: Sequence[Sequence[TextBox]], gap_ratio: float) -> list[list[list[TextBox]]]:
     """Baris yang jaraknya jauh dari baris sebelumnya memulai paragraf baru."""
     if not lines:
@@ -280,11 +328,15 @@ def order_clusters(clusters: Sequence[Sequence[TextBox]], band_ratio: float) -> 
 
 def _teks_satu_gugus(boxes: Sequence[TextBox], d: dict) -> list[str]:
     """Paragraf-paragraf dari satu gugus, memakai aturan baris yang sama."""
-    miring = 0.0
-    if d.get("line_slope_correct"):
-        miring = estimate_text_slope(boxes, float(d["line_slope_gap_ratio"]),
-                                     float(d["line_slope_max"]))
-    baris = group_lines(boxes, float(d["line_tolerance_ratio"]), miring)
+    if str(d.get("line_grouping", "pita")).lower() == "rantai":
+        baris = group_lines_chain(boxes, float(d["line_tolerance_ratio"]),
+                                  float(d["line_slope_gap_ratio"]))
+    else:
+        miring = 0.0
+        if d.get("line_slope_correct"):
+            miring = estimate_text_slope(boxes, float(d["line_slope_gap_ratio"]),
+                                         float(d["line_slope_max"]))
+        baris = group_lines(boxes, float(d["line_tolerance_ratio"]), miring)
     paragraf = group_paragraphs(baris, float(d["paragraph_gap_ratio"]))
     keluar = []
     for p in paragraf:

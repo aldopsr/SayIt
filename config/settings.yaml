@@ -299,6 +299,22 @@ vision:
     # seluruh piksel, jadi pada foto buku yang dipegang ia mengukur bentuk
     # halaman dan meja, bukan baris teksnya. Terukur 31-10: satu baris membentang
     # dari y=99 ke y=56 (miring ~6 derajat) dan baris-baris saling menyisip.
+    # Cara membentuk baris. `pita` membandingkan pusat vertikal terhadap nilai
+    # tengah baris berjalan (dengan koreksi kemiringan di bawah). `rantai`
+    # menyambung tiap kotak ke tetangga terdekatnya, tanpa taksiran kemiringan
+    # sama sekali, sehingga baris yang MELENGKUNG diikuti apa adanya.
+    # DIUKUR 31-10 dan hasilnya TERBELAH, jadi bawaannya belum diganti:
+    #   - 13 dokumen A4 beracuan: 14,89% -> 14,94% (1 membaik, 2 memburuk,
+    #     10 tetap) = di dalam derau, tidak menang dan tidak kalah.
+    #   - foto buku: `rantai` tampak LEBIH BAIK. Pada `tulisanbukubaru (5)`
+    #     dua klausa menjadi benar: "adalah terdapatnya unsur-unsur yang sama
+    #     dalam kalimat" dan "Langkah-langkah membuat tulisan ilmiah adalah
+    #     membuat konsep; menuliskan, dan direvisi". `pita` mengacaukan keduanya.
+    #     Tetapi itu penilaian MATA pada 2 foto tanpa teks acuan.
+    # Untuk mengunci `rantai` sebagai bawaan dibutuhkan teks acuan untuk
+    # beberapa foto buku. Tanpa itu, mengganti bawaan berarti menukar angka
+    # terukur dengan kesan - kesalahan yang sudah berulang di proyek ini.
+    line_grouping: pita         # pita | rantai
     line_slope_correct: true
     line_slope_gap_ratio: 3.0   # celah mendatar maksimum antar-kata sebaris, x tinggi huruf
     line_slope_max: 0.35        # taksiran di atas ini dianggap liar dan dibuang (~19 derajat)
