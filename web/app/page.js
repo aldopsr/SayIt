@@ -69,8 +69,11 @@ const JINGGA_TEKS = '#c2410c';
    Kalau suatu saat dibutuhkan di JSX, lewatkan dulu lewat state (lihat `demo`
    di bawah); dipakai langsung, hydration-nya gagal.
 
-   Jawaban dan suaranya PALSU. Jangan sekali-kali dipakai menilai akurasi,
-   latensi, atau mutu suara. */
+   JAWABANNYA palsu dan latensinya dibuat-buat, jadi jangan dipakai menilai
+   akurasi atau kecepatan. SUARANYA sungguhan: berkas di web/public/demo dibuat
+   `scripts/buat_demo_suara.py` dari klip yang sama dengan aplikasi penuh dan
+   dari SpeechRenderer yang sama (edge-tts id-ID-GadisNeural), jadi mutu suara
+   justru boleh dinilai dari sini. */
 const DEMO = typeof window !== 'undefined'
   && new URLSearchParams(window.location.search).get('demo') === '1';
 
@@ -87,12 +90,26 @@ const KLIP_DEMO = {
   sampai_jumpa: 'Sampai jumpa.',
 };
 
-// Urutan jawaban palsu sesudah foto. Sengaja ditutup KELUAR supaya satu putaran
-// demo selalu sampai ke layar selesai tanpa perlu disetir.
-const JAWAB_DEMO = [
-  { intent: 'UANG', teks: 'Uang lima puluh ribu rupiah, dan dua lembar dua ribu rupiah. Totalnya lima puluh empat ribu rupiah. Mau saya ulangi, foto lagi, atau keluar?' },
-  { intent: 'KELUAR', teks: 'Terima kasih sudah memakai SayIt. Sampai jumpa.' },
-];
+// Jawaban palsu mode demo. `teks` WAJIB sama persis dengan isi berkas audionya:
+// keduanya berasal dari satu sumber, scripts/buat_demo_suara.py. Kalau salah satu
+// diubah sendirian, yang terdengar dan yang terbaca pembaca layar akan berbeda.
+// `urutan` sengaja ditutup KELUAR supaya satu putaran demo selalu sampai ke layar
+// selesai tanpa perlu disetir.
+const JAWAB_DEMO = {
+  foto: { teks: 'Foto berhasil diambil. Apa yang ingin kamu tanyakan?', audio: '/demo/foto_diambil.mp3' },
+  berkas: {
+    teks: 'Surat keterangan domisili atas nama pemohon, dikeluarkan kantor kelurahan. Mau saya ulangi, foto lagi, atau keluar?',
+    audio: '/demo/jawaban_berkas.mp3',
+  },
+  urutan: [
+    {
+      intent: 'UANG',
+      teks: 'Terdeteksi tiga lembar, satu lembar lima puluh ribu rupiah, dan dua lembar dua ribu rupiah. Totalnya lima puluh empat ribu rupiah. Mau saya ulangi, foto lagi, atau keluar?',
+      audio: '/demo/jawaban_uang.mp3',
+    },
+    { intent: 'KELUAR', teks: 'Sampai jumpa.', audio: '/demo/sampai_jumpa.mp3' },
+  ],
+};
 
 /* --- basis API, header tunnel, dan pengemas WAV: dikembalikan apa adanya dari
    commit bfba151. Semuanya sudah pernah diuji lewat tunnel sungguhan, jadi
@@ -527,25 +544,6 @@ export default function SayItPage() {
     isSpeechSynthesisSpeaking.current = true;
     setIsSpeaking(true);
 
-    // Mode demo: tidak ada klip dari server. Suaranya dipinjam dari peramban
-    // supaya alurnya tetap terdengar, tetapi yang MENGGERAKKAN alur adalah timer,
-    // bukan onend speechSynthesis - yang terbukti bisa tidak pernah berbunyi.
-    if (DEMO) {
-      if (teks && window.speechSynthesis) {
-        const u = new SpeechSynthesisUtterance(teks);
-        u.lang = 'id-ID';
-        window.speechSynthesis.speak(u);
-      }
-      nanti(() => {
-        if (id !== utteranceId.current) return;
-        isSpeechSynthesisSpeaking.current = false;
-        setIsSpeaking(false);
-        if (lalu) nanti(() => pindah(lalu), 400);
-        if (selesai) selesai();
-      }, Math.min(9000, Math.max(1400, (teks ? teks.length : 20) * 65)));
-      return;
-    }
-
     const a = new Audio(src);
     audioRef.current = a;
 
@@ -601,15 +599,19 @@ export default function SayItPage() {
   };
 
   /** Klip tetap. Pakai salinan blob kalau ada (lihat prefetch di bawah). */
-  const klipSrc = (nama) => klipRef.current[nama] || api(`/klip/${nama}.mp3`);
+  // Mode demo menyajikan klip yang SAMA dari web/public/demo, bukan lewat /api,
+  // jadi suaranya tetap edge-tts yang sudah disepakati walau backend tidak jalan.
+  const klipSrc = (nama) => (DEMO ? `/demo/${nama}.mp3` : klipRef.current[nama] || api(`/klip/${nama}.mp3`));
   const ucapkanKlip = (nama, opsi = {}) => {
     klipTerakhirRef.current = nama;
     return putar(klipSrc(nama), { teks: teksKlipRef.current[nama] ?? null, ...opsi });
   };
 
-  /** Jawaban dari server: WAV base64 yang sudah berisi kalimat lengkapnya. */
-  const ucapkanJawaban = (b64, teks, opsi = {}) =>
-    putar(`data:audio/wav;base64,${b64}`, { teks, ...opsi });
+  /** Jawaban dari server: WAV base64 yang sudah berisi kalimat lengkapnya.
+   *  Di mode demo isinya URL berkas MP3 yang sudah dirender lebih dulu, jadi
+   *  dibedakan dari base64 lewat garis miring di depannya. */
+  const ucapkanJawaban = (audio, teks, opsi = {}) =>
+    putar(audio && audio.startsWith('/') ? audio : `data:audio/wav;base64,${audio}`, { teks, ...opsi });
 
   /** Peringatan sisi klien. speechSynthesis, bukan klip: sebagian peringatan ini
    *  muncul justru ketika servernya tidak terjangkau, jadi klip tidak bisa
@@ -851,12 +853,10 @@ export default function SayItPage() {
     await new Promise((r) => setTimeout(r, 700));   // beri waktu orb "memproses" terlihat
     if (jalur === '/foto') {
       demoKe.current = 0;
-      return { teks: 'Foto berhasil diambil. Apa yang ingin kamu tanyakan?', intent: 'FOTO', diterima: true, audio: null };
+      return { ...JAWAB_DEMO.foto, intent: 'FOTO', diterima: true };
     }
-    if (jalur === '/berkas') {
-      return { teks: 'Surat keterangan domisili atas nama pemohon. Mau saya ulangi, foto lagi, atau keluar?', intent: 'BACA', diterima: true, audio: null };
-    }
-    return { ...JAWAB_DEMO[Math.min(demoKe.current++, JAWAB_DEMO.length - 1)], audio: null };
+    if (jalur === '/berkas') return { ...JAWAB_DEMO.berkas, intent: 'BACA', diterima: true };
+    return JAWAB_DEMO.urutan[Math.min(demoKe.current++, JAWAB_DEMO.urutan.length - 1)];
   };
 
   const kirim = async (jalur, form) => {
