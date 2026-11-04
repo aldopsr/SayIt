@@ -134,3 +134,55 @@ def test_awalan_tujuh_digit_ditolak(tmp_path):
     yang dibetulkan menjadi `20260411`, bukan skripnya yang menebak.
     """
     assert harapan_dari_nama(tmp_path / "2026411_ajinomoto.jpg")[0] is None
+
+
+# --------------------------------------------------------------------------- ekspor notebook
+
+class TestEksporNotebook:
+    """Penjaga `scripts/ekspor_notebook.py`.
+
+    Notebook adalah satu-satunya tempat logika k-fold penghasil angka 90,1%,
+    dan `.ipynb` tidak terbaca AST mana pun - bukan oleh graphify, bukan oleh
+    linter, bukan oleh `grep -n`. Ekspor inilah yang membuatnya terlihat, jadi
+    kegagalannya harus keras, bukan diam-diam.
+    """
+
+    def test_baris_ajaib_dikomentari(self):
+        from scripts.ekspor_notebook import baris_aman
+        assert baris_aman("!pip install ultralytics").startswith("# [ajaib ipython]")
+        assert baris_aman("    %cd /content").startswith("# [ajaib ipython]")
+        # baris biasa tidak disentuh, termasuk yang memuat ! atau % di tengah
+        assert baris_aman("x = a % b") == "x = a % b"
+        assert baris_aman("assert x != y") == "assert x != y"
+
+    def test_notebook_buatan_menghasilkan_python_sah(self, tmp_path):
+        import ast
+        import json
+        from scripts.ekspor_notebook import ekspor_satu
+
+        nb = tmp_path / "uji.ipynb"
+        nb.write_text(json.dumps({"cells": [
+            {"cell_type": "markdown", "source": ["# judul, harus dilewati\n"]},
+            {"cell_type": "code", "source": ["!pip install x\n", "def f():\n", "    return 1\n"]},
+            {"cell_type": "code", "source": ["   \n"]},           # kosong, dilewati
+            {"cell_type": "code", "source": ["KONSTAN = 2\n"]},
+        ]}), encoding="utf-8")
+
+        teks, n_sel, n_ajaib = ekspor_satu(nb)
+        assert (n_sel, n_ajaib) == (2, 1)
+        ast.parse(teks)                                  # inilah penjaga yang sesungguhnya
+        nama = {n.name for n in ast.walk(ast.parse(teks)) if isinstance(n, ast.FunctionDef)}
+        assert nama == {"f"}
+        assert "judul, harus dilewati" not in teks
+
+    def test_seluruh_notebook_asli_terekspor_dan_sah(self):
+        """Uji pada notebook SUNGGUHAN, bukan hanya yang dibuat-buat."""
+        import ast
+        from scripts.ekspor_notebook import SUMBER, ekspor_satu
+
+        asli = sorted(SUMBER.glob("*.ipynb"))
+        assert asli, "tidak ada notebook; apakah foldernya dipindah?"
+        for nb in asli:
+            teks, n_sel, _ = ekspor_satu(nb)
+            assert n_sel > 0, f"{nb.name} tidak menghasilkan satu sel kode pun"
+            ast.parse(teks, filename=nb.name)

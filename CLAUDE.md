@@ -251,8 +251,8 @@ Langkah lengkapnya di `docs/deploy.md`.
 
 ## graphify
 
-Proyek ini punya knowledge graph di `graphify-out/` (2.752 node, 4.634 edge, 141 komunitas,
-dibangun 4 November 2026 dari 69 berkas kode + 24 dokumen).
+Proyek ini punya knowledge graph di `graphify-out/` (2.096 node, 4.127 edge, 177 komunitas,
+dibangun 4 November 2026 dari 66 berkas kode + 24 dokumen).
 
 **Perintahnya `py -V:3.11 -m graphify ...`, bukan `graphify ...`.** graphifyy sengaja dipasang
 di **base Python 3.11**, BUKAN di `.venv` proyek, supaya tes dan `requirements.txt` tidak
@@ -269,11 +269,31 @@ Aturan:
 - Setelah mengubah kode: `py -V:3.11 -m graphify update .` (AST saja, tanpa biaya).
 - `graphify-out/` ada di `.gitignore` dan TIDAK di-commit.
 
-Yang sengaja DIKELUARKAN dari korpus (ada di `graphify-out/.graphify_build.json`):
+**Notebook WAJIB diekspor dulu.** graphify tidak mengenal `.ipynb` sama sekali - ekstensi itu
+tidak ada di 114 ekstensi kode maupun 10 ekstensi dokumen yang didukungnya, jadi keempat
+notebook pernah sama sekali tidak terlihat oleh graph, termasuk logika k-fold penghasil
+angka 90,1%. Sebelum membangun ulang graph:
+
+    python scripts\ekspor_notebook.py
+
+Itu menulis `notebooks/_ekspor/*.py` (berkas turunan, diabaikan Git, 74 sel kode, semuanya
+dijamin lolos `ast.parse`). Hasilnya 86 node notebook masuk graph, dan fungsi seperti
+`sidik_lipatan()`, `tulis_dataset()`, `evaluasi_total()`, `group_with()` jadi bisa dicari.
+Catatan jujur: ke-119 edge notebook mengarah ke pustaka luar, NOL ke kode aplikasi - memang
+begitu kenyataannya, notebook berjalan di Colab dan tidak mengimpor modul proyek.
+
+**`gitignore: false` di `.graphify_build.json`, jadi daftar `excludes` adalah SATU-SATUNYA
+penjaga.** Ini disengaja supaya `notebooks/_ekspor/` yang diabaikan Git tetap ikut terbaca.
+Konsekuensinya setiap penambahan folder besar atau sensitif harus ditambahkan ke `excludes`
+secara eksplisit. Yang sudah dikeluarkan:
 `assets/tts/**` (89 klip sintesis - teksnya sudah ada di `templates.py`), `.claude/**` dan
 `.agents/**` (dokumentasi skill, bukan isi proyek), seluruh gambar (foto uang dan grafik
-pelatihan tidak menyumbang untuk graph arsitektur), dan `fase0/fase0_hasil/**`
-(**rekaman suara orang - jangan pernah dimasukkan**).
+pelatihan tidak menyumbang untuk graph arsitektur), `**/args*.yaml` dan `**/data.yaml`
+(dump hiperparameter: 7 komunitas berkohesi 0,017 yang mencemari daftar saran), berkas berat
+(`.venv`, `node_modules`, `web/.next`, `data/`, `models/`, `__pycache__`), dan
+`fase0/fase0_hasil/**` (**rekaman suara orang - jangan pernah dimasukkan**).
+Sudah diverifikasi setelah `gitignore` dimatikan: 0 berkas rekaman dan 0 berkas folder berat
+ikut terdeteksi.
 
 Catatan membaca laporan: 457 "dangling-endpoint edge" pada diagnostik BUKAN korupsi - itu
 `imports` ke pustaka luar (`time`, `streamlit`, `argparse`) yang memang bukan berkas proyek.

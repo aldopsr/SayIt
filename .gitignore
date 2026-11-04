@@ -40,3 +40,6 @@ docs/jurnal_bahan/
 
 # Keluaran graphify (knowledge graph) - tidak di-commit
 graphify-out/
+
+# Hasil ekspor notebook (turunan, dibuat scripts/ekspor_notebook.py)
+notebooks/_ekspor/
