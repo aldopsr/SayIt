@@ -161,7 +161,7 @@ Hasil ukur terakhir terhadap target PRD Bagian 11:
 | :--- | :--- | :--- | :--- |
 | Akurasi kedaluwarsa | 81% (13 benar / 1 salah / 2 diam dari 16) | >= 70% | tercapai |
 | Akurasi uang (total diucapkan) | **90,1%** (73 benar / 8 salah / 0 diam dari 81 foto) | >= 85% | **tercapai** |
-| CER dokumen | 15,3% | <= 15% | meleset 0,3 poin |
+| CER dokumen | **14,89%** | <= 15% | **tercapai** |
 | Latensi uang / kendali | 1,4 s / 1,3 s | <= 8 s | lolos |
 | Latensi dokumen / kedaluwarsa | 11,5 s / 11,4 s | <= 8 s | penyimpangan diterima |
 
@@ -175,7 +175,7 @@ angka ada di `docs/keputusan-teknis.md`.
 ## Aturan kerja
 
 - `python -m pytest -q` harus lulus **sebelum dan sesudah** setiap perubahan.
-  Saat ini 648 tes.
+  Saat ini 685 tes.
 - Uji asap API: `python server\smoke.py` — memuat model sungguhan, jadi bukan
   bagian dari pytest.
 - Semua parameter di `config/settings.yaml`, dibaca lewat `sayit/config.py`.

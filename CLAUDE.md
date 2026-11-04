@@ -64,7 +64,7 @@
 Selesai: config, `audio/io.py`, `audio/stt.py`, `audio/tts.py`, `intent/`, `response/`, skrip cache & demo,
 `vision/quality_gate.py` (PRD 8.2), `vision/preprocess.py` (PRD 8.3), `vision/money.py` (PRD 8.6),
 `vision/date_parser.py` (PRD 8.8.1), `vision/document.py` (PRD 8.7), `vision/expiry.py` (PRD 8.8), `pipeline.py` (PRD 7), `app.py` + `sayit/appkit.py` (Streamlit), `scripts/diagnosa_uang.py`, `scripts/buat_label_uang.py`, `scripts/ukur_dokumen.py`,
-`scripts/ukur_kedaluwarsa.py`, `sayit/gambar.py`, `tests/test_ukur.py`, `scripts/banding_ocr.py`, `scripts/ukur_latensi.py`, 566 tes lulus.
+`scripts/ukur_kedaluwarsa.py`, `sayit/gambar.py`, `tests/test_ukur.py`, `scripts/banding_ocr.py`, `scripts/ukur_latensi.py`, 685 tes lulus.
 `opencv-python`, `ultralytics`, dan `easyocr` terpasang dan masuk `requirements.txt`.
 
 Pra-pemrosesan: tiap langkah adalah fungsi murni `(citra, params) -> citra` di `STEPS`, dirangkai lewat
@@ -300,7 +300,7 @@ Catatan membaca laporan: 457 "dangling-endpoint edge" pada diagnostik BUKAN koru
 
 ## Titik sambung (2 Oktober 2026)
 
-566 tes lulus. Seluruh metrik PRD Bagian 11 kini sudah pernah diukur.
+685 tes lulus. Seluruh metrik PRD Bagian 11 kini sudah pernah diukur.
 
 | Metrik | Hasil | Target | |
 |---|---|---|---|
