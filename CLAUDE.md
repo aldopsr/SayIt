@@ -249,6 +249,35 @@ dipasang. `Dockerfile` dibiarkan di repo tetapi tidak dipakai.
 
 Langkah lengkapnya di `docs/deploy.md`.
 
+## graphify
+
+Proyek ini punya knowledge graph di `graphify-out/` (2.752 node, 4.634 edge, 141 komunitas,
+dibangun 4 November 2026 dari 69 berkas kode + 24 dokumen).
+
+**Perintahnya `py -V:3.11 -m graphify ...`, bukan `graphify ...`.** graphifyy sengaja dipasang
+di **base Python 3.11**, BUKAN di `.venv` proyek, supaya tes dan `requirements.txt` tidak
+tersentuh. Folder `Scripts` base tidak ada di PATH.
+
+Aturan:
+- Selama `graphify-out/graph.json` ada, jalankan `py -V:3.11 -m graphify query "<pertanyaan>"`
+  SEBELUM grep, pencarian, atau membaca berkas sumber untuk pertanyaan soal kode. Sertakan
+  aturan ini juga di setiap prompt subagent yang menjelajah kode. Baca berkas mentah hanya
+  untuk baris yang sudah dilokalisasi graph.
+- `py -V:3.11 -m graphify path "<A>" "<B>"` untuk relasi; `... explain "<konsep>"` untuk konsep.
+- Baca `graphify-out/GRAPH_REPORT.md` hanya untuk tinjauan arsitektur luas, atau bila
+  query/path/explain belum cukup.
+- Setelah mengubah kode: `py -V:3.11 -m graphify update .` (AST saja, tanpa biaya).
+- `graphify-out/` ada di `.gitignore` dan TIDAK di-commit.
+
+Yang sengaja DIKELUARKAN dari korpus (ada di `graphify-out/.graphify_build.json`):
+`assets/tts/**` (89 klip sintesis - teksnya sudah ada di `templates.py`), `.claude/**` dan
+`.agents/**` (dokumentasi skill, bukan isi proyek), seluruh gambar (foto uang dan grafik
+pelatihan tidak menyumbang untuk graph arsitektur), dan `fase0/fase0_hasil/**`
+(**rekaman suara orang - jangan pernah dimasukkan**).
+
+Catatan membaca laporan: 457 "dangling-endpoint edge" pada diagnostik BUKAN korupsi - itu
+`imports` ke pustaka luar (`time`, `streamlit`, `argparse`) yang memang bukan berkas proyek.
+
 ## Titik sambung (2 Oktober 2026)
 
 566 tes lulus. Seluruh metrik PRD Bagian 11 kini sudah pernah diukur.

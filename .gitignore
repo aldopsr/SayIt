@@ -37,3 +37,6 @@ out/
 # Bahan jurnal: 9,5 MB, memuat foto uang dan latar rumah. SENGAJA tidak
 # di-commit (keputusan 23-10). Hapus baris ini kalau nanti mau ikut Git.
 docs/jurnal_bahan/
+
+# Keluaran graphify (knowledge graph) - tidak di-commit
+graphify-out/
