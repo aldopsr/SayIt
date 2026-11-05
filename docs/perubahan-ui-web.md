@@ -88,7 +88,13 @@ masuk ke `CAMERA_READY`, dan `/foto` tidak lagi memanggil `fetch(null)`.
 Teks di `JAWAB_DEMO` wajib sama persis dengan isi audionya. Skrip itu mencetak
 teksnya supaya keduanya tidak pernah menyimpang.
 
-Ada penanda merah **"MODE DEMO · jawaban palsu"** di layar. Jawaban dan
+Ada penanda merah **"MODE DEMO - jawaban palsu"** di layar, dan sejak 05-11 penanda
+itu juga **BERBUNYI**: peringatannya diucapkan tepat sesudah sambutan selesai, dan
+masuk wilayah `aria-live` sejak halaman dibuka. Penanda yang hanya terlihat
+melanggar aturan nomor 1 di README - pengguna sasaran SayIt tidak melihat layar,
+jadi ia akan mendengar "lima puluh empat ribu rupiah" tanpa tahu itu karangan.
+Diucapkan SESUDAH sambutan, bukan sebelum, karena `putar()` memanggil
+`speechSynthesis.cancel()` sehingga peringatan yang lebih dulu akan terpotong. Jawaban dan
 latensinya karangan, jadi jangan dipakai menilai akurasi atau kecepatan. Mutu
 suara justru boleh dinilai dari sini, karena mesinnya sama.
 

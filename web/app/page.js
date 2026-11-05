@@ -77,6 +77,14 @@ const JINGGA_TEKS = '#c2410c';
 const DEMO = typeof window !== 'undefined'
   && new URLSearchParams(window.location.search).get('demo') === '1';
 
+/* Peringatan mode demo, WAJIB berbunyi dan bukan hanya tampil. Penanda merah di
+   pojok layar hanya TERLIHAT, sedangkan pengguna sasaran SayIt tidak melihat
+   apa pun - jadi penanda itu sendirian melanggar aturan proyek nomor 1 di README:
+   setiap peringatan wajib berbunyi DAN menyebut tindakan berikutnya. Jawaban
+   karangan yang disangka sungguhan adalah kesalahan termahal di aplikasi ini. */
+const DEMO_PESAN = 'Mode demo. Semua jawaban di sini palsu';
+const DEMO_AKSI = 'Jangan dipakai menilai akurasi. Buka alamat yang sama tanpa tanda demo untuk memakai SayIt sungguhan.';
+
 // Salinan kalimat klip yang diputar klien sendiri, dipakai HANYA di mode demo
 // karena /klip-teks tidak bisa dihubungi. Sumber kebenarannya tetap
 // sayit/response/templates.py; kalau di sana berubah, salinan ini ikut.
@@ -613,6 +621,12 @@ export default function SayItPage() {
     return putar(klipSrc(nama), { teks: teksKlipRef.current[nama] ?? null, ...opsi });
   };
 
+  /** Sambutan, lalu peringatan mode demo SESUDAHNYA.
+   *  Sesudah, bukan sebelum: putar() memanggil speechSynthesis.cancel(), jadi
+   *  peringatan yang diucapkan lebih dulu akan terpotong klip sambutan sendiri. */
+  const ucapkanSambutan = () => ucapkanKlip('sambutan',
+    DEMO ? { selesai: () => peringatkan(DEMO_PESAN, DEMO_AKSI) } : {});
+
   /** Jawaban dari server: WAV base64 yang sudah berisi kalimat lengkapnya.
    *  Di mode demo isinya URL berkas MP3 yang sudah dirender lebih dulu, jadi
    *  dibedakan dari base64 lewat garis miring di depannya. */
@@ -666,7 +680,14 @@ export default function SayItPage() {
      jalur yang paling sering dipakai pengguna adalah satu-satunya yang tidak
      terlindungi. */
   useEffect(() => {
-    if (DEMO) { teksKlipRef.current = KLIP_DEMO; setDemo(true); return; }
+    // srText diisi langsung supaya pembaca layar memilikinya walau sambutannya
+    // nanti disela sebelum peringatan lisan di bawah sempat berbunyi.
+    if (DEMO) {
+      teksKlipRef.current = KLIP_DEMO;
+      setDemo(true);
+      setSrText(`${DEMO_PESAN}. ${DEMO_AKSI}`);
+      return;
+    }
     const h = kepalaApi();
     const opsi = { headers: h, cache: 'no-cache' };
 
@@ -923,14 +944,14 @@ export default function SayItPage() {
         .then(() => {
           if (isMounted) {
             pindah('CAMERA_READY');
-            ucapkanKlip('sambutan');
+            ucapkanSambutan();
           }
         })
         .catch(err => {
           console.error(err);
           // Di mode demo alurnya harus tetap jalan walau perangkatnya tidak punya
           // kamera sama sekali - yang sedang diuji tampilan dan urutan layarnya.
-          if (DEMO) { pindah('CAMERA_READY'); ucapkanKlip('sambutan'); return; }
+          if (DEMO) { pindah('CAMERA_READY'); ucapkanSambutan(); return; }
           peringatkan('Kamera tidak bisa dibuka',
                       'Izinkan kamera di pengaturan situs peramban, lalu muat ulang halaman ini.');
         });
@@ -1491,7 +1512,6 @@ export default function SayItPage() {
       style={{
         height: '100%',
         width: 'auto',
-        maxWidth: '80%',
         objectFit: 'contain',
         // Dibatasi sama dengan kartu jawaban supaya foto, kartu, dan tombol
         // membentuk satu kolom di layar lebar, bukan tiga lebar yang berbeda.
