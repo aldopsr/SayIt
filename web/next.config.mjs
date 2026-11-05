@@ -1,6 +1,8 @@
 // API dilewatkan rewrite supaya satu origin dengan frontend: tidak perlu CORS,
 // dan panel peramban / perangkat lain tidak perlu tahu alamat backend.
-// Produksi: set API_ORIGIN ke URL Hugging Face Space di Vercel.
+// Produksi: API_ORIGIN TIDAK diset di Vercel - backend ada di laptop lewat ngrok
+// dan URL-nya berganti tiap restart, jadi basisnya ditentukan saat jalan lewat ?api=.
+// (Hugging Face Spaces dicoret 11-10; lihat docs/deploy.md.)
 const nextConfig = {
   experimental: {
     /* Batas waktu proxy rewrite. Bawaan Next 30 detik, dan modul kedaluwarsa
