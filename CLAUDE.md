@@ -52,7 +52,7 @@
 - Whisper kadang menyisipkan kata dari prompt; ada penjaga di `sayit/audio/stt.py`.
 - Hasil STT baru dari **1 penutur**; akurasi router pada kalimat baru masih optimistis.
 - `soundfile` bisa membaca MP3, tetapi byte MP3 yang disambung tidak terbaca utuh: selalu decode per klip lalu gabungkan array.
-- Privasi: teks yang dibacakan gTTS dikirim ke Google. Jangan menguji dengan dokumen pribadi asli.
+- Privasi: teks dokumen yang disintesis langsung dikirim ke **Microsoft** (edge-tts sejak 28-10; Google bila `tts.engine: gtts`). Jangan menguji dengan dokumen pribadi asli.
 
 ## Aturan kode
 - Semua parameter di `config/settings.yaml`, dibaca lewat `sayit/config.py`. Hindari angka ajaib di kode.

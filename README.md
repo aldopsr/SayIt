@@ -7,6 +7,7 @@ Tiga kemampuan: **nominal uang Rupiah** (termasuk total beberapa lembar),
 **membacakan tulisan dokumen**, dan **membacakan tanggal kedaluwarsa kemasan**.
 
 - Persyaratan: `docs/PRD_SayIt_v2_1.md`
+- **Baru di proyek ini? Mulai dari `docs/pencerdasan.md`**
 - Status proyek terkini: `docs/status-proyek.md`
 - Catatan keputusan beserta angkanya: `docs/keputusan-teknis.md`
 - Langkah deploy: `docs/deploy.md`
@@ -146,7 +147,7 @@ Berguna untuk memeriksa modul satu per satu tanpa peramban dan tanpa suara.
 | Konfigurasi | `config/settings.yaml`, `sayit/config.py` | Siap |
 | Rekam/putar audio | `sayit/audio/io.py` | Siap |
 | Speech-to-Text | `sayit/audio/stt.py` | Siap (faster-whisper small + prompt) |
-| Text-to-Speech | `sayit/audio/tts.py` | Siap (gTTS hibrida, klip offline) |
+| Text-to-Speech | `sayit/audio/tts.py` | Siap (edge-tts hibrida, 89 klip offline) |
 | Intent router | `sayit/intent/` | Siap |
 | Templat respons & angka ke kata | `sayit/response/` | Siap |
 | Quality gate, pra-pemrosesan, uang, dokumen, kedaluwarsa | `sayit/vision/` | Siap |
@@ -197,8 +198,8 @@ angka ada di `docs/keputusan-teknis.md`.
 
 ## Aturan privasi
 
-- Teks yang dibacakan gTTS **dikirim ke server Google**. Jangan memakai dokumen
-  pribadi asli saat pengujian.
+- Teks dokumen yang dibacakan **dikirim ke server Microsoft** (edge-tts sejak 28-10;
+  dulu Google lewat gTTS). Jangan memakai dokumen pribadi asli saat pengujian.
 - Audio teks dinamis tidak disimpan ke disk (`tts.cache_dynamic_text: false`).
 - Rekaman suara anggota tim di `fase0/fase0_hasil/rekaman/` **tidak boleh**
   di-commit maupun diunggah. Sudah dijaga `.gitignore`.
