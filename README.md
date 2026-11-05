@@ -11,6 +11,7 @@ Tiga kemampuan: **nominal uang Rupiah** (termasuk total beberapa lembar),
 - Status proyek terkini: `docs/status-proyek.md`
 - Catatan keputusan beserta angkanya: `docs/keputusan-teknis.md`
 - Langkah deploy: `docs/deploy.md`
+- Perubahan UI web terakhir beserta angkanya: `docs/perubahan-ui-web.md`
 - Konteks untuk Claude Code: `CLAUDE.md`
 
 ---
@@ -35,10 +36,16 @@ Yang diubah hampir semuanya ada di dua berkas:
 | `web/app/page.js` | seluruh tampilan dan alurnya, satu komponen |
 | `web/app/globals.css` | warna merek (`--jingga`, `--hitam`), kelas `.sr`, mode gerak-dikurangi |
 
-**Tanpa backend, tombol-tombolnya akan menjawab "Tidak bisa menghubungi server
-SayIt".** Itu normal dan memang begitu seharusnya — tata letak, warna, animasi,
-dan ukuran sentuh semuanya tetap bisa dikerjakan. Untuk melihat jawaban
-sungguhan, ada dua pilihan:
+**Tanpa backend, buka `http://localhost:3000/?demo=1`.** Seluruh alur berjalan
+sampai layar selesai, memakai suara edge-tts yang sama dengan aplikasi penuh dan
+tanpa memanggil `/api` sama sekali. Jawabannya karangan dan latensinya
+dibuat-buat, jadi jangan dipakai menilai akurasi atau kecepatan; ada penanda
+merah di layar supaya tidak tertukar dengan hasil sungguhan. Berkas suaranya
+dibuat ulang dengan `python scripts/buat_demo_suara.py`.
+
+Tanpa `?demo=1` dan tanpa backend, tombol-tombolnya akan menjawab "Tidak bisa
+terhubung ke SayIt". Itu normal. Untuk melihat jawaban sungguhan, ada dua
+pilihan:
 
 **Pilihan A — pakai backend orang lain (paling cepat).** Minta URL ngrok dari
 anggota tim yang sedang menjalankan servernya, lalu buka:
@@ -63,8 +70,14 @@ Penggunanya tunanetra, jadi ini bukan selera:
    jangan `setGalat()` langsung.
 2. Setiap jawaban masuk wilayah `aria-live` (elemen `<p className="sr">`).
    Jangan hapus elemen itu walau tidak terlihat.
-3. Area sentuh utama adalah **seluruh layar**, bukan tombol kecil.
+3. Area sentuh utama adalah **seluruh layar**, bukan tombol kecil. Satu
+   pengecualian: ketukan selagi sistem bicara hanya **menyela**, tidak memotret —
+   kalau digabung, menyela sambutan di layar kamera selalu berarti ikut memotret
+   sebelum penggunanya sempat membidik. Memotret tetap bisa lewat tombol rana
+   yang berlabel "Ambil foto".
 4. Hormati `prefers-reduced-motion` (sudah ada di `globals.css`).
+5. Setiap teks yang tampil wajib sama dengan yang diucapkan. Kalau mengubah
+   kalimat, ubah keduanya.
 
 ---
 

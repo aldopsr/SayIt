@@ -50,6 +50,66 @@ const HENING_MS = 3000;    // spec 4: berhenti mendengar setelah 3 detik hening
 // perintah. Jangan diturunkan lagi tanpa diuji pada penutur yang bicara pelan.
 const HENING_PERINTAH_MS = 1500;
 const IDLE_MS = 30000;     // spec 7: tutup aplikasi setelah 30 detik tanpa interaksi
+// Penutupan otomatis wajib diumumkan SEBELUM terjadi. Pengguna tunanetra tidak
+// melihat hitungan apa pun, jadi aplikasi yang mendadak diam tidak bisa
+// dibedakan dari aplikasi yang rusak. Sisa 10 detik cukup untuk menjawab.
+const IDLE_PERINGATAN_MS = 20000;
+
+// Jingga untuk apa pun yang MEMUAT teks atau ikon. Putih di atas #f97316 hanya
+// 2,8:1, di bawah ambang WCAG AA 4,5:1; di atas #c2410c jadi 5,2:1. Ikon #c2410c
+// di atas latar jingga 18% jadi 4,3:1, sebelumnya #ea580c hanya 3,0:1.
+// #f97316 tetap dipakai sebagai aksen yang tidak memuat apa pun: bingkai dan rana.
+const JINGGA_TEKS = '#c2410c';
+
+/* Mode demo: menjalankan SELURUH alur tanpa backend, untuk menguji tampilan dan
+   urutan layar ketika servernya tidak bisa dijalankan. Dinyalakan lewat ?demo=1.
+
+   Dibaca di tingkat modul, jadi nilainya false saat dirender di server dan true
+   di klien. Itu aman HANYA selama DEMO tidak pernah memengaruhi hasil render.
+   Kalau suatu saat dibutuhkan di JSX, lewatkan dulu lewat state (lihat `demo`
+   di bawah); dipakai langsung, hydration-nya gagal.
+
+   JAWABANNYA palsu dan latensinya dibuat-buat, jadi jangan dipakai menilai
+   akurasi atau kecepatan. SUARANYA sungguhan: berkas di web/public/demo dibuat
+   `scripts/buat_demo_suara.py` dari klip yang sama dengan aplikasi penuh dan
+   dari SpeechRenderer yang sama (edge-tts id-ID-GadisNeural), jadi mutu suara
+   justru boleh dinilai dari sini. */
+const DEMO = typeof window !== 'undefined'
+  && new URLSearchParams(window.location.search).get('demo') === '1';
+
+// Salinan kalimat klip yang diputar klien sendiri, dipakai HANYA di mode demo
+// karena /klip-teks tidak bisa dihubungi. Sumber kebenarannya tetap
+// sayit/response/templates.py; kalau di sana berubah, salinan ini ikut.
+const KLIP_DEMO = {
+  sambutan: 'Halo, ini SayIt. Sentuh layar di mana saja untuk memotret. Kalau belum paham, katakan: apa itu SayIt.',
+  sedang_memproses: 'Sebentar, sedang saya proses.',
+  kamera_depan: 'Kamera depan aktif.',
+  kamera_belakang: 'Kamera belakang aktif.',
+  kamera_tunggal: 'Perangkat ini hanya punya satu kamera. Kamu masih bisa memilih berkas dari penyimpanan.',
+  sentuh_untuk_berkas: 'Sentuh layar sekali untuk membuka daftar berkas.',
+  sampai_jumpa: 'Sampai jumpa.',
+};
+
+// Jawaban palsu mode demo. `teks` WAJIB sama persis dengan isi berkas audionya:
+// keduanya berasal dari satu sumber, scripts/buat_demo_suara.py. Kalau salah satu
+// diubah sendirian, yang terdengar dan yang terbaca pembaca layar akan berbeda.
+// `urutan` sengaja ditutup KELUAR supaya satu putaran demo selalu sampai ke layar
+// selesai tanpa perlu disetir.
+const JAWAB_DEMO = {
+  foto: { teks: 'Foto berhasil diambil. Apa yang ingin kamu tanyakan?', audio: '/demo/foto_diambil.mp3' },
+  berkas: {
+    teks: 'Surat keterangan domisili atas nama pemohon, dikeluarkan kantor kelurahan. Mau saya ulangi, foto lagi, atau keluar?',
+    audio: '/demo/jawaban_berkas.mp3',
+  },
+  urutan: [
+    {
+      intent: 'UANG',
+      teks: 'Terdeteksi tiga lembar, satu lembar lima puluh ribu rupiah, dan dua lembar dua ribu rupiah. Totalnya lima puluh empat ribu rupiah. Mau saya ulangi, foto lagi, atau keluar?',
+      audio: '/demo/jawaban_uang.mp3',
+    },
+    { intent: 'KELUAR', teks: 'Sampai jumpa.', audio: '/demo/sampai_jumpa.mp3' },
+  ],
+};
 
 /* --- basis API, header tunnel, dan pengemas WAV: dikembalikan apa adanya dari
    commit bfba151. Semuanya sudah pernah diuji lewat tunnel sungguhan, jadi
@@ -397,6 +457,7 @@ export default function SayItPage() {
   const [facingMode, setFacingMode] = useState('user'); // 'user' = kamera depan, 'environment' = kamera belakang
   const [capturedMirror, setCapturedMirror] = useState(true); // foto dari kamera depan ditampilkan mirror, kamera belakang & upload tidak
   const [orbSlot, setOrbSlot] = useState({ top: null, scale: 0.9 }); // posisi orb di layar hasil
+  const [demo, setDemo] = useState(false);     // DEMO, tetapi lewat state supaya hydrate tetap cocok
 
   // === REFS ===
   const videoRef = useRef(null);
@@ -420,6 +481,7 @@ export default function SayItPage() {
   const jawabanRef = useRef(null);                 // {audio, teks} jawaban terakhir, untuk ULANGI
   const suaraRef = useRef(null);                   // rekaman WAV yang menunggu dikirim
   const berkasMenunggu = useRef(false);            // "pilih berkas" diucapkan, menunggu sentuhan
+  const demoKe = useRef(0);                        // langkah jawaban palsu, lihat JAWAB_DEMO
 
   // === KELOMPOK LAYAR ===
   // Dideklarasikan di atas karena efek timer idle (spec 7) membacanya, dan const
@@ -456,6 +518,12 @@ export default function SayItPage() {
    *  pengguna - persis kebalikan dari maksud barge-in. */
   const hentikanSuara = () => {
     utteranceId.current++;
+    // Klipnya WAJIB dijeda di sini. utteranceId hanya membatalkan rantai alurnya;
+    // elemen <audio> tetap berbunyi sampai habis. Dulu ini tidak kelihatan karena
+    // ketukan langsung memicu klip berikutnya, dan putar() menjeda yang lama.
+    // Sejak ketukan saat sistem bicara hanya menyela tanpa memulai apa pun,
+    // tanpa baris ini menyela sama sekali tidak menghentikan suaranya.
+    audioRef.current?.pause();
     if (typeof window !== 'undefined') window.speechSynthesis?.cancel();
     isSpeechSynthesisSpeaking.current = false;
     setIsSpeaking(false);
@@ -514,14 +582,17 @@ export default function SayItPage() {
    *  Bukan kalimat utuh, karena perintahnya cuma dua kata: klip "sedang saya
    *  proses" berdurasi 2 detik akan terpotong jawabannya sendiri, dan itu lebih
    *  buruk daripada diam. Nada 0,2 detik memberi kepastian tanpa menunda apa pun.
-   *  Dibuat Web Audio, jadi tidak ada berkas tambahan. */
-  const bip = () => {
+   *  Dibuat Web Audio, jadi tidak ada berkas tambahan.
+   *
+   *  Dua nada dipakai dan bedanya harus tetap terdengar: 880 Hz = "sudah
+   *  kudengar", 1320 Hz = "sekarang bicara" (lihat LISTENING_Q). */
+  const bip = (hz = 880) => {
     try {
       const ac = new (window.AudioContext || window.webkitAudioContext)();
       const o = ac.createOscillator();
       const g = ac.createGain();
       o.type = 'sine';
-      o.frequency.value = 880;
+      o.frequency.value = hz;
       g.gain.setValueAtTime(0.0001, ac.currentTime);
       g.gain.exponentialRampToValueAtTime(0.22, ac.currentTime + 0.012);
       g.gain.exponentialRampToValueAtTime(0.0001, ac.currentTime + 0.18);
@@ -534,15 +605,19 @@ export default function SayItPage() {
   };
 
   /** Klip tetap. Pakai salinan blob kalau ada (lihat prefetch di bawah). */
-  const klipSrc = (nama) => klipRef.current[nama] || api(`/klip/${nama}.mp3`);
+  // Mode demo menyajikan klip yang SAMA dari web/public/demo, bukan lewat /api,
+  // jadi suaranya tetap edge-tts yang sudah disepakati walau backend tidak jalan.
+  const klipSrc = (nama) => (DEMO ? `/demo/${nama}.mp3` : klipRef.current[nama] || api(`/klip/${nama}.mp3`));
   const ucapkanKlip = (nama, opsi = {}) => {
     klipTerakhirRef.current = nama;
     return putar(klipSrc(nama), { teks: teksKlipRef.current[nama] ?? null, ...opsi });
   };
 
-  /** Jawaban dari server: WAV base64 yang sudah berisi kalimat lengkapnya. */
-  const ucapkanJawaban = (b64, teks, opsi = {}) =>
-    putar(`data:audio/wav;base64,${b64}`, { teks, ...opsi });
+  /** Jawaban dari server: WAV base64 yang sudah berisi kalimat lengkapnya.
+   *  Di mode demo isinya URL berkas MP3 yang sudah dirender lebih dulu, jadi
+   *  dibedakan dari base64 lewat garis miring di depannya. */
+  const ucapkanJawaban = (audio, teks, opsi = {}) =>
+    putar(audio && audio.startsWith('/') ? audio : `data:audio/wav;base64,${audio}`, { teks, ...opsi });
 
   /** Peringatan sisi klien. speechSynthesis, bukan klip: sebagian peringatan ini
    *  muncul justru ketika servernya tidak terjangkau, jadi klip tidak bisa
@@ -591,6 +666,7 @@ export default function SayItPage() {
      jalur yang paling sering dipakai pengguna adalah satu-satunya yang tidak
      terlindungi. */
   useEffect(() => {
+    if (DEMO) { teksKlipRef.current = KLIP_DEMO; setDemo(true); return; }
     const h = kepalaApi();
     const opsi = { headers: h, cache: 'no-cache' };
 
@@ -637,6 +713,18 @@ export default function SayItPage() {
   //   lalu pemanggil membukanya lagi. Ini yang menjaga penyangga rekaman tidak
   //   tumbuh terus selama layar kamera dibiarkan terbuka.
   const dengarkan = (saatSelesai, { tungguSuara = false, batasSunyi = 0, heningMs = HENING_MS } = {}) => {
+    // Mode demo: tidak ada yang bisa menerjemahkan suaranya, jadi mikrofon tidak
+    // dibuka sama sekali. Pendengar layar kamera dikenali dari heningMs-nya yang
+    // pendek dan sengaja TIDAK pernah mendengar apa pun, supaya perintah palsu
+    // tidak muncul sendiri; layar pertanyaan dan menu menjawab setelah jeda,
+    // supaya alurnya berjalan sampai akhir tanpa disentuh.
+    if (DEMO) {
+      const gen = ++dengarGen.current;
+      hentiDengarRef.current = () => { dengarGen.current++; };
+      if (heningMs === HENING_PERINTAH_MS) return;
+      nanti(() => { if (gen === dengarGen.current) saatSelesai(new Blob(['demo'])); }, 2600);
+      return;
+    }
     if (!navigator.mediaDevices?.getUserMedia) {
       peringatkan('Mikrofon tidak tersedia di perangkat ini',
                   'Kamu masih bisa mengetuk layar untuk memotret ulang.');
@@ -766,7 +854,19 @@ export default function SayItPage() {
    *  Penandanya bukan status HTTP melainkan apakah badannya JSON SayIt: rewrite
    *  Next membalas 500 "Internal Server Error" teks biasa ketika backend mati,
    *  jadi status 500 tidak bisa dibedakan dari galat server sungguhan. */
+  /** Jawaban palsu untuk mode demo, bentuknya sama dengan balasan server asli. */
+  const jawabDemo = async (jalur) => {
+    await new Promise((r) => setTimeout(r, 700));   // beri waktu orb "memproses" terlihat
+    if (jalur === '/foto') {
+      demoKe.current = 0;
+      return { ...JAWAB_DEMO.foto, intent: 'FOTO', diterima: true };
+    }
+    if (jalur === '/berkas') return { ...JAWAB_DEMO.berkas, intent: 'BACA', diterima: true };
+    return JAWAB_DEMO.urutan[Math.min(demoKe.current++, JAWAB_DEMO.urutan.length - 1)];
+  };
+
   const kirim = async (jalur, form) => {
+    if (DEMO) return jawabDemo(jalur);
     // Batas waktu klien, sedikit DI BAWAH proxyTimeout Next (180 detik). Tanpa
     // ini permintaan yang benar-benar menggantung membisukan aplikasi tanpa
     // batas, dan pengguna tunanetra tidak punya cara tahu bahwa ia menunggu
@@ -782,8 +882,8 @@ export default function SayItPage() {
   };
 
   const galatJaringan = () =>
-    peringatkan('Tidak bisa menghubungi server SayIt',
-                'Periksa koneksi internetmu, atau pastikan server-nya sudah jalan, lalu coba lagi.');
+    peringatkan('Tidak bisa terhubung ke SayIt',
+                'Periksa koneksi internetmu, lalu ketuk layar untuk mencoba lagi.');
 
   // === KAMERA ===
   // Menyalakan kamera sesuai arah (depan/belakang). Stream lama dimatikan dulu,
@@ -828,7 +928,11 @@ export default function SayItPage() {
         })
         .catch(err => {
           console.error(err);
-          peringatkan("Kamera tidak ditemukan", "Periksa izin kamera.");
+          // Di mode demo alurnya harus tetap jalan walau perangkatnya tidak punya
+          // kamera sama sekali - yang sedang diuji tampilan dan urutan layarnya.
+          if (DEMO) { pindah('CAMERA_READY'); ucapkanKlip('sambutan'); return; }
+          peringatkan('Kamera tidak bisa dibuka',
+                      'Izinkan kamera di pengaturan situs peramban, lalu muat ulang halaman ini.');
         });
 
       return () => { isMounted = false; };
@@ -837,6 +941,12 @@ export default function SayItPage() {
 
   useEffect(() => {
     if (appState === 'LISTENING_Q') {
+      // Mikrofon yang menyala tanpa bunyi apa pun tidak bisa diketahui pengguna
+      // tunanetra: bola yang berubah warna hanya TERLIHAT. Nada 1320 Hz berarti
+      // "sekarang bicara", sengaja lebih tinggi daripada bip() 880 Hz yang
+      // berarti "sudah kudengar", supaya keduanya tidak tertukar.
+      bip(1320);
+      setSrText('Silakan bicara.');
       // tungguSuara WAJIB. Tanpa itu hening 3 detik tetap dikirim ke Whisper,
       // transkripnya kosong, jawabannya "suaramu tidak terdengar jelas", lalu
       // kembali ke sini - lingkaran tanpa akhir bagi pengguna yang diam.
@@ -889,6 +999,8 @@ export default function SayItPage() {
 
   useEffect(() => {
     if (appState === 'LISTENING_MENU') {
+      bip(1320);                   // nada yang sama dengan LISTENING_Q: "sekarang bicara"
+      setSrText('Silakan jawab: ulangi, foto lagi, atau keluar.');
       // ponytail: jawaban menu belum dikenali (butuh STT dari backend), jadi hening
       // 3 detik berarti pengguna tidak menjawab -> diam di layar hasil, bukan
       // memotret ulang diam-diam. Timer idle 30 detik yang menutup aplikasinya.
@@ -950,7 +1062,9 @@ export default function SayItPage() {
     let j;
     try {
       const form = new FormData();
-      form.append('foto', await (await fetch(imageUrl)).blob(), 'foto.jpg');
+      // Tanpa kamera (mode demo di perangkat tanpa kamera) imageUrl null, dan
+      // fetch(null) akan melempar lalu dilaporkan sebagai galat jaringan palsu.
+      if (imageUrl) form.append('foto', await (await fetch(imageUrl)).blob(), 'foto.jpg');
       j = await kirim('/foto', form);
     } catch {
       galatJaringan();
@@ -1048,13 +1162,26 @@ export default function SayItPage() {
   // menundanya: sentuhan/tombol di sini, dan suara pengguna dari dengarkan().
   useEffect(() => {
     if (!isResultScreen) return;
-    const sentuh = () => { aktifRef.current = performance.now(); };
+    let sudahDiperingatkan = false;
+    const sentuh = () => { aktifRef.current = performance.now(); sudahDiperingatkan = false; };
     sentuh();
     ['pointerdown', 'keydown'].forEach((e) => window.addEventListener(e, sentuh, true));
     const iv = setInterval(() => {
-      if (performance.now() - aktifRef.current >= IDLE_MS) {
+      // Sistem yang SEDANG bicara dihitung sebagai aktivitas. Mikrofon mati
+      // selama itu, jadi aktifRef tidak pernah disegarkan - dan satu potongan
+      // bacaan dokumen sudah terukur 29,6 detik, cuma 0,4 detik dari batas.
+      // Tanpa baris ini aplikasinya menutup di tengah jawabannya sendiri.
+      if (isSpeechSynthesisSpeaking.current) { sentuh(); return; }
+      const diam = performance.now() - aktifRef.current;
+      if (diam >= IDLE_MS) {
         clearInterval(iv);
         tutupAplikasi();
+        return;
+      }
+      if (diam >= IDLE_PERINGATAN_MS && !sudahDiperingatkan) {
+        sudahDiperingatkan = true;
+        peringatkan('SayIt akan menutup sendiri sebentar lagi',
+                    'Ketuk layar atau bicara untuk melanjutkan.');
       }
     }, 1000);
     return () => {
@@ -1217,21 +1344,10 @@ export default function SayItPage() {
   };
 
   // === HANDLER KLIK ===
-  const handleScreenClick = () => {
-    // Spec 2 (barge-in): dulu di sini ada `if (isSpeechSynthesisSpeaking.current)
-    // return;` yang memblokir SEMUA ketukan selagi sistem bicara - termasuk
-    // sambutan yang panjang. Sekarang ketukan justru MENGHENTIKAN ucapan sistem.
+  /** Jepret dari aliran kamera lalu lanjutkan. Dipakai tombol rana DAN ketukan
+   *  layar, jadi keduanya tidak bisa menyimpang. */
+  const ambilFoto = () => {
     aktifRef.current = performance.now();
-    hentikanSuara();
-
-    // "pilih berkas" sudah diucapkan: sentuhan ini dipakai untuk membuka
-    // pemilihnya, bukan memotret. Hanya di sinilah .click() diizinkan peramban.
-    if (berkasMenunggu.current) {
-      berkasMenunggu.current = false;
-      fileInputRef.current?.click();
-      return;
-    }
-
     if (appState === 'CAMERA_READY') {
       let imageUrl = null;
       if (videoRef.current) {
@@ -1284,6 +1400,31 @@ export default function SayItPage() {
     }
   };
 
+  const handleScreenClick = () => {
+    aktifRef.current = performance.now();
+
+    // "pilih berkas" sudah diucapkan: sentuhan ini MEMANG diminta untuk membuka
+    // pemilihnya, jadi diperiksa sebelum penjaga barge-in di bawah. Hanya di
+    // sinilah .click() diizinkan peramban.
+    if (berkasMenunggu.current) {
+      berkasMenunggu.current = false;
+      hentikanSuara();
+      fileInputRef.current?.click();
+      return;
+    }
+
+    // Ketukan selagi sistem bicara HANYA menyela (spec 2), tanpa memotret.
+    // Bedanya dengan penjaga lama yang dibuang: dulu ketukan diabaikan
+    // seluruhnya, sehingga sambutan panjang tidak bisa dipotong sama sekali.
+    // Sekarang ucapannya berhenti dan ketukan BERIKUTNYA yang memotret. Kalau
+    // keduanya digabung, menyela sambutan di layar kamera selalu ikut memotret
+    // apa pun yang sedang dihadapi kamera, padahal penggunanya belum membidik.
+    if (isSpeechSynthesisSpeaking.current) { hentikanSuara(); return; }
+
+    hentikanSuara();
+    ambilFoto();
+  };
+
   // === LOGIKA POSISI DAN VISIBILITAS TRANSISI KELOMPOK SCREEN ===
 
   // Mode AI orb: user input suara > sistem berbicara > diam
@@ -1316,7 +1457,10 @@ export default function SayItPage() {
   } else if (isQuestionScreen) {
     orbPosStyle = {
       ...orbPosStyle,
-      top: '86%', 
+      // 86% saja memotong orb di layar pendek: setengah tingginya 117 px, jadi
+      // ia keluar bawah begitu tinggi layar < 836 px. Di laptop 573 px terpotong
+      // 37 px. Batas kedua menjaganya tetap di dalam, berapa pun tinggi layarnya.
+      top: 'min(86%, calc(100% - 125px))',
       transform: 'translate(-50%, -50%) scale(0.9)',
       opacity: 1,
     };
@@ -1343,12 +1487,15 @@ export default function SayItPage() {
   const photoImg = capturedImage ? (
     <img
       src={capturedImage}
-      alt="Hasil Foto"
+      alt="Foto yang akan dibacakan SayIt"
       style={{
         height: '100%',
         width: 'auto',
         maxWidth: '80%',
         objectFit: 'contain',
+        // Dibatasi sama dengan kartu jawaban supaya foto, kartu, dan tombol
+        // membentuk satu kolom di layar lebar, bukan tiga lebar yang berbeda.
+        maxWidth: 'min(80%, 560px)',
         borderRadius: '16px',
         transform: capturedMirror ? 'scaleX(-1)' : 'none',
         boxShadow: '0 10px 30px rgba(0,0,0,0.1)'
@@ -1382,17 +1529,19 @@ export default function SayItPage() {
           display: flex;
           align-items: center;
           justify-content: center;
+          flex-direction: column;
+          gap: 4px;
           flex: 1;
-          height: 52px;
+          height: 64px;
           background-color: rgba(249, 115, 22, 0.18);
-          color: #ea580c;
+          color: ${JINGGA_TEKS};
           border: none; 
           border-radius: 16px;
           cursor: pointer;
           transition: all 0.2s ease;
         }
         .btn-icon:hover {
-          background-color: var(--jingga, #f97316); 
+          background-color: ${JINGGA_TEKS}; 
           color: white; 
         }
         .btn-icon:active {
@@ -1401,6 +1550,38 @@ export default function SayItPage() {
         .btn-icon svg {
           width: 26px;
           height: 26px;
+        }
+        /* Label terlihat DI SAMPING aria-label. Pendamping yang melihat layar dan
+           pengguna dengan sisa penglihatan tidak bisa menebak tiga ikon jingga. */
+        .btn-icon .label {
+          font-size: 12px;
+          font-weight: 700;
+          line-height: 1;
+        }
+        .btn-rana {
+          pointer-events: auto;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          width: 76px;
+          height: 76px;
+          padding: 0;
+          border: none;
+          border-radius: 50%;
+          background-color: white;
+          box-shadow: 0 4px 10px rgba(0,0,0,0.5);
+          cursor: pointer;
+          transition: transform 0.2s ease;
+          -webkit-tap-highlight-color: transparent;
+        }
+        .btn-rana:active {
+          transform: scale(0.92);
+        }
+        .btn-rana span {
+          width: 60px;
+          height: 60px;
+          border-radius: 50%;
+          background-color: var(--jingga, #f97316);
         }
         .btn-cam {
           pointer-events: auto;
@@ -1413,7 +1594,7 @@ export default function SayItPage() {
           border: none;
           border-radius: 50%;
           background-color: rgba(255, 255, 255, 0.92);
-          color: #ea580c;
+          color: ${JINGGA_TEKS};
           box-shadow: 0 4px 10px rgba(0,0,0,0.35);
           cursor: pointer;
           transition: transform 0.2s ease, background-color 0.2s ease;
@@ -1427,6 +1608,29 @@ export default function SayItPage() {
           height: 26px;
         }
       `}} />
+
+      {/* Satu-satunya h1 halaman. Pembaca layar memakai judul untuk menavigasi,
+          dan logo di atas cuma gambar beraria-label, bukan judul. Disembunyikan
+          dari mata karena judulnya memang sudah tergambar sebagai logo itu. */}
+      <h1 style={{
+        position: 'absolute', width: '1px', height: '1px', margin: '-1px', padding: 0,
+        overflow: 'hidden', clip: 'rect(0 0 0 0)', whiteSpace: 'nowrap', border: 0,
+      }}>
+        SayIt
+      </h1>
+
+      {/* Penanda mode demo. Tanpa ini jawaban palsu bisa disangka hasil sungguhan,
+          dan di proyek ini angka karangan adalah kesalahan yang mahal. */}
+      {demo && (
+        <div style={{
+          position: 'absolute', top: '8px', left: '8px', zIndex: 60,
+          padding: '6px 10px', borderRadius: '8px',
+          backgroundColor: '#7f1d1d', color: 'white',
+          fontSize: '12px', fontWeight: 700, lineHeight: 1,
+        }}>
+          MODE DEMO · jawaban palsu
+        </div>
+      )}
 
       {/* Pembaca Layar Wajib (SR) */}
       <div aria-live="assertive" aria-atomic="true">
@@ -1494,9 +1698,18 @@ export default function SayItPage() {
               </svg>
             </button>
 
-            <div style={{ width: '76px', height: '76px', backgroundColor: 'white', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 4px 10px rgba(0,0,0,0.5)' }}>
-              <div style={{ width: '60px', height: '60px', backgroundColor: 'var(--jingga, #f97316)', borderRadius: '50%' }}></div>
-            </div>
+            {/* Rana adalah TOMBOL sungguhan, bukan div: pembaca layar harus bisa
+                menyebutnya, dan sejak ketukan layar hanya menyela ucapan, inilah
+                pemicu foto yang bisa ditemukan dengan menelusuri layar. Tetap
+                memotret walau sistem sedang bicara, karena menekan rana adalah
+                permintaan memotret yang tidak ambigu. */}
+            <button
+              className="btn-rana"
+              onClick={(e) => { e.stopPropagation(); hentikanSuara(); ambilFoto(); }}
+              aria-label="Ambil foto"
+            >
+              <span />
+            </button>
 
             <button className="btn-cam" onClick={handleFlip} aria-label="Balik kamera depan dan belakang">
               {/* Bentuk "switch-camera" dari Lucide (MIT), bukan gambaran sendiri:
@@ -1568,8 +1781,10 @@ export default function SayItPage() {
           </div>
           
           {/* Teks pertanyaan di bawah foto, orb ada di bawah teks (86%) */}
-          <h2 style={{ position: 'absolute', top: '66%', left: '24px', right: '24px', margin: 0, fontSize: '19px', fontWeight: '800', textAlign: 'center', color: 'black', lineHeight: 1.3 }}>
-            Apa yang ingin anda tanyakan<br/>dari foto ini?
+          {/* "kamu", bukan "anda": audio /foto mengucapkan "Apa yang ingin kamu
+              tanyakan?", dan yang terdengar tidak boleh berbeda dari yang tertulis. */}
+          <h2 style={{ position: 'absolute', top: '66%', left: '24px', right: '24px', margin: '0 auto', maxWidth: '560px', fontSize: '20px', fontWeight: '800', textAlign: 'center', color: 'black', lineHeight: 1.3 }}>
+            Apa yang ingin kamu tanyakan<br/>dari foto ini?
           </h2>
         </div>
 
@@ -1610,6 +1825,9 @@ export default function SayItPage() {
           {/* 3. CARD OUTPUT: tinggi mengikuti teks, scroll kalau lebih dari 40vh */}
           <div style={{
             width: '75%',
+            // Tanpa batas ini satu baris jawaban mencapai ~102 karakter di layar
+            // laptop (terukur 921 px pada lebar 1279). Nyaman dibaca 45-75.
+            maxWidth: '560px',
             boxSizing: 'border-box',
             flex: '0 0 auto',
             minHeight: '9vh',
@@ -1620,11 +1838,13 @@ export default function SayItPage() {
             WebkitOverflowScrolling: 'touch',
             display: 'flex',
             padding: '14px 18px',
-            backgroundColor: 'var(--jingga, #f97316)',
+            backgroundColor: JINGGA_TEKS,
             borderRadius: '16px',
             boxShadow: '0 4px 20px rgba(249,115,22,0.2)'
           }}>
-            <h2 style={{ width: '100%', margin: 'auto 0', fontSize: '15px', fontWeight: '700', textAlign: 'center', color: 'white', lineHeight: '1.5', overflowWrap: 'anywhere' }}>
+            {/* 18px, bukan 15px: ini isi utama layar hasil, tetapi dulu justru
+                teks terkecil di halaman dan di bawah ambang 16px untuk teks isi. */}
+            <h2 style={{ width: '100%', margin: 'auto 0', fontSize: '18px', fontWeight: '700', textAlign: 'center', color: 'white', lineHeight: '1.5', overflowWrap: 'anywhere' }}>
               {resultText}
             </h2>
           </div>
@@ -1638,7 +1858,7 @@ export default function SayItPage() {
               sehingga aplikasinya tidak pernah menutup. Terbukti saat diuji. */}
           <div
             onClick={(e) => e.stopPropagation()}
-            style={{ width: '75%', display: 'flex', gap: '12px', marginTop: '20px', flex: '0 0 auto' }}
+            style={{ width: '75%', maxWidth: '560px', display: 'flex', gap: '12px', marginTop: '20px', flex: '0 0 auto' }}
           >
             <button 
               className="btn-icon"
@@ -1652,35 +1872,38 @@ export default function SayItPage() {
                 const j = jawabanRef.current;
                 if (j) ucapkanJawaban(j.audio, j.teks, { lalu: 'LISTENING_MENU' });
               }}
-              aria-label="Ulangi Pembacaan"
+              aria-label="Ulangi pembacaan"
             >
-              <svg fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" strokeLinecap="round" strokeLinejoin="round">
+              <svg aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" strokeLinecap="round" strokeLinejoin="round">
                 <path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8"/>
                 <path d="M21 3v5h-5"/>
               </svg>
+              <span className="label">Ulangi</span>
             </button>
 
             <button 
               className="btn-icon"
               onClick={() => { hentikanSuara(); pindah('INIT'); }}
-              aria-label="Foto Lagi"
+              aria-label="Foto lagi"
             >
-              <svg fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" strokeLinecap="round" strokeLinejoin="round">
+              <svg aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" strokeLinecap="round" strokeLinejoin="round">
                 <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/>
                 <circle cx="12" cy="13" r="4"/>
               </svg>
+              <span className="label">Foto lagi</span>
             </button>
 
             <button 
               className="btn-icon"
               onClick={keluar}
-              aria-label="Keluar Aplikasi"
+              aria-label="Keluar aplikasi"
             >
-              <svg fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" strokeLinecap="round" strokeLinejoin="round">
+              <svg aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" strokeLinecap="round" strokeLinejoin="round">
                 <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/>
                 <polyline points="16 17 21 12 16 7"/>
                 <line x1="21" y1="12" x2="9" y2="12"/>
               </svg>
+              <span className="label">Keluar</span>
             </button>
           </div>
         </div>
@@ -1712,14 +1935,14 @@ export default function SayItPage() {
       >
         {/* Kartu jingga, sama persis dengan kartu jawaban di layar hasil */}
         <div style={{
-          width: '75%', boxSizing: 'border-box',
+          width: '75%', maxWidth: '560px', boxSizing: 'border-box',
           padding: '18px 20px',
-          backgroundColor: 'var(--jingga, #f97316)',
+          backgroundColor: JINGGA_TEKS,
           borderRadius: '16px',
           boxShadow: '0 4px 20px rgba(249,115,22,0.2)',
         }}>
           <h2 style={{
-            margin: 0, fontSize: '15px', fontWeight: 700, lineHeight: 1.5,
+            margin: 0, fontSize: '18px', fontWeight: 700, lineHeight: 1.5,
             textAlign: 'center', color: 'white',
           }}>
             Terima kasih sudah memakai SayIt.
@@ -1727,18 +1950,19 @@ export default function SayItPage() {
         </div>
 
         <p style={{
-          width: '75%', margin: '14px 0 0', fontSize: '13px', lineHeight: 1.5,
+          width: '75%', maxWidth: '560px', margin: '14px 0 0', fontSize: '14px', lineHeight: 1.5,
           textAlign: 'center', color: '#6b7280',
         }}>
-          Aplikasi sudah ditutup. Kamu bisa menutup tab ini.
+          Sesi selesai. Tutup tab ini, atau ketuk Mulai lagi.
         </p>
 
-        {/* Satu tombol, selebar kartu, tinggi 52 px sama dengan .btn-icon di
-            layar hasil - jadi letak jempol tidak berpindah antar layar. */}
+        {/* Satu tombol, selebar kartu, setinggi .btn-icon di layar hasil - jadi
+            letak jempol tidak berpindah antar layar. Ikon dan teksnya sejajar,
+            bukan bertumpuk seperti tiga tombol itu, karena di sini ada ruang. */}
         <button
           className="btn-icon"
           onClick={() => { aktifRef.current = performance.now(); pindah('INIT'); }}
-          style={{ width: '75%', flex: '0 0 auto', marginTop: '24px', gap: '10px', fontSize: '16px', fontWeight: 700 }}
+          style={{ width: '75%', maxWidth: '560px', flex: '0 0 auto', marginTop: '24px', flexDirection: 'row', gap: '10px', fontSize: '16px', fontWeight: 700 }}
         >
           <svg fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
             <path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8"/>
