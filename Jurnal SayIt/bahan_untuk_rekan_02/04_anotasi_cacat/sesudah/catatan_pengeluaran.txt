@@ -1,0 +1,39 @@
+FOTO DI FOLDER INI SENGAJA DIKELUARKAN DARI DATASET
+===================================================
+Dikeluarkan 9 November 2026.
+
+5000_dipegang_ (3).jpeg
+-----------------------
+Anotasinya CACAT: berkas labelnya ternyata salinan identik byte-per-byte
+dari label foto tetangganya, 5000_dipegang_ (2).txt.
+
+    2 0.499893 0.485510 0.998700 0.708150
+
+Kotak itu menutupi 99,87% lebar bingkai dan 70,7% luasnya - mencakup
+tangan, meja, laptop, dan orang di latar. Sementara fotonya sendiri
+memuat lebih dari satu objek uang (satu lembar Rp5.000 dipegang, dan
+tumpukan Rp20.000 di meja yang jumlah lembarnya tidak bisa dihitung).
+
+Melabeli ulang berarti MENEBAK jumlah lembar. Itu persis kesalahan yang
+dulu membuat dataset Roboflow tidak bisa dipakai. Jadi fotonya
+dikeluarkan, bukan dilabeli ulang.
+
+KENAPA FOTONYA IKUT DIPINDAH, BUKAN HANYA BERKAS .txt
+-----------------------------------------------------
+Menghapus berkas .txt saja SUDAH PERNAH DICOBA pada 23 Oktober 2026 dan
+GAGAL: berkas itu tersalin balik dari Google Drive dan ikut melatih serta
+menguji model v2 tanpa ketahuan. Memindahkan gambarnya keluar folder
+test/images membuat sinkronisasi Drive tidak bisa menghidupkannya lagi.
+
+Notebook memindai hanya root/{train,valid,val,test}/images dan tidak
+rekursif, jadi folder ini aman diabaikan.
+
+JANGAN taruh berkas .txt kosong untuk foto tanpa label. Dalam YOLO label
+kosong berarti "tidak ada uang di gambar ini", dan itu pernah merusak
+latihan k-fold pertama (7 Oktober 2026).
+
+SALINAN BUKTINYA
+----------------
+Label cacat dan gambar berkotaknya tersimpan di
+  Jurnal SayIt/bahan_untuk_rekan_02/04_anotasi_cacat/sebelum/
+dan di dalam 03_label_evaluasi.zip.
