@@ -172,10 +172,9 @@ Sudah ada: 35 foto uji uang sendiri di `data/uji_sendiri/` (1000 2, 2000 4, 5000
 lebar bingkai. Menghapus `.txt` saja sudah dicoba 23-10 dan GAGAL karena tersalin balik
 dari Drive, jadi kali ini gambarnya ikut dipindah; `image_files()` tidak rekursif sehingga
 folder itu aman diabaikan. **Wajib dihapus juga di Google Drive sebelum Colab dijalankan.**
-Angka **90,1% masih dihitung DENGAN foto itu di dalamnya** (73/8/0 dari 81). Batasnya pasti,
-bukan rentang: dikeluarkan dari evaluasi 72/8/0 dari 80 = 90,0%; dipaksa salah 72/9/0 = 88,9%.
-Ketiganya di atas target 85%. Setelah latih ulang, datasetnya 80 foto sehingga angkanya
-**tidak lagi sebanding langsung** dengan 90,1%.
+Angka 90,1% dihitung DENGAN foto itu di dalamnya (73/8/0 dari 81); dasar sebandingnya
+72/8/0 dari 80 = 90,0%. **Latih ulang k-fold v3 pada 80 foto SUDAH dijalankan 10-11
+dan memberi 68/11/1 = 85,0%** (ambang 0,30) - lihat blok akurasi uang di bawah.
 Tambahan 23-10 (+33 foto) sengaja **diarahkan ke tiga kelas terlemah k-fold**
 (5000 0,29 / 2000 0,50 / 100000 0,50), bukan merata: 2000 8->21, 5000 7->20, 100000 6->13.
 1000 (hanya 4 kotak) kini kelas terlemah berikutnya kalau hasilnya tetap buruk.
@@ -312,7 +311,7 @@ Catatan membaca laporan: 457 "dangling-endpoint edge" pada diagnostik BUKAN koru
 |---|---|---|---|
 | Akurasi kedaluwarsa | **81%** (13 benar / 1 salah / 2 diam) | >= 70% | **TERCAPAI** |
 | CER dokumen | **14,89%** (31-10, koreksi kemiringan baris) | <= 15% | **TERCAPAI** |
-| Akurasi uang (total diucapkan) | **90,1%** (73 benar / 8 salah / 0 diam, k-fold v2, 81 foto, ambang 0,30) | >= 85% | **TERCAPAI** |
+| Akurasi uang (total diucapkan) | **85,0%** (68 benar / 11 salah / 1 diam, k-fold v3, 80 foto bersih, ambang 0,30); 86,25% pada ambang 0,25 | >= 85% | **TERCAPAI, tepat di garis** |
 | Latensi uang / kendali | 1,4 s / 1,3 s | <= 8 s | **LOLOS** |
 | Latensi dokumen / kedaluwarsa | 11,5 s / 11,4 s | <= 8 s | **penyimpangan diterima** |
 
@@ -342,16 +341,33 @@ mesin OCR dipisah per modul - dokumen EasyOCR, kedaluwarsa PaddleOCR + `mobile_d
 `expiry.preprocess_chain: hanya_resize` (resize WAJIB ada, ia pengendali latensi);
 `resize.max_side: 1600`; `rotate_retry: [180, 90, 270]`; `zone_score_min: 0.40`.
 
-**AKURASI UANG 90,1% - TARGET PRD TERCAPAI** (73 benar / 8 salah / 0 diam dari 81 foto,
-k-fold v2, ambang 0,30). Bobot `money_kfold_v2_final` **sudah dipasang** 28-10
-(MD5 `bc09a6fc2c9fedbb38c39aa8aba44672`; model lama di `models/best_money_SEBELUM_v2.pt`).
-Riwayat: 65,7% -> 68,8% -> 84,0% -> **90,1%**. Lompatan terakhir BUKAN dari model
-melainkan dari memperbaiki ALAT UKURNYA - evaluasi notebook tidak memakai
-`relative_score_min`. Kelima kesalahan "1 lembar lawan 2" hilang seluruhnya.
-**Delapan kesalahan tersisa semuanya 1 lembar dijawab 1 lembar** (murni salah kenal
-kelas), jadi pasca-pemrosesan sudah habis tuasnya. Terlemah: **1000 (3/4), 10000 (8/10),
-50000 (5/6), 2000 (16/19)**; 100000 dan 20000 sempurna.
-`score_min` tetap **0,30**: 0,15-0,30 identik (73/8/0), 0,35 memberi 72/7/2.
+**AKURASI UANG: 85,0% pada k-fold v3, dataset bersih 80 foto** (68 benar / 11 salah /
+1 diam, ambang 0,30). Target PRD >= 85% tercapai, tetapi **tepat di garisnya**.
+Sapuan ambang v3: 0,15 / 0,20 / 0,25 seluruhnya **69/11/0 = 86,25%**; 0,30 dan 0,35
+68/11/1; 0,40 67/11/2; 0,50 64/9/7. Lampiran di `docs/jurnal_bahan/v3/`.
+Riwayat: 65,7% -> 68,8% -> 84,0% -> 90,1% (v2, 81 foto) -> **85,0% (v3, 80 foto bersih)**.
+
+**Penurunan 90,0% -> 85,0% itu TIDAK boleh dibaca sebagai kemunduran model.** Mengeluarkan
+satu foto cacat mengubah pembagian kelima lipatan sepenuhnya, jadi kedua angka diukur pada
+partisi berbeda. Dengan n=80 dan ~10 kesalahan, selisih 5 poin ada di dalam variasi
+antar-run - artinya 90,1% mungkin ujung atas yang beruntung, bukan titik tengah.
+**Laporkan akurasi uang sebagai rentang 85-90%, bukan satu angka presisi.** Itu temuan,
+bukan kegagalan, dan sekaligus jawaban terhadap kritik "angkanya berdiri di atas anotasi lama".
+
+Kesebelas kesalahan v3: **sembilan salah kenal kelas satu lembar** dan **dua salah hitung
+lembar** (01241 2000->4000, 01210 10000->30000). Dua yang terakhir BARU - v2 tidak punya
+satu pun. Kalau bertambah, kesimpulan 28-10 bahwa "tuas pasca-pemrosesan sudah habis"
+perlu ditinjau ulang. Terlemah per proporsi: **1000 (3/4, hanya 4 kotak latih),
+10000 (7/10), 2000 (16/20)**; **100000 sempurna 13/13**.
+
+Bobot yang DIPASANG di `models/best_money.pt` masih **v2** (MD5
+`bc09a6fc2c9fedbb38c39aa8aba44672`; model lama di `models/best_money_SEBELUM_v2.pt`).
+`money_kfold_v3_final/weights/best.pt` sudah ada di Drive (6.515.946 bita, optimizer
+dibuang = latihan selesai normal) tetapi **belum diunduh dan belum dipasang** - keputusan
+pengguna. Angka laporan dan model yang dipakai sebaiknya dari dataset yang sama;
+ketidakcocokan latih-pakai adalah persis jebakan CLAHE 28-10.
+`score_min` tetap **0,30** sampai diputuskan lain; sapuan v3 menunjukkan **0,25 lebih baik
+di dua sisi sekaligus** (+1 benar, diam 1 -> 0, salah tetap 11).
 
 **CLAHE SUDAH DIBUANG dari rangkaian `uang` (28-10): `[resize, clahe]` -> `[resize]`.**
 Sebabnya ketidakcocokan latih-pakai - notebook melatih pada gambar ASLI, aplikasi dulu
