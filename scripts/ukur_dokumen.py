@@ -163,6 +163,14 @@ def main() -> int:
     ap.add_argument("--rinci", action="store_true", help="tampilkan teks hasil OCR")
     ap.add_argument("--mesin", choices=("easyocr", "paddleocr"), default=None,
                     help="timpa vision.document.engine untuk pengukuran ini saja")
+    # Biaya PaddleOCR pada dokumen padat teks ada di tahap PENGENALAN per baris
+    # (41,8 detik/halaman, 02-10), bukan di deteksi. Kedua tuas di bawah menyerang
+    # tahap itu dan belum pernah diukur; keduanya ada di config tetapi mati bawaan.
+    ap.add_argument("--rec-batch", type=int, default=None,
+                    help="timpa paddle.text_recognition_batch_size (mis. 8 atau 16)")
+    ap.add_argument("--rec-model", default=None,
+                    help="timpa paddle.text_recognition_model_name "
+                         "(mis. PP-OCRv5_mobile_rec; butuh internet saat pertama)")
     ap.add_argument("--per-langkah", action="store_true",
                     help="ablasi satu langkah dibuang bergantian (lambat: satu OCR per langkah per foto)")
     args = ap.parse_args()
@@ -184,6 +192,13 @@ def main() -> int:
     if args.mesin:
         cfg["vision"]["document"]["engine"] = args.mesin
         print(f"Mesin OCR ditimpa menjadi {args.mesin!r} untuk pengukuran ini.")
+    paddle = cfg["vision"]["document"].setdefault("paddle", {})
+    if args.rec_batch is not None:
+        paddle["text_recognition_batch_size"] = args.rec_batch
+        print(f"text_recognition_batch_size ditimpa menjadi {args.rec_batch}.")
+    if args.rec_model is not None:
+        paddle["text_recognition_model_name"] = args.rec_model
+        print(f"text_recognition_model_name ditimpa menjadi {args.rec_model!r}.")
     ocr = DocumentReader(cfg)
     ocr.load()
 
