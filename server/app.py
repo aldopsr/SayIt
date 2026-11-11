@@ -9,8 +9,11 @@ Jalankan lokal:  uvicorn server.app:app --reload
 from __future__ import annotations
 
 import base64
+import contextlib
+import functools
 import io
 import threading
+import time
 
 import numpy as np
 import soundfile as sf
@@ -35,7 +38,67 @@ status: dict[str, str] = {}
 # Modelnya 2,5 GB dan butuh 10 detik dimuat, jadi satu instans per pengguna mustahil.
 # Konsekuensinya permintaan diantre, bukan diparalelkan. Kalau nanti perlu paralel:
 # pisahkan model (dibagi) dari state percakapan (per sesi).
+#
+# PENTING: endpoint berat sengaja `def`, BUKAN `async def`. Isinya kerja blocking
+# (OCR, YOLO, Whisper), dan `async def` menjalankannya di event loop sehingga
+# SELURUH server membeku selama pekerjaan itu. Terukur 11-11-2026: saat satu
+# dokumen dibaca, `GET /sehat` yang hanya mengembalikan dict memakan 6,57 detik,
+# dan permintaan kedua bahkan belum DITERIMA - sehingga klip "server_sibuk"
+# mustahil terkirim dan kunci di bawah ini tidak pernah berebut. Dengan `def`,
+# Starlette memindahkannya ke threadpool: event loop tetap bebas melayani
+# /sehat dan /klip, permintaan benar-benar bersamaan, dan kunci ini bekerja.
 kunci = threading.Lock()
+
+
+class Sibuk(Exception):
+    """Antrean penuh: permintaan lain sedang dilayani lebih lama dari batas tunggu."""
+
+
+def jaga_antrean(fn):
+    """Ubah `Sibuk` menjadi jawaban berbunyi, sehingga `antre()` boleh dipakai
+    di mana pun di dalam endpoint tanpa tiap blok membungkus try/except sendiri."""
+    @functools.wraps(fn)
+    def bungkus(*a, **kw):
+        try:
+            return fn(*a, **kw)
+        except Sibuk:
+            return _galat("server_sibuk")
+    return bungkus
+
+
+@contextlib.contextmanager
+def antre():
+    """Kunci dengan batas tunggu, supaya menunggu TIDAK pernah berupa diam.
+
+    `with kunci` tanpa batas membuat permintaan kedua menunggu tanpa kabar.
+    Bagi pengguna tunanetra diam 20 detik tidak bisa dibedakan dari server mati,
+    dan aturan aksesibilitas proyek mewajibkan tiap peringatan berbunyi serta
+    menyebut tindakan berikutnya. Jadi di atas batas tunggu kita menjawab
+    klip "server_sibuk", bukan membiarkan pengguna menebak.
+    """
+    if not kunci.acquire(timeout=cfg["server"]["antre_timeout_s"]):
+        raise Sibuk
+    try:
+        yield
+    finally:
+        kunci.release()
+
+
+def _hangatkan(penyuara_, kunci_, coba: int, jeda_s: float, tidur=time.sleep) -> bool:
+    """Ulangi warmup sampai berhasil. True bila sesi TTS akhirnya terbangun.
+
+    Kuncinya diambil saat mencoba: kalau tidak, pemanasan bisa berjalan bersamaan
+    dengan permintaan pengguna dan keduanya membangun sesi edge-tts sendiri.
+    Menahan kunci selama percobaan tidak merugikan - permintaan yang terhalang
+    justru akan membayar 9 detik itu sendiri bila pemanasannya dilewati.
+    """
+    for sisa in range(coba, 0, -1):
+        with kunci_:
+            if penyuara_.warmup():
+                return True
+        if sisa > 1:
+            tidur(jeda_s)
+    return False
 
 app = FastAPI(title="SayIt")
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
@@ -64,7 +127,24 @@ async def klip_wajib_divalidasi(request, call_next):
 @app.on_event("startup")
 def muat():
     status.update(pipeline.load())
-    penyuara.warmup()
+    # Pemanasan dibayar di sini, bukan oleh pengguna. Kalau gagal - start tanpa
+    # internet adalah penyebab yang nyata - dicoba lagi di latar, karena tanpa itu
+    # 9 detik pembangunan sesi edge-tts jatuh tepat di pembacaan dokumen pertama.
+    # Statusnya masuk /sehat supaya kegagalannya TERLIHAT, bukan diam-diam.
+    if penyuara.warmup():
+        status["tts"] = "siap"
+        return
+    status["tts"] = "belum hangat, mencoba lagi di latar"
+    threading.Thread(target=_hangatkan_tts, daemon=True).start()
+
+
+def _hangatkan_tts():
+    srv = cfg["server"]
+    if _hangatkan(penyuara, kunci, srv["warmup_retry"], srv["warmup_retry_delay_s"]):
+        status["tts"] = "siap (setelah dicoba ulang)"
+    else:
+        status["tts"] = ("gagal dihangatkan, cek internet; "
+                         "pembacaan dokumen pertama akan lambat sekitar 9 detik")
 
 
 def _wav_b64(audio: np.ndarray, sr: int) -> str:
@@ -95,21 +175,24 @@ class _Berkas:
 
 
 @app.post("/foto")
-async def unggah_foto(foto: UploadFile = File(...)):
+@jaga_antrean
+def unggah_foto(foto: UploadFile = File(...)):
     """Langkah 3-5 alur: terima foto, periksa mutunya, lalu minta pertanyaan.
 
     Dipisah dari /tanya karena pengguna memotret dulu dan bertanya kemudian;
     menggabungkannya memaksa keduanya terjadi dalam satu gestur.
     """
-    with kunci:
-        giliran = pipeline.set_photo(foto_dari_berkas(_Berkas(await foto.read())))
+    data = foto.file.read()         # dibaca sebelum mengantre: jangan tahan kunci saat I/O
+    with antre():
+        giliran = pipeline.set_photo(foto_dari_berkas(_Berkas(data)))
         audio, sr = penyuara.render(giliran.utterance)
     return {"teks": giliran.text, "intent": giliran.intent, "alasan": giliran.reason,
             "diterima": giliran.diterima, "audio": _wav_b64(audio, sr)}
 
 
 @app.post("/berkas")
-async def unggah_berkas(berkas: UploadFile = File(...)):
+@jaga_antrean
+def unggah_berkas(berkas: UploadFile = File(...)):
     """Unggah gambar, PDF, atau DOCX dari penyimpanan.
 
     PDF dan DOCX yang punya lapisan teks tidak di-OCR: teksnya sudah akurat,
@@ -120,9 +203,9 @@ async def unggah_berkas(berkas: UploadFile = File(...)):
     tipe = bk.jenis(nama)
     if not tipe:
         return _galat("berkas_tidak_didukung")
-    data = await berkas.read()
+    data = berkas.file.read()
 
-    with kunci:
+    with antre():
         try:
             if tipe == "gambar":
                 giliran = pipeline.set_photo(foto_dari_berkas(_Berkas(data)))
@@ -173,7 +256,8 @@ def klip_teks():
 
 
 @app.post("/tanya")
-async def tanya(
+@jaga_antrean
+def tanya(
     foto: UploadFile | None = File(None),
     suara: UploadFile | None = File(None),
     teks: str | None = Form(None),
@@ -182,9 +266,14 @@ async def tanya(
     if not suara and not teks:
         return {"error": "kirim `suara` atau `teks`"}
 
-    with kunci:
-        if foto is not None:
-            giliran_foto = pipeline.set_photo(foto_dari_berkas(_Berkas(await foto.read())))
+    # Unggahan dibaca sebelum mengantre: menahan kunci selama I/O jaringan
+    # memperpanjang antrean orang lain tanpa alasan.
+    data_foto = foto.file.read() if foto is not None else None
+    data_suara = suara.file.read() if suara else None
+
+    with antre():
+        if data_foto is not None:
+            giliran_foto = pipeline.set_photo(foto_dari_berkas(_Berkas(data_foto)))
             if not giliran_foto.diterima:              # ditolak quality gate
                 audio, sr = penyuara.render(giliran_foto.utterance)
                 return {"teks": giliran_foto.text, "intent": giliran_foto.intent,
@@ -192,7 +281,7 @@ async def tanya(
 
         if suara:
             sr_in = cfg["audio"]["sample_rate"]
-            giliran = pipeline.listen(suara_dari_berkas(_Berkas(await suara.read()), sr_in), sr=sr_in)
+            giliran = pipeline.listen(suara_dari_berkas(_Berkas(data_suara), sr_in), sr=sr_in)
         else:
             giliran = pipeline.ask(teks)
 

@@ -407,3 +407,17 @@ pipeline:
   quality_gate_on_photo: true   # periksa foto saat diambil, bukan saat pertanyaan datang,
                                 # agar pengguna bisa langsung foto ulang
   slow_intents: [BACA, KEDALUWARSA]   # intent yang perlu penanda suara "sedang saya proses"
+
+# API web (server/app.py). Keduanya menegakkan aturan aksesibilitas proyek:
+# pengguna tunanetra tidak punya petunjuk visual, jadi menunggu harus DIBUNYIKAN.
+server:
+  # Batas tunggu antrean. Satu Pipeline dipakai bersama, jadi permintaan kedua
+  # menunggu. Di bawah batas ini ia menunggu diam-diam (wajar, tidak terasa);
+  # di atasnya ia dijawab klip "server_sibuk" supaya tidak ada diam tanpa sebab.
+  # 1,5 detik dipilih supaya intent cepat (uang 1,4 s) tetap lolos mengantre.
+  antre_timeout_s: 1.5
+  # Pemanasan edge-tts: sintesis pertama ~9 detik karena membangun sesi. Bila
+  # server start tanpa internet, warmup gagal dan 9 detik itu jatuh tepat di
+  # pembacaan dokumen pertama pengguna. Jadi dicoba lagi di latar.
+  warmup_retry: 10
+  warmup_retry_delay_s: 30

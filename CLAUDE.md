@@ -211,7 +211,17 @@ server/   FastAPI membungkus Pipeline                      -> Hugging Face Space
 - `next.config.mjs` me-rewrite `/api/*` ke `API_ORIGIN`, jadi frontend dan backend
   satu origin - **CORS tidak dibutuhkan sama sekali**, dan jalurnya sama di panel uji maupun produksi.
 - Satu `Pipeline` dibagi di belakang `threading.Lock`: modelnya 2,5 GB, jadi permintaan
-  **diantre, bukan diparalelkan**.
+  **diantre, bukan diparalelkan**. Antrean yang lebih lama dari `server.antre_timeout_s`
+  (1,5 detik) dijawab klip **`server_sibuk`**, bukan diam - diam tidak bisa dibedakan
+  dari server mati oleh pengguna tunanetra.
+- **Endpoint berat WAJIB `def`, bukan `async def`.** Isinya kerja blocking, dan `async def`
+  menjalankannya di event loop sehingga SELURUH server membeku: terukur 11-11, `GET /sehat`
+  memakan **6,57 detik** saat satu dokumen dibaca, dan permintaan kedua bahkan belum diterima
+  sehingga kuncinya tidak pernah berebut. Dengan `def`, Starlette memakai threadpool:
+  `/sehat` 0,21 detik. Dikunci tes `test_endpoint_berat_sinkron_bukan_async`.
+- `warmup()` TTS yang gagal **dicoba ulang di latar** (10x, jeda 30 detik) dan statusnya
+  masuk `/sehat` sebagai kunci `tts`. Tanpa itu 9 detik edge-tts jatuh di pembacaan
+  dokumen pertama pengguna, dan kegagalannya tidak terlihat sama sekali.
 - `MediaRecorder` menghasilkan webm/opus yang **tidak terbaca `soundfile`**. Didecode di
   peramban lewat `decodeAudioData` lalu dikemas ulang jadi WAV 16-bit (~25 baris, tanpa dependensi).
 - Uji asap: `python server\smoke.py` (bukan pytest - memuat model sungguhan).

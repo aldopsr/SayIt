@@ -82,6 +82,11 @@ FIXED_PHRASES: dict[str, str] = {
     "berkas_rusak": "Berkas itu tidak bisa dibaca atau rusak. Coba pilih berkas yang lain.",
     "berkas_lain": ("Kamu bisa memilih berkas lain yang lebih jelas, "
                     "atau memotret langsung dengan menyentuh layar."),
+    # Antrean server. Satu Pipeline dipakai bersama, jadi permintaan kedua menunggu.
+    # Tanpa klip ini pengguna tunanetra hanya mendengar DIAM, dan diam tidak bisa
+    # dibedakan dari server mati. Kalimatnya menyebut tindakan berikutnya.
+    "server_sibuk": ("Ada permintaan lain yang sedang saya proses. "
+                     "Tunggu sebentar, lalu tanyakan lagi."),
     # Kendali tombol lewat suara. Pengguna tunanetra tidak melihat tombolnya,
     # jadi hasil tiap tindakan harus diucapkan, bukan hanya terjadi.
     "kamera_diputar": "Baik, kameranya saya putar.",
