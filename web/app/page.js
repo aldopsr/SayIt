@@ -460,11 +460,6 @@ export default function SayItPage() {
   const [appState, setAppState] = useState('INIT');
   const [srText, setSrText] = useState('');
   const [resultText, setResultText] = useState('');
-  // Apa yang DIDENGAR Whisper. Dulu hanya masuk console.info, yang tidak terjangkau
-  // di HP - sehingga tiap salah intent harus ditebak. Ditampilkan kecil di bawah
-  // kartu, dan aria-hidden: pendamping yang melihat layar butuh ini, pengguna
-  // tunanetra tidak perlu mendengar "didengar: ..." setelah tiap jawaban.
-  const [didengar, setDidengar] = useState('');
   const [capturedImage, setCapturedImage] = useState(null);
   const [isSpeaking, setIsSpeaking] = useState(false); // sistem sedang berbicara (TTS)
   const [facingMode, setFacingMode] = useState('user'); // 'user' = kamera depan, 'environment' = kamera belakang
@@ -1262,7 +1257,6 @@ export default function SayItPage() {
     // Apa yang DIDENGAR sistem, bukan apa yang kita kira kita ucapkan. Tanpa ini
     // tiap bug suara harus ditebak; dengan ini cukup buka konsol di HP.
     if (j.transcript) console.info('[SayIt] didengar:', JSON.stringify(j.transcript), '-> intent', j.intent);
-    setDidengar(j.transcript ? `${j.transcript} → ${j.intent || '?'}` : '');
     if (j.error) { ucapkanGalat(j); pindah('HASIL_SUNYI'); return; }
 
     switch (j.intent) {
@@ -1874,18 +1868,6 @@ export default function SayItPage() {
               {resultText}
             </h2>
           </div>
-
-          {/* Apa yang didengar sistem, lalu intent yang dipilih. Alat diagnosis:
-              tanpa ini salah intent tidak bisa dibedakan dari salah dengar. */}
-          {didengar && (
-            <p aria-hidden="true" style={{
-              width: '75%', maxWidth: '560px', flex: '0 0 auto',
-              margin: '8px 0 0', fontSize: '12px', lineHeight: 1.4,
-              textAlign: 'center', color: '#78716c', overflowWrap: 'anywhere'
-            }}>
-              didengar: {didengar}
-            </p>
-          )}
 
           {/* 4. TIGA TOMBOL ICON */}
           {/* stopPropagation WAJIB di sini. Latar layar hasil sengaja dibiarkan
