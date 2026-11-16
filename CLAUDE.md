@@ -150,9 +150,15 @@ jalur zona dan rotasi). Hasilnya: **PaddleOCR menang jauh.**
 | detik/foto | 3,5 | 24,9 |
 
 Tiga konsekuensi yang harus diingat:
-1. **Dengan PaddleOCR, `require_marker_for_compact` harus DINYALAKAN kembali** - kebalikan dari keputusan
-   30-09. Pelonggaran di PaddleOCR memberi +1 benar tetapi +1 salah (miesedap dijawab dari kode produksi
-   `200122`). Saklar itu milik mesin OCR, bukan keputusan global.
+1. ~~**Dengan PaddleOCR, `require_marker_for_compact` harus DINYALAKAN kembali**~~
+   **DIBATALKAN 16-11 - DIUKUR DI PIPELINE PENUH DAN HASILNYA JAUH LEBIH BURUK.** Saran ini
+   berdiri di atas ablasi mesin TERISOLASI (800 px, jalur zona dan rotasi dimatikan), dan di
+   pipeline sungguhan ia salah: 16 kemasan, `false` 12 BENAR / 3 SALAH / 1 DIAM = **75%** lawan
+   `true` 9 / 2 / 5 = **56%**. Menyalakannya menukar **3 jawaban benar** demi 1 jawaban salah
+   (ajinomoto, miesedap, dan merica jadi DIAM), dan latensi median naik 10,5 -> 19,1 detik karena
+   tiap DIAM memicu percobaan rotasi. `require_marker_for_compact` tetap **`false`**.
+   Pelajaran lama yang terulang: temuan dari uji mesin terisolasi TIDAK berpindah ke pipeline
+   penuh - sama seperti pola `dmy_spasi` yang +1 benar di mesin tetapi nol efek di pipeline.
 2. Latensi PaddleOCR 7x EasyOCR, dan oneDNN **tidak bisa dinyalakan** di paddlepaddle 3.3.1. Belum diuji:
    model `PP-OCRv5_mobile_det` (butuh internet) - itu tuas latensi yang paling menjanjikan.
 3. Menjalankan kedua mesin dalam satu proses **crash native**. Pakai `--mesin` satu per satu, dan `--sisi 800`
@@ -448,9 +454,20 @@ Transcript tetap dikirim server dan tetap masuk `console.info`.
   sudah dikunci modul ini - tanggal keliru lebih berbahaya daripada diam. Dua salah baru:
   `mentega` 2027-03-31 (harap 03-11), `chees` 2026-05-21 (harap 2027-03-21). `ovaltine`
   2027-09-30 tetap salah seperti 02-10.
-- **BELUM DIDIAGNOSIS. Jangan menebak sebabnya.** Kandidat: commit `25853d3` (model pengenalan
-  dapat diatur config), atau berkas model PaddleOCR di folder `.paddlex` pengguna yang berubah
-  DI LUAR repo.
+- **DIDIAGNOSIS SEBAGIAN 16-11. Ketiga jawaban salah adalah kegagalan PARSER, bukan OCR** -
+  OCR membaca tanggalnya dengan benar di ketiganya, penafsirannya yang keliru:
+  - `chees`: teks `'... 210526 MAR ... /Production Code BestBefore Kode Produksi/'`. Parser
+    menjawab dari **nomor produksi** `210526`, padahal tanggalnya `MAR` tepat di sebelahnya.
+  - `mentega`: teks `'... MAR 27 NS 02:31 11.'`. Cetakan aslinya "02:31 11 MAR 27", tetapi
+    **urutan kotak OCR mengacaukannya** sehingga `11` terlempar ke belakang `MAR 27`, lalu
+    pola bulan-saja menang. Ini masalah URUTAN BACAAN, sama akar dengan foto buku.
+  - `ovaltine`: `'LOT:2 09.27/L3A'` -> 2027-09-30, meleset tiga hari. Bukan temuan baru.
+- **Sebab turunnya 81% -> 75% TETAP TIDAK DAPAT DITELUSURI, dan sekarang kita tahu kenapa:
+  riwayat Git mulai 11 Oktober, sedangkan 81% diukur 2 Oktober.** Sembilan hari itu tidak ada
+  di Git, jadi bisect tidak mungkin dan 81% tidak bisa direproduksi. **Yang masuk jurnal
+  adalah 75% dengan tanggal pengukurannya**, bukan 81%.
+- Kandidat yang SUDAH DIELIMINASI: `require_marker_for_compact` (dinyalakan justru memberi 56%,
+  lihat ralat di atas) dan kode parser (tidak tersentuh sejak commit pertama).
 - **Angka 81% mungkin tidak dapat direproduksi dari repo saja**: pengenal `PP-OCRv6_medium_rec`
   tersimpan di `~/.paddlex/official_models/`, bukan di Git. Terpasang sekarang **paddleocr 3.7.0,
   paddlepaddle 3.3.1** (catatan lama menulis "paddleocr 3.3.1" - yang 3.3.1 itu paddlepaddle).
@@ -468,6 +485,12 @@ Sebab yang paling mungkin: jalur lama yang gagal membaca potongan langsung mundu
 gambar, dan itu sering BERHASIL dan murah (ajinomoto 30-09); jalur baru membakar tiga rotasi
 potongan lebih dulu. **Tuas yang masih masuk akal dan BELUM diuji: URUTAN eskalasinya** -
 `potongan tegak -> seluruh gambar -> rotasi potongan`.
+
+**PERINGATAN soal mengutip LATENSI kedaluwarsa:** kondisi yang sama persis
+(`rotate_crop=false`) memberi median **6,54 detik** di satu sesi dan **10,46 detik** di sesi
+lain pada hari yang sama - simpangan 60% dari beban laptop. Yang sah dikutip adalah
+perbandingan DI DALAM satu sesi, bukan angka detiknya. Kalau jurnal menulis satu angka latensi,
+sebutkan ia median satu sesi dan berderau besar.
 
 **Konfigurasi terkunci (jangan diubah tanpa mengukur ulang):**
 mesin OCR dipisah per modul - dokumen EasyOCR, kedaluwarsa PaddleOCR + `mobile_det`;
