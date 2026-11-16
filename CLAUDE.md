@@ -319,7 +319,7 @@ Catatan membaca laporan: 457 "dangling-endpoint edge" pada diagnostik BUKAN koru
 
 | Metrik | Hasil | Target | |
 |---|---|---|---|
-| Akurasi kedaluwarsa | **81%** (13 benar / 1 salah / 2 diam) | >= 70% | **TERCAPAI** |
+| Akurasi kedaluwarsa | **75%** (12 benar / **3 salah** / 1 diam, diukur ulang 16-11; 81% pada 02-10) | >= 70% | **TERCAPAI, tetapi TURUN** |
 | CER dokumen | **14,89%** (31-10, koreksi kemiringan baris) | <= 15% | **TERCAPAI** |
 | Akurasi uang (total diucapkan) | **85,0%** (68 benar / 11 salah / 1 diam, k-fold v3, 80 foto bersih, ambang 0,30); 86,25% pada ambang 0,25 | >= 85% | **TERCAPAI, tepat di garis** |
 | Latensi uang / kendali | 1,4 s / 1,3 s | <= 8 s | **LOLOS** |
@@ -440,6 +440,34 @@ Catatan membaca laporan: 457 "dangling-endpoint edge" pada diagnostik BUKAN koru
 **DITOLAK pengguna 12-11: menampilkan transcript ("didengar: <teks> -> <intent>") di bawah
 kartu jawaban.** Sudah dibuat lalu di-revert atas permintaan pengguna. Jangan ditawarkan lagi.
 Transcript tetap dikirim server dan tetap masuk `console.info`.
+
+**AKURASI KEDALUWARSA TURUN 81% -> 75% (diukur ulang 16-11) - PERIKSA SEBELUM JURNAL:**
+- **12 BENAR / 3 SALAH / 1 DIAM** pada 16 kemasan, disepakati DUA instrumen (skrip ad-hoc dan
+  `scripts/ukur_kedaluwarsa.py` resmi). Catatan 02-10: 13 / 1 / 2 = 81%.
+- **Arahnya buruk: jawaban SALAH naik 1 -> 3, DIAM turun 2 -> 1.** Itu melanggar prioritas yang
+  sudah dikunci modul ini - tanggal keliru lebih berbahaya daripada diam. Dua salah baru:
+  `mentega` 2027-03-31 (harap 03-11), `chees` 2026-05-21 (harap 2027-03-21). `ovaltine`
+  2027-09-30 tetap salah seperti 02-10.
+- **BELUM DIDIAGNOSIS. Jangan menebak sebabnya.** Kandidat: commit `25853d3` (model pengenalan
+  dapat diatur config), atau berkas model PaddleOCR di folder `.paddlex` pengguna yang berubah
+  DI LUAR repo.
+- **Angka 81% mungkin tidak dapat direproduksi dari repo saja**: pengenal `PP-OCRv6_medium_rec`
+  tersimpan di `~/.paddlex/official_models/`, bukan di Git. Terpasang sekarang **paddleocr 3.7.0,
+  paddlepaddle 3.3.1** (catatan lama menulis "paddleocr 3.3.1" - yang 3.3.1 itu paddlepaddle).
+  Jurnal WAJIB menulis versi paddleocr, nama model pengenal, dan tanggal pengukuran.
+- Petunjuk arah: `mentega` dan `ovaltine` sama-sama jatuh di hari TERAKHIR bulan, yaitu bentuk
+  jawaban bulan-saja - wilayah `require_marker_for_compact` dan pola `my_spasi`. Tanpa
+  pra-pemrosesan `chees` justru BENAR dan komposisinya 12/2/2 (satu salah lebih sedikit),
+  walau ablasi resmi melaporkan "tidak berpengaruh +0%" karena akurasinya sama-sama 75%.
+
+**Memutar POTONGAN zona TERBANTAH (16-11), `expiry.rotate_crop` tetap `false`:**
+16 kemasan, dua kondisi: akurasi **identik per berkas** (12/3/1 keduanya), latensi JAUH lebih
+buruk - median 6,54 s -> 9,33 s, total 234,4 s -> 344,4 s, terburuk `tolakangin2` 91,7 s ->
+**147,3 s**, melambat di 13 dari 16 berkas. Taksiran 45 s -> 20 s **terbantah, arahnya terbalik**.
+Sebab yang paling mungkin: jalur lama yang gagal membaca potongan langsung mundur ke OCR seluruh
+gambar, dan itu sering BERHASIL dan murah (ajinomoto 30-09); jalur baru membakar tiga rotasi
+potongan lebih dulu. **Tuas yang masih masuk akal dan BELUM diuji: URUTAN eskalasinya** -
+`potongan tegak -> seluruh gambar -> rotasi potongan`.
 
 **Konfigurasi terkunci (jangan diubah tanpa mengukur ulang):**
 mesin OCR dipisah per modul - dokumen EasyOCR, kedaluwarsa PaddleOCR + `mobile_det`;
