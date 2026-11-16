@@ -64,7 +64,7 @@
 Selesai: config, `audio/io.py`, `audio/stt.py`, `audio/tts.py`, `intent/`, `response/`, skrip cache & demo,
 `vision/quality_gate.py` (PRD 8.2), `vision/preprocess.py` (PRD 8.3), `vision/money.py` (PRD 8.6),
 `vision/date_parser.py` (PRD 8.8.1), `vision/document.py` (PRD 8.7), `vision/expiry.py` (PRD 8.8), `pipeline.py` (PRD 7), `app.py` + `sayit/appkit.py` (Streamlit), `scripts/diagnosa_uang.py`, `scripts/buat_label_uang.py`, `scripts/ukur_dokumen.py`,
-`scripts/ukur_kedaluwarsa.py`, `sayit/gambar.py`, `tests/test_ukur.py`, `scripts/banding_ocr.py`, `scripts/ukur_latensi.py`, 695 tes lulus.
+`scripts/ukur_kedaluwarsa.py`, `sayit/gambar.py`, `tests/test_ukur.py`, `scripts/banding_ocr.py`, `scripts/ukur_latensi.py`, 705 tes lulus.
 `opencv-python`, `ultralytics`, dan `easyocr` terpasang dan masuk `requirements.txt`.
 
 Pra-pemrosesan: tiap langkah adalah fungsi murni `(citra, params) -> citra` di `STEPS`, dirangkai lewat
@@ -315,7 +315,7 @@ Catatan membaca laporan: 457 "dangling-endpoint edge" pada diagnostik BUKAN koru
 
 ## Titik sambung (2 Oktober 2026)
 
-695 tes lulus. Seluruh metrik PRD Bagian 11 kini sudah pernah diukur.
+705 tes lulus. Seluruh metrik PRD Bagian 11 kini sudah pernah diukur.
 
 | Metrik | Hasil | Target | |
 |---|---|---|---|
@@ -391,6 +391,32 @@ Catatan membaca laporan: 457 "dangling-endpoint edge" pada diagnostik BUKAN koru
   Memotong pita dari gambar penuh tidak menyentuh tinggi huruf, jadi tidak memecah baris,
   sementara biaya deteksi tetap turun sebanding luas. Proyeksi `r (11)` 3 pita: kata pertama
   ~4,6 s lawan 14,15 s sekarang. **Proyeksi dari angka terukur, belum diukur.**
+
+**Pembacaan per PITA 16-11 - DIBUAT, DIUKUR, DAN TIDAK MEMBELI APA PUN:**
+- Jalur produksi (`read()`, `readtext` per potongan, penyusunan global, 13 dokumen):
+
+  | pita | CER | median | total |
+  |---|---|---|---|
+  | **1 (dipakai)** | **14,89%** | **8,26 s** | 120,2 s |
+  | 2 | 14,88% | 8,66 s | 112,0 s |
+  | 3 | 15,79% | 9,95 s | 133,8 s |
+  | 4 | 15,24% | 17,16 s | 208,4 s |
+
+- **RALAT: angka prototipe (-37% total, -66% kata pertama) ARTEFAK.** Prototipe memakai
+  `detect()`+`recognize()` terpisah yang **1,8x lebih lambat** dari `readtext()` (dasarnya
+  13,58 s lawan 8,26 s pada data yang sama). Memecah jalur lambat menolong; memecah
+  `readtext` tidak. **`readtext` tidak superlinear terhadap luas gambar** - itu dugaan saya
+  yang terbantah.
+- **Sisi positif: memotong gambar TIDAK merusak urutan bacaan** (14,88% lawan 14,89%).
+  Kerusakan 3 pita pada prototipe datang dari penyusunan teks PER PITA, bukan dari
+  pemotongannya. Untuk streaming nanti: mengucapkan pita 1 lebih dulu BERARTI menyusun
+  per pita, dan di situlah harganya.
+- `bands: 1` tetap bawaan. Kode `_ocr_pita` ditahan atas keputusan pengguna sebagai
+  mekanisme yang dibutuhkan streaming, **bukan** karena ia membeli sesuatu sekarang.
+  Pita MEMILIKI kotak yang pusatnya di wilayahnya, potongan dilebihkan `band_pad_ratio`
+  4% - penyaring pusat itu yang mencegah baris batas terbaca dua kali, tanpa dedupe.
+  `build_result` tetap dipanggil SEKALI atas gabungan kotak. Flag `--pita` di
+  `scripts/ukur_dokumen.py`. Dikunci 5 tes.
 
 **Uji lapangan pertama oleh pengguna di HP lewat ngrok (12-11) - tiga temuan:**
 1. **Kemasan Indomie: tanggal TIDAK terbaca, 44,9 detik.** Zona ketemu dengan skor **0,755**

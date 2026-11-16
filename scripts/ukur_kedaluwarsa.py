@@ -58,6 +58,12 @@ def main() -> int:
     ap.add_argument("--rinci", action="store_true", help="tampilkan alasan parser")
     ap.add_argument("--mesin", choices=("easyocr", "paddleocr"), default=None,
                     help="timpa vision.document.engine untuk pengukuran ini saja")
+    # Memutar POTONGAN zona lawan memutar gambar penuh. Uji lapangan 12-11:
+    # Indomie 44,9 detik habis di rotate_retry yang mengulang deteksi zona pada
+    # gambar 3000x4000 empat kali, padahal zonanya ketemu di lintasan pertama.
+    ap.add_argument("--rotasi-potongan", dest="rotasi_potongan",
+                    action=argparse.BooleanOptionalAction, default=None,
+                    help="timpa vision.expiry.rotate_crop untuk pengukuran ini saja")
     args = ap.parse_args()
 
     folder = project_path(args.folder)
@@ -71,6 +77,9 @@ def main() -> int:
         return 1
 
     cfg = load_config()
+    if args.rotasi_potongan is not None:
+        cfg["vision"]["expiry"]["rotate_crop"] = args.rotasi_potongan
+        print(f"vision.expiry.rotate_crop ditimpa menjadi {args.rotasi_potongan}.")
     # Modul kedaluwarsa boleh memakai mesin OCR sendiri (`vision.expiry.engine`),
     # sama seperti yang dilakukan Pipeline. Tanpa ini skrip akan mengukur mesin
     # modul dokumen dan angkanya tidak mewakili perilaku aplikasi.

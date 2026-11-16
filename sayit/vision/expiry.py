@@ -212,7 +212,15 @@ class ExpiryReader:
         t_mulai = time.perf_counter()
 
         hasil = self._read_once(image, today)
-        if not hasil.found:
+        if not hasil.found and hasil.notes.get("crop_rotations_tried"):
+            # Zona SUDAH ketemu dan potongannya sudah dicoba di seluruh sudut.
+            # Memutar gambar penuh di sini hanya mengulang deteksi zona yang tadi
+            # berhasil, pada gambar 3000x4000, tiga kali lagi. Uji lapangan 12-11
+            # (Indomie, 44,9 detik): zona ketemu skor 0,755 di lintasan pertama,
+            # lalu OCR membaca sampah di keempat rotasi - yang gagal PENGENALAN
+            # CETAKAN, dan rotasi gambar penuh tidak menyentuh itu sama sekali.
+            hasil.notes["rotate_full_dilewati"] = "potongan sudah dicoba di semua sudut"
+        elif not hasil.found:
             dicoba: list[int] = []
             for derajat in self.e.get("rotate_retry") or []:
                 ulang = self._read_once(rotate_image(image, derajat), today)
@@ -259,28 +267,59 @@ class ExpiryReader:
         penuh = self._read_full(image, today, dict(catatan))
         return penuh if penuh.found else hasil
 
+    def _urai_crop(self, crop, langkah: list[str], today: date,
+                   catatan: dict, imbuhan: str = "") -> DateParseResult:
+        """OCR satu potongan lalu urai tanggalnya, termasuk ulangan tanpa binarisasi."""
+        teks, jejak = self._ocr_text(crop, langkah)
+        catatan["pass1" + imbuhan] = jejak
+        terurai = parse_expiry(teks, today, self.cfg)
+        if terurai.found:
+            return terurai
+
+        # PRD 8.8 langkah 4: binarisasi bisa menghapus cetakan tipis.
+        buang = set(self.e.get("retry_without_steps") or [])
+        langkah2 = [s for s in langkah if s not in buang]
+        if langkah2 == langkah:
+            return terurai
+        teks2, jejak2 = self._ocr_text(crop, langkah2)
+        catatan["pass2" + imbuhan] = jejak2
+        terurai2 = parse_expiry(teks2, today, self.cfg)
+        if terurai2.found or not terurai.text.strip():
+            return terurai2         # tulisan apa pun lebih berguna daripada kosong
+        return terurai
+
     def _read_zone(self, image, zona: Zone, today: date, catatan: dict) -> ExpiryResult:
+        """Baca potongan zona, dan bila gagal putar POTONGANNYA - bukan gambar penuh.
+
+        Memutar potongan lawan memutar gambar penuh adalah soal apa yang dibayar
+        ulang. Satu lintasan gambar penuh berarti deteksi zona YOLO pada gambar
+        3000x4000 lagi, lalu potong lagi, lalu OCR lagi; memutar potongan hanya
+        membayar OCR potongan yang kecil. Zona yang sudah ketemu tidak akan
+        hilang karena gambarnya diputar, jadi mendeteksinya ulang tidak membeli apa pun.
+
+        Saklar `expiry.rotate_crop` dibuat supaya perbandingannya bisa diukur
+        tanpa menyentuh kode: `false` memulihkan perilaku lama persis.
+        """
         crop = crop_with_margin(image, zona.box, float(self.e["crop_margin_ratio"]))
         catatan["crop_shape"] = tuple(crop.shape[:2])
-
         langkah = self._langkah("preprocess_chain")
-        teks, jejak = self._ocr_text(crop, langkah)
-        catatan["pass1"] = jejak
-        terurai = parse_expiry(teks, today, self.cfg)
 
-        if not terurai.found:
-            # PRD 8.8 langkah 4: binarisasi bisa menghapus cetakan tipis.
-            buang = set(self.e.get("retry_without_steps") or [])
-            langkah2 = [s for s in langkah if s not in buang]
-            if langkah2 != langkah:
-                teks2, jejak2 = self._ocr_text(crop, langkah2)
-                catatan["pass2"] = jejak2
-                terurai2 = parse_expiry(teks2, today, self.cfg)
-                if terurai2.found:
-                    terurai = terurai2
-                elif not terurai.text.strip():
-                    terurai = terurai2          # tulisan apa pun lebih berguna daripada kosong
+        terurai = self._urai_crop(crop, langkah, today, catatan)
+        if terurai.found or not self.e.get("rotate_crop", False):
+            return ExpiryResult(date=terurai, zone=zona, source=SOURCE_ZONE, notes=catatan)
 
+        dicoba: list[int] = []
+        for derajat in self.e.get("rotate_retry") or []:
+            ulang = self._urai_crop(rotate_image(crop, int(derajat)), langkah, today,
+                                    catatan, f"_putar{int(derajat)}")
+            if ulang.found:
+                catatan["crop_rotated_deg"] = int(derajat)
+                catatan["crop_rotations_tried"] = list(dicoba)
+                return ExpiryResult(date=ulang, zone=zona, source=SOURCE_ZONE, notes=catatan)
+            dicoba.append(int(derajat))
+            if not terurai.text.strip():
+                terurai = ulang     # tulisan apa pun lebih berguna daripada kosong
+        catatan["crop_rotations_tried"] = dicoba
         return ExpiryResult(date=terurai, zone=zona, source=SOURCE_ZONE, notes=catatan)
 
     def _read_full(self, image, today: date, catatan: dict) -> ExpiryResult:

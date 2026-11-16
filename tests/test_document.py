@@ -711,3 +711,76 @@ def test_bawaan_pengelompokan_baris_adalah_pita(cfg):
     penilaian mata pada 2 foto tanpa teks acuan - belum cukup untuk mengunci.
     """
     assert cfg["vision"]["document"]["line_grouping"] == "pita"
+
+
+# ------------------------------------------------------------------- pembacaan per pita
+
+class ReaderPerPita:
+    """OCR tiruan yang jawabannya berbeda tiap pemanggilan.
+
+    Dipakai untuk menguji dua hal yang tidak bisa diuji dengan jawaban tetap:
+    pergeseran koordinat ke gambar penuh, dan aturan "pita hanya memiliki kotak
+    yang PUSATNYA ada di wilayahnya" yang mencegah baris di batas pita terbaca dua kali.
+    """
+
+    def __init__(self, *args, jawaban=(), **kwargs):
+        self.bentuk = []
+        self._jawaban = list(jawaban)
+
+    def readtext(self, image, **kwargs):
+        self.bentuk.append(image.shape[:2])
+        i = len(self.bentuk) - 1
+        return self._jawaban[i] if i < len(self._jawaban) else []
+
+
+def _kotak(y1, y2, teks, skor=0.9):
+    return ([[0, y1], [100, y1], [100, y2], [0, y2]], teks, skor)
+
+
+def _pembaca_pita(cfg, jawaban, pita=2, pad=0.04):
+    cfg["vision"]["document"]["bands"] = pita
+    cfg["vision"]["document"]["band_pad_ratio"] = pad
+    palsu = ReaderPerPita(jawaban=jawaban)
+    return DOC.DocumentReader(cfg, reader_factory=lambda *a, **k: palsu), palsu
+
+
+def test_pita_memotong_dengan_tumpang_tindih(cfg):
+    # 800 piksel, 2 pita, pad 4% = 32 piksel -> [0,432) dan [368,800)
+    r, palsu = _pembaca_pita(cfg, [[_kotak(100, 120, "atas")], [_kotak(132, 152, "bawah")]])
+    r._ocr_pita(np.zeros((800, 100, 3), np.uint8))
+    assert palsu.bentuk == [(432, 100), (432, 100)]
+
+
+def test_pita_menggeser_koordinat_ke_gambar_penuh(cfg):
+    r, _ = _pembaca_pita(cfg, [[_kotak(100, 120, "atas")], [_kotak(132, 152, "bawah")]])
+    kotak, _ = r._ocr_pita(np.zeros((800, 100, 3), np.uint8))
+    # pita 1 dimulai pada y=368, jadi kotak crop 132..152 menjadi 500..520 global
+    assert [(b.text, b.box[1], b.box[3]) for b in kotak] == [
+        ("atas", 100, 120), ("bawah", 500, 520)]
+
+
+def test_baris_di_batas_pita_tidak_terbaca_dua_kali(cfg):
+    """Baris yang sama terdeteksi KEDUA pita; hanya pemiliknya yang menyimpannya."""
+    # pusat global 400: di pita 0 (crop y0=0) pusatnya 400, di pita 1 (crop y0=368) pusatnya 32.
+    r, _ = _pembaca_pita(cfg, [[_kotak(395, 405, "batas")], [_kotak(27, 37, "batas")]])
+    kotak, _ = r._ocr_pita(np.zeros((800, 100, 3), np.uint8))
+    assert [b.text for b in kotak] == ["batas"]
+    assert (kotak[0].box[1], kotak[0].box[3]) == (395, 405)
+
+
+def test_pita_satu_tidak_memotong_apa_pun(cfg):
+    r, palsu = _pembaca_pita(cfg, [[_kotak(10, 30, "utuh")]], pita=1)
+    kotak, _ = r._ocr_pita(np.zeros((800, 100, 3), np.uint8))
+    assert palsu.bentuk == [(800, 100)]
+    assert [b.text for b in kotak] == ["utuh"]
+
+
+def test_read_memakai_pita_dan_menyusun_teks_sekali(cfg):
+    """Penyusunan teks tidak berubah: satu `build_result` atas gabungan kotak."""
+    r, palsu = _pembaca_pita(cfg, [[_kotak(100, 120, "Halaman")], [_kotak(132, 152, "dua")]])
+    hasil = r.read(np.zeros((800, 100, 3), np.uint8), preprocess=False)
+    assert len(palsu.bentuk) == 2
+    # dua paragraf karena y 100 dan y 500 berjauhan - bukti penyusunannya GLOBAL,
+    # memakai koordinat gambar penuh, bukan per pita
+    assert hasil.text == "Halaman. dua."
+    assert hasil.notes["raw_boxes"] == 2

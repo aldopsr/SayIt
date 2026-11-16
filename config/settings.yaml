@@ -320,6 +320,35 @@ vision:
     line_slope_max: 0.35        # taksiran di atas ini dianggap liar dan dibuang (~19 derajat)
     paragraph_gap_ratio: 1.6    # jarak antar-baris di atas rasio ini dianggap ganti paragraf
     max_words_per_chunk: 40     # PRD 8.7, potongan yang dibacakan sekali jalan
+    # --- pembacaan per pita ---------------------------------------------------
+    # OCR dijalankan atas N potongan mendatar, bukan seluruh halaman sekali.
+    # MEMOTONG, bukan memperkecil: sapuan `max_side` 16-11 membuktikan memperkecil
+    # gambar membuat deteksi MEMECAH baris (CER 14,89% -> 20,17% pada 1000 px),
+    # sedangkan memotong tidak menyentuh tinggi huruf sama sekali.
+    #
+    # Disapu 16-11 pada 13 dokumen beracuan (prototipe):
+    #
+    #   pita    CER     kata pertama   total
+    #     1   14,89%        13,58 s   13,58 s
+    #     2   14,57%         4,67 s    8,59 s   <- dipakai, menang di KETIGA sisi
+    #     3   17,36%         3,75 s   11,08 s
+    #     4   15,37%         3,60 s   15,86 s
+    #
+    # 3 pita merugikan tajam (`r (11)` 21,1% -> 32,5%, `r (3)` 18,7% -> 27,6%):
+    # makin banyak potongan, makin besar peluang satu paragraf terbelah. 2 pita
+    # satu-satunya titik yang tidak membayar apa pun.
+    #
+    # PERINGATAN: tabel di atas diukur pada PROTOTIPE yang memakai detect+recognize
+    # terpisah, bukan `readtext` seperti produksi, dan jalur itu 1,8x lebih lambat.
+    # Jadi RASIO-nya sah tetapi detiknya tidak sebanding dengan angka produksi.
+    # Bawaannya tetap 1 sampai disapu di jalur produksi lewat
+    # `scripts/ukur_dokumen.py --pita 2`.
+    bands: 1
+    # Tumpang-tindih tiap sisi potongan, relatif tinggi gambar. Pada 1600 px ini
+    # ~64 piksel, sekitar dua baris teks. Pita tetap hanya MEMILIKI kotak yang
+    # pusatnya ada di wilayahnya sendiri, jadi tumpang-tindih tidak menggandakan
+    # apa pun - ia hanya memberi ruang agar baris di batas pita terdeteksi utuh.
+    band_pad_ratio: 0.04
     preprocess_chain: dokumen   # kosongkan (null) bila citra sudah diproses pemanggil
 
     # --- urutan bacaan -------------------------------------------------------
@@ -396,6 +425,19 @@ vision:
     # dengan skor 0,76, gagal dibaca lewat potongan, padahal OCR seluruh gambar membaca
     # `110426` dengan benar. Tanpa saklar ini sistem membuang jawaban yang sudah di tangan.
     full_image_fallback: true
+    # Bila potongan zona tidak terbaca, putar POTONGANNYA, bukan gambar penuh.
+    # Soalnya apa yang dibayar ulang: satu lintasan gambar penuh = deteksi zona YOLO
+    # pada 3000x4000 + potong + OCR; memutar potongan hanya membayar OCR potongan.
+    # Zona yang sudah ketemu tidak hilang karena gambar diputar, jadi mendeteksinya
+    # ulang tidak membeli apa pun. Uji lapangan 12-11 (Indomie, 44,9 detik): zona
+    # ketemu skor 0,755 di lintasan pertama, OCR membaca sampah di keempat rotasi -
+    # yang gagal PENGENALAN CETAKAN, dan rotasi gambar penuh tidak menyentuh itu.
+    #
+    # Konsekuensinya: selama zona ketemu, `rotate_retry` di bawah TIDAK lagi
+    # diterapkan pada gambar penuh (lihat `rotate_full_dilewati` di notes).
+    # `false` memulihkan perilaku lama persis, untuk ablasi.
+    # BELUM DIUKUR pada 16 kemasan - jangan dinyalakan sebelum angkanya ada.
+    rotate_crop: false
     text_score_min: 0.4         # ambang kotak OCR, sama dasarnya dengan modul dokumen
     # Dicoba berurutan HANYA bila alur biasa tidak menemukan tanggal. Rotasi EXIF
     # sudah ditangani sayit/gambar.py; ini untuk foto yang EXIF-nya hilang atau

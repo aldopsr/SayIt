@@ -489,3 +489,73 @@ def test_mundur_tidak_pernah_dinyatakan_yakin(cfg):
     r = pembaca(cfg, ocr, kotak=[[100, 200, 300, 250]], skor=[0.9])
     hasil = r.read(FOTO, today=HARI_INI)
     assert hasil.confident is False
+
+
+# ------------------------------------------------- memutar POTONGAN, bukan gambar penuh
+
+def _pembaca_zona(cfg, ocr, kotak, skor):
+    """Pembaca berzona plus pegangan ke pabriknya, agar panggilan YOLO bisa dihitung."""
+    zona = pabrik_zona(kotak, skor)
+    return E.ExpiryReader(cfg, ocr=ocr, zone_factory=zona), zona
+
+
+ZONA = [[100, 200, 300, 250]]       # dengan margin 10% -> potongan (60, 240, 3)
+
+
+def test_potongan_diputar_dan_zona_tidak_dideteksi_ulang(cfg):
+    """Rotasi dibayar pada POTONGAN; deteksi zona 3000x4000 hanya sekali."""
+    cfg["vision"]["expiry"]["rotate_crop"] = True
+    ocr = OcrPalsu("NETTO", "EXP 03/12/2026")
+    r, zona = _pembaca_zona(cfg, ocr, ZONA, [0.9])
+    hasil = r.read(FOTO, today=HARI_INI)
+    assert hasil.date.value == date(2026, 12, 3)
+    assert hasil.source == E.SOURCE_ZONE
+    assert hasil.notes["crop_rotated_deg"] == 180
+    assert len(zona.model.panggilan) == 1
+    # lintasan kedua memakai POTONGAN yang diputar, bukan gambar 600x800
+    assert ocr.panggilan == [(60, 240, 3), (60, 240, 3)]
+
+
+def test_gambar_penuh_tidak_diputar_bila_potongan_sudah_dicoba_semua(cfg):
+    """Inti perbaikannya: yang gagal pengenalan cetakan, bukan pembidikan."""
+    cfg["vision"]["expiry"]["rotate_crop"] = True
+    ocr = OcrPalsu("NETTO")             # tidak pernah berhasil, di sudut mana pun
+    r, zona = _pembaca_zona(cfg, ocr, ZONA, [0.9])
+    hasil = r.read(FOTO, today=HARI_INI)
+    assert hasil.found is False
+    assert hasil.notes["crop_rotations_tried"] == [180, 90, 270]
+    assert "rotate_full_dilewati" in hasil.notes
+    assert "rotations_tried" not in hasil.notes
+    assert len(zona.model.panggilan) == 1
+
+
+def test_mundur_ke_seluruh_gambar_tetap_jalan_sesudah_rotasi_potongan(cfg):
+    """Zona tetap PETUNJUK letak: potongan gagal di semua sudut, seluruh gambar menang."""
+    cfg["vision"]["expiry"]["rotate_crop"] = True
+    ocr = OcrPalsu("NETTO", "NETTO", "NETTO", "NETTO", "EXP 03/12/2026")
+    r, _ = _pembaca_zona(cfg, ocr, ZONA, [0.9])
+    hasil = r.read(FOTO, today=HARI_INI)
+    assert hasil.date.value == date(2026, 12, 3)
+    assert hasil.source == E.SOURCE_FULL
+    assert ocr.panggilan[-1] == FOTO.shape
+
+
+def test_rotate_crop_mati_memulihkan_perilaku_lama(cfg):
+    """Dengan `false`, gambar PENUH yang diputar - termasuk deteksi zonanya."""
+    cfg["vision"]["expiry"]["rotate_crop"] = False
+    ocr = OcrPalsu("NETTO")
+    r, zona = _pembaca_zona(cfg, ocr, ZONA, [0.9])
+    hasil = r.read(FOTO, today=HARI_INI)
+    assert hasil.found is False
+    assert hasil.notes["rotations_tried"] == [180, 90, 270]
+    assert "crop_rotations_tried" not in hasil.notes
+    assert len(zona.model.panggilan) == 4       # satu per lintasan gambar penuh
+
+
+def test_tanpa_zona_gambar_penuh_tetap_diputar(cfg):
+    """Tanpa zona, memutar gambar penuh satu-satunya cara menolong DETEKSI."""
+    cfg["vision"]["expiry"]["rotate_crop"] = True
+    ocr = OcrPalsu("NETTO", "EXP 03/12/2026")
+    hasil = pembaca(cfg, ocr).read(FOTO, today=HARI_INI)
+    assert hasil.date.value == date(2026, 12, 3)
+    assert hasil.notes["rotated_deg"] == 180

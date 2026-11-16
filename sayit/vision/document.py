@@ -19,7 +19,7 @@ seluruh aturannya bisa diuji tanpa memuat model OCR. `DocumentReader` menerima
 from __future__ import annotations
 
 import time
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from statistics import median
 from typing import Any, Callable, Sequence
 
@@ -624,6 +624,46 @@ class DocumentReader:
             kotak = extract_boxes(self._reader.readtext(image, detail=1, **self._rotasi_kwargs()))
         return kotak, time.perf_counter() - t
 
+    def _ocr_pita(self, image: np.ndarray) -> tuple[list[TextBox], float]:
+        """OCR per PITA mendatar, lalu kotaknya digabung dalam koordinat gambar penuh.
+
+        Memotong, bukan memperkecil. Sapuan `resize.max_side` 16-11 menunjukkan
+        memperkecil gambar membuat deteksi MEMECAH baris (`r (4)` 76 kotak menjadi
+        156) sehingga CER runtuh; memotong tidak menyentuh tinggi huruf sama sekali,
+        sementara biaya deteksi tetap turun karena ia dibayar per piksel.
+
+        Pita ke-k MEMILIKI baris yang pusatnya jatuh di `[k*H/n, (k+1)*H/n)`, tetapi
+        di-OCR atas potongan yang dilebihkan `band_pad_ratio` di atas dan bawah. Jadi
+        baris yang terbelah batas pita tetap utuh di pita yang memiliki pusatnya, dan
+        tidak perlu dedupe - penyaring pusat itu sendiri yang mencegah kotak ganda.
+
+        Penyusunan teks TIDAK berubah: `build_result` tetap dipanggil sekali atas
+        gabungan seluruh kotak, jadi urutan bacaan, mode tata letak, dan penjaga mutu
+        bekerja persis seperti sebelumnya. Yang berubah hanya cara kotak diperoleh.
+        Terukur pada 13 dokumen beracuan (prototipe, jalur detect+recognize terpisah):
+        2 pita memberi CER 14,57% lawan 14,89%, kata pertama 4,67 s lawan 13,58 s,
+        total 8,59 s lawan 13,58 s - menang di ketiga sisi. 3 pita MERUGIKAN (17,36%).
+        """
+        n = int(self.d.get("bands") or 1)
+        if n <= 1:
+            return self.ocr_boxes(image)
+
+        tinggi = image.shape[0]
+        pad = int(float(self.d.get("band_pad_ratio") or 0.0) * tinggi)
+        kotak: list[TextBox] = []
+        total = 0.0
+        for k in range(n):
+            milik0, milik1 = k * tinggi // n, (k + 1) * tinggi // n
+            y0, y1 = max(0, milik0 - pad), min(tinggi, milik1 + pad)
+            potongan = image[y0:y1]
+            if potongan.size == 0:
+                continue
+            sebagian, dt = self.ocr_boxes(potongan)
+            total += dt
+            kotak += [replace(b, box=(b.box[0], b.box[1] + y0, b.box[2], b.box[3] + y0))
+                      for b in sebagian if milik0 <= b.center_y + y0 < milik1]
+        return kotak, total
+
     def _rotasi_kwargs(self) -> dict:
         """Sudut tambahan yang dicoba EasyOCR untuk tiap baris teks.
 
@@ -709,7 +749,7 @@ class DocumentReader:
             image = hasil_pra.image
             catatan_pra = {"preprocess_steps": hasil_pra.steps, **hasil_pra.notes}
 
-        kotak, elapsed = self.ocr_boxes(image)
+        kotak, elapsed = self._ocr_pita(image)
         hasil = build_result(kotak, self.cfg, self._mode_tata_letak(catatan_pra))
         hasil.notes.update(catatan_pra)
         hasil.notes["ocr_s"] = elapsed
