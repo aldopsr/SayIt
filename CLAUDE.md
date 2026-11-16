@@ -346,6 +346,45 @@ Catatan membaca laporan: 457 "dangling-endpoint edge" pada diagnostik BUKAN koru
   pada foto buku tampak lebih baik tetapi itu penilaian MATA pada 2 foto.
   **Untuk menguncinya butuh teks acuan beberapa foto buku** - sesudah itu cukup satu baris config.
 
+**OCR dokumen, ablasi 11-11 (tuas latensi PaddleOCR):**
+- `text_recognition_batch_size` **TERBANTAH**: 8 memberi nol perbaikan, 32 justru lebih lambat
+  (22,3 s lawan 15,9 s bawaan). Biarkan kosong, jangan diuji ulang.
+- **`PP-OCRv5_mobile_rec` adalah titik terbaik di sisi PaddleOCR: CER 10,1%, median 21,6 detik**
+  (13 dokumen). Lawan `medium_rec` 9,4% pada ~42 detik: bayar 0,7 poin CER untuk separuh latensi.
+  `PP-OCRv6_mobile_rec` tidak terdaftar di paddleocr 3.3.1.
+- Perbandingan satu sesi: **EasyOCR 14,89% / 8,8 detik lawan mobile_rec 10,1% / 21,6 detik.**
+  **Pindah mesin SEKARANG adalah kemunduran bagi pengguna** - CER membaik 4,8 poin tetapi kata
+  pertama terdengar 12,8 detik lebih lambat. `document.engine` SENGAJA masih `easyocr`.
+- **Yang membuka kuncinya: pembacaan bertahap (OCR per pita).** Terukur pada `r (11)` (303 kata):
+  OCR seluruh halaman 20,3 detik, durasi dibacakan **177,8 detik** (TTS sungguhan, 102 kata/menit).
+  Anggaran **+157,5 detik** - 10x, bukan tipis. Kalau OCR dipecah per pita, kata pertama keluar
+  ~4-5 detik (TAKSIRAN, belum diukur) sambil CER turun ke 10,1%. Menyentuh `document.py`,
+  `pipeline.py` (posisi LANJUT), server, mungkin klien. Flag `--rec-model` dan `--rec-batch`
+  sudah ada di `scripts/ukur_dokumen.py` untuk mengulang ablasinya.
+
+**Uji lapangan pertama oleh pengguna di HP lewat ngrok (12-11) - tiga temuan:**
+1. **Kemasan Indomie: tanggal TIDAK terbaca, 44,9 detik.** Zona ketemu dengan skor **0,755**
+   (pembidikan benar), potongan benar, tetapi OCR membaca sampah di KEEMPAT rotasi:
+   `'CBI.'` / `'2 57 8 90 88.'` / `'5 4.'` / `'O6 8 4 5.'`. Menegaskan ulang: penghambatnya
+   **pengenalan cetakan**, bukan pembidikan. 45 detik itu habis di `rotate_retry` yang mengulang
+   SELURUH pipeline (deteksi zona + potong + OCR) pada gambar 3000x4000 empat kali, padahal
+   zonanya sudah ketemu di lintasan pertama. **Tuas yang belum dikerjakan: putar POTONGANNYA
+   (OCR 4,4 s) bukan gambar penuh (~10 s)** - perkiraan 45 s -> 20 s. Wajib ukur akurasi
+   16 kemasan bersamaan, jangan latensi saja.
+2. **Dua lembar uang dijawab satu nominal, dan BUKAN karena penjumlahan.** Deteksi mentah pada
+   foto 2.000 + 10.000: tiga kotak yang SAMA (seluruh bingkai) dengan kelas berbeda -
+   10000 skor 0,641, 50000 skor 0,301, 2000 skor 0,296. Model melihat satu gumpalan lalu menebak
+   tiga kelas; pasca-pemrosesan membuang dua. Penjumlahannya tidak pernah dapat kesempatan.
+   Sebabnya data latih: dari 80 foto hanya **1** yang berlabel banyak lembar.
+3. **Ambang buram memang terlalu ketat.** Foto kemasan asli pengguna `blur_variance` **137,2**
+   lawan ambang **100** - lolos, tetapi margin 37%. Foto malam dalam ruangan duduk di tepi ambang.
+   Butuh 2-3 foto ASLI yang DITOLAK untuk mengkalibrasinya; tangkapan layar TIDAK BISA dipakai
+   (latar putih aplikasi membuat `saturated_ratio` 0,44 dan hasilnya tidak sah).
+
+**DITOLAK pengguna 12-11: menampilkan transcript ("didengar: <teks> -> <intent>") di bawah
+kartu jawaban.** Sudah dibuat lalu di-revert atas permintaan pengguna. Jangan ditawarkan lagi.
+Transcript tetap dikirim server dan tetap masuk `console.info`.
+
 **Konfigurasi terkunci (jangan diubah tanpa mengukur ulang):**
 mesin OCR dipisah per modul - dokumen EasyOCR, kedaluwarsa PaddleOCR + `mobile_det`;
 `expiry.preprocess_chain: hanya_resize` (resize WAJIB ada, ia pengendali latensi);
