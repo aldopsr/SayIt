@@ -64,7 +64,7 @@
 Selesai: config, `audio/io.py`, `audio/stt.py`, `audio/tts.py`, `intent/`, `response/`, skrip cache & demo,
 `vision/quality_gate.py` (PRD 8.2), `vision/preprocess.py` (PRD 8.3), `vision/money.py` (PRD 8.6),
 `vision/date_parser.py` (PRD 8.8.1), `vision/document.py` (PRD 8.7), `vision/expiry.py` (PRD 8.8), `pipeline.py` (PRD 7), `app.py` + `sayit/appkit.py` (Streamlit), `scripts/diagnosa_uang.py`, `scripts/buat_label_uang.py`, `scripts/ukur_dokumen.py`,
-`scripts/ukur_kedaluwarsa.py`, `sayit/gambar.py`, `tests/test_ukur.py`, `scripts/banding_ocr.py`, `scripts/ukur_latensi.py`, 685 tes lulus.
+`scripts/ukur_kedaluwarsa.py`, `sayit/gambar.py`, `tests/test_ukur.py`, `scripts/banding_ocr.py`, `scripts/ukur_latensi.py`, 695 tes lulus.
 `opencv-python`, `ultralytics`, dan `easyocr` terpasang dan masuk `requirements.txt`.
 
 Pra-pemrosesan: tiap langkah adalah fungsi murni `(citra, params) -> citra` di `STEPS`, dirangkai lewat
@@ -315,7 +315,7 @@ Catatan membaca laporan: 457 "dangling-endpoint edge" pada diagnostik BUKAN koru
 
 ## Titik sambung (2 Oktober 2026)
 
-685 tes lulus. Seluruh metrik PRD Bagian 11 kini sudah pernah diukur.
+695 tes lulus. Seluruh metrik PRD Bagian 11 kini sudah pernah diukur.
 
 | Metrik | Hasil | Target | |
 |---|---|---|---|
@@ -358,9 +358,39 @@ Catatan membaca laporan: 457 "dangling-endpoint edge" pada diagnostik BUKAN koru
 - **Yang membuka kuncinya: pembacaan bertahap (OCR per pita).** Terukur pada `r (11)` (303 kata):
   OCR seluruh halaman 20,3 detik, durasi dibacakan **177,8 detik** (TTS sungguhan, 102 kata/menit).
   Anggaran **+157,5 detik** - 10x, bukan tipis. Kalau OCR dipecah per pita, kata pertama keluar
-  ~4-5 detik (TAKSIRAN, belum diukur) sambil CER turun ke 10,1%. Menyentuh `document.py`,
+  ~4-5 detik (TAKSIRAN, belum diukur; lihat ralat 16-11 di bawah - hanya berlaku bila
+  GAMBARNYA ikut dipotong) sambil CER turun ke 10,1%. Menyentuh `document.py`,
   `pipeline.py` (posisi LANJUT), server, mungkin klien. Flag `--rec-model` dan `--rec-batch`
   sudah ada di `scripts/ukur_dokumen.py` untuk mengulang ablasinya.
+
+**OCR dokumen, sapuan `resize.max_side` 16-11 - TUASNYA MATI, dan sebabnya sekarang jelas:**
+- **Biaya EasyOCR terbagi hampir rata, dan separuhnya dibayar PER PIKSEL.** Terukur pada
+  tiga dokumen: deteksi 4,42-7,32 detik (sebanding luas gambar, tidak peduli jumlah baris),
+  pengenalan 2,60-6,47 detik (51-100 ms per kotak). Deteksi 46-53% biaya.
+- **Sapuan `max_side` pada 13 dokumen beracuan: tidak ada titik yang menang di dua sisi.**
+
+  | sisi | CER | median | total |
+  |---|---|---|---|
+  | **1600 (dipakai)** | **14,89%** | 7,85 s | 109,8 s |
+  | 1200 | 15,42% | 6,28 s | 81,1 s |
+  | 1000 | 20,17% | 5,76 s | **117,0 s** |
+  | 800 | 39,54% | **24,12 s** | 316,9 s |
+
+  Hanya 1200 memberi perbaikan nyata (median -20%) dan harganya target PRD <= 15% hilang.
+  Nilai tetap **1600**. Flag `--sisi` ada di `scripts/ukur_dokumen.py` untuk mengulang satu titik.
+- **KOPLING AKURASI-LATENSI LEWAT ROTASI KINI TERBUKTI DI MODUL DOKUMEN JUGA.** Itu sebab
+  total 1000 px lebih lambat daripada 1600 px: gambar kecil menjatuhkan skor baris di bawah
+  `rotate_trigger_score` 0,75, lalu `rotate_retry` membayar empat lintasan penuh. Per berkas:
+  `r (10)` 8,4 -> 33,7 s, `r (4)` 7,5 -> 47,8 s, `r (7)` 5,9 -> 23,5 s.
+- **Yang rusak saat diperkecil adalah deteksi yang MEMECAH baris, bukan yang melewatkannya.**
+  Jumlah kotak NAIK: `r (4)` 76 -> 99 -> 104 -> **156**; `r (11)` 72 -> 97 -> 100 -> 133.
+  Deteksi turun 7,93 -> 1,49 s tetapi pengenalan tidak ikut turun (12,98 -> 15,83 s).
+  Ini **membantah** gagasan "deteksi resolusi rendah + pengenalan resolusi penuh": kotaknya
+  sudah pecah sebelum sampai ke pengenalan.
+- **MEMOTONG bukan MEMPERKECIL - itu sebabnya pita masih hidup sebagai satu-satunya tuas.**
+  Memotong pita dari gambar penuh tidak menyentuh tinggi huruf, jadi tidak memecah baris,
+  sementara biaya deteksi tetap turun sebanding luas. Proyeksi `r (11)` 3 pita: kata pertama
+  ~4,6 s lawan 14,15 s sekarang. **Proyeksi dari angka terukur, belum diukur.**
 
 **Uji lapangan pertama oleh pengguna di HP lewat ngrok (12-11) - tiga temuan:**
 1. **Kemasan Indomie: tanggal TIDAK terbaca, 44,9 detik.** Zona ketemu dengan skor **0,755**

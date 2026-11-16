@@ -171,6 +171,13 @@ def main() -> int:
     ap.add_argument("--rec-model", default=None,
                     help="timpa paddle.text_recognition_model_name "
                          "(mis. PP-OCRv5_mobile_rec; butuh internet saat pertama)")
+    # Setengah biaya EasyOCR ada di tahap DETEKSI, dan deteksi dibayar per PIKSEL,
+    # bukan per baris - terukur 16-11 pada tiga dokumen: deteksi 4,4-7,3 s lawan
+    # pengenalan 2,6-6,5 s. Karena itu `resize.max_side` adalah tuas latensi
+    # terbesar modul dokumen, dan satu-satunya yang belum pernah disapu.
+    # Tuas ini TIDAK berlaku untuk PaddleOCR: biayanya per baris (02-10).
+    ap.add_argument("--sisi", type=int, default=None,
+                    help="timpa preprocess.resize.max_side (mis. 800, 1000, 1200)")
     ap.add_argument("--per-langkah", action="store_true",
                     help="ablasi satu langkah dibuang bergantian (lambat: satu OCR per langkah per foto)")
     args = ap.parse_args()
@@ -192,6 +199,9 @@ def main() -> int:
     if args.mesin:
         cfg["vision"]["document"]["engine"] = args.mesin
         print(f"Mesin OCR ditimpa menjadi {args.mesin!r} untuk pengukuran ini.")
+    if args.sisi is not None:
+        cfg["vision"]["preprocess"]["steps"]["resize"]["max_side"] = args.sisi
+        print(f"resize.max_side ditimpa menjadi {args.sisi} untuk pengukuran ini.")
     paddle = cfg["vision"]["document"].setdefault("paddle", {})
     if args.rec_batch is not None:
         paddle["text_recognition_batch_size"] = args.rec_batch
