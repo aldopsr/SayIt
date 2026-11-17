@@ -161,7 +161,13 @@ Tiga konsekuensi yang harus diingat:
    penuh - sama seperti pola `dmy_spasi` yang +1 benar di mesin tetapi nol efek di pipeline.
 2. Latensi PaddleOCR 7x EasyOCR, dan oneDNN **tidak bisa dinyalakan** di paddlepaddle 3.3.1. Belum diuji:
    model `PP-OCRv5_mobile_det` (butuh internet) - itu tuas latensi yang paling menjanjikan.
-3. Menjalankan kedua mesin dalam satu proses **crash native**. Pakai `--mesin` satu per satu, dan `--sisi 800`
+3. Menjalankan kedua mesin dalam satu proses **tidak aman - dan RALAT 17-11: ia tidak selalu
+   crash, ia bisa GAGAL DIAM-DIAM dengan angka yang masih terlihat masuk akal.** Terukur:
+   satu skrip yang memuat PaddleOCR lalu EasyOCR memberi CER dokumen **10,28%** dan median
+   **77 detik**, padahal proses bersih hari yang sama memberi **14,89%** dan **8,10 detik**;
+   `ketentuan_makalah` melompat 76,9% -> 11,3%. Gagal diam-diam lebih berbahaya daripada crash,
+   karena angkanya ikut dipakai. **Satu proses = satu mesin, selalu.**
+   Pakai `--mesin` satu per satu, dan `--sisi 800`
    karena paddle crash pada foto 3024x4032 utuh. Skripnya `python scripts\banding_ocr.py`.
 
 Celah pemisah spasi sudah ditutup 01-10 dan 02-10 (pola `dmy_spasi` dan `my_spasi`).
@@ -325,8 +331,8 @@ Catatan membaca laporan: 457 "dangling-endpoint edge" pada diagnostik BUKAN koru
 
 | Metrik | Hasil | Target | |
 |---|---|---|---|
-| Akurasi kedaluwarsa | **75%** (12 benar / **3 salah** / 1 diam, diukur ulang 16-11; 81% pada 02-10) | >= 70% | **TERCAPAI, tetapi TURUN** |
-| CER dokumen | **14,89%** (31-10, koreksi kemiringan baris) | <= 15% | **TERCAPAI** |
+| Akurasi kedaluwarsa | **81%** (13 benar / 2 salah / 1 diam, 17-11 dengan `line_grouping: rantai`) | >= 70% | **TERCAPAI** |
+| CER dokumen | **14,94%** (17-11, `line_grouping: rantai`; 14,89% dengan `pita`) | <= 15% | **TERCAPAI, margin 0,06 poin** |
 | Akurasi uang (total diucapkan) | **85,0%** (68 benar / 11 salah / 1 diam, k-fold v3, 80 foto bersih, ambang 0,30); 86,25% pada ambang 0,25 | >= 85% | **TERCAPAI, tepat di garis** |
 | Latensi uang / kendali | 1,4 s / 1,3 s | <= 8 s | **LOLOS** |
 | Latensi dokumen / kedaluwarsa | 11,5 s / 11,4 s | <= 8 s | **penyimpangan diterima** |
@@ -346,11 +352,12 @@ Catatan membaca laporan: 457 "dangling-endpoint edge" pada diagnostik BUKAN koru
   nyaris sama), dan bukan "gugus menggumpal" (gugus sudah terpisah benar, 121 kotak lawan 18).
   Penjelasan yang tersisa: halamannya **MELENGKUNG** - datar di tengah, menukik sampai -0,18
   dekat jilidan - jadi satu angka kemiringan tidak akan pernah muat.
-- **`line_grouping: rantai` sudah ada tetapi BUKAN bawaan.** Menyambung kotak ke tetangga
-  terdekat tanpa taksiran kemiringan, jadi simpangan menumpuk sepanjang baris. Diukur:
-  13 dokumen A4 **14,89% -> 14,94%** (1 membaik, 2 memburuk, 10 tetap) = di dalam derau;
-  pada foto buku tampak lebih baik tetapi itu penilaian MATA pada 2 foto.
-  **Untuk menguncinya butuh teks acuan beberapa foto buku** - sesudah itu cukup satu baris config.
+- **`line_grouping: rantai` SEKARANG BAWAAN (diganti 17-11).** Menyambung kotak ke tetangga
+  terdekat tanpa taksiran kemiringan sama sekali. Buktinya datang dari modul **KEDALUWARSA**,
+  bukan dari foto buku yang sejak 31-10 ditunggu teks acuannya - lihat blok "rantai jadi bawaan"
+  di bawah. Harganya di dokumen +0,05 poin CER, di dalam derau.
+  **Teks acuan foto buku TETAP perlu**: keunggulan `rantai` pada halaman MELENGKUNG masih
+  penilaian mata, belum terbukti. Penggantian ini dibenarkan angka kedaluwarsa, bukan klaim itu.
 
 **OCR dokumen, ablasi 11-11 (tuas latensi PaddleOCR):**
 - `text_recognition_batch_size` **TERBANTAH**: 8 memberi nol perbaikan, 32 justru lebih lambat
@@ -447,7 +454,37 @@ Catatan membaca laporan: 457 "dangling-endpoint edge" pada diagnostik BUKAN koru
 kartu jawaban.** Sudah dibuat lalu di-revert atas permintaan pengguna. Jangan ditawarkan lagi.
 Transcript tetap dikirim server dan tetap masuk `console.info`.
 
-**AKURASI KEDALUWARSA TURUN 81% -> 75% (diukur ulang 16-11) - PERIKSA SEBELUM JURNAL:**
+**`rantai` JADI BAWAAN 17-11, DAN ITU MENGEMBALIKAN AKURASI KEDALUWARSA KE 81%:**
+- `pita` 12 BENAR / 3 SALAH / 1 DIAM = 75% lawan **`rantai` 13 / 2 / 1 = 81%** pada 16 kemasan.
+  Yang berubah **hanya satu berkas**: `mentega` SALAH -> BENAR. **Nol regresi** pada 15 lainnya.
+- Sebabnya: tanggal mentega tercetak **DIAGONAL** - `02:31`(x995,cy261) `NS`(831,362)
+  `27`(680,428) `MAR`(418,523) `11`(238,614), jadi x TURUN saat y naik. Kemiringan sejatinya
+  **-0,418**, di atas `line_slope_max` 0,35 sehingga dibuang jadi 0; taksiran median seluruh
+  potongan hanya **-0,196** karena blok tabel gizi di atasnya hampir datar. **Satu angka
+  kemiringan tidak muat untuk dua blok berorientasi berbeda** - masalah yang SAMA dengan
+  halaman buku melengkung, muncul di modul yang berbeda.
+- Harga di modul dokumen: CER **14,89% -> 14,94%** (1 membaik `r (10)`, 1 memburuk `r (4)`,
+  11 tetap), direproduksi persis dari pengukuran 31-10. **PERINGATAN: margin target PRD
+  <= 15% menyusut dari 0,11 ke 0,06 poin.** Perubahan berikutnya yang menambah 0,06 poin saja
+  akan membuatnya gagal.
+- Saklar `line_grouping` hidup di `vision.document` tetapi modul kedaluwarsa memakai
+  `compose_text` yang sama, jadi **mengubahnya SELALU menyentuh kedua modul** dan keduanya
+  wajib diukur bersamaan.
+- `line_slope_correct` kini hanya berlaku untuk `pita`. Tesnya memakai mode yang dipatok.
+
+**Dua jawaban salah yang MASIH tersisa di kedaluwarsa (bukan soal urutan bacaan):**
+- `chees` 2026-05-21 (harap 2027-03-21): parser menjawab dari **nomor produksi** `210526`,
+  padahal `MAR` ada di sebelahnya. `rantai` tidak mengubahnya. Penjaganya BUKAN
+  `require_marker_for_compact` - menyalakan itu memberi 56%.
+- `ovaltine` 2027-09-30 (harap 2027-09-27): meleset tiga hari, tercatat sejak 02-10.
+
+**RIWAYAT: akurasi sempat terbaca TURUN 81% -> 75% pada 16-11, dan sebabnya ternyata `pita`,
+bukan regresi misterius.** Yang tetap tidak dapat ditelusuri: mengapa 02-10 memberi 13/1/2
+sementara 17-11 memberi 13/2/1 - komposisi berbeda pada akurasi yang sama. **Riwayat Git mulai
+11 Oktober sedangkan 81% diukur 2 Oktober**, jadi sembilan hari itu tidak ada di versi kontrol.
+**Yang masuk jurnal adalah angka 17-11 dengan tanggal, versi paddleocr, dan nama model.**
+
+**Catatan diagnosis 16-11 (ditahan sebagai jejak):**
 - **12 BENAR / 3 SALAH / 1 DIAM** pada 16 kemasan, disepakati DUA instrumen (skrip ad-hoc dan
   `scripts/ukur_kedaluwarsa.py` resmi). Catatan 02-10: 13 / 1 / 2 = 81%.
 - **Arahnya buruk: jawaban SALAH naik 1 -> 3, DIAM turun 2 -> 1.** Itu melanggar prioritas yang

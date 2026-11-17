@@ -303,18 +303,31 @@ vision:
     # tengah baris berjalan (dengan koreksi kemiringan di bawah). `rantai`
     # menyambung tiap kotak ke tetangga terdekatnya, tanpa taksiran kemiringan
     # sama sekali, sehingga baris yang MELENGKUNG diikuti apa adanya.
-    # DIUKUR 31-10 dan hasilnya TERBELAH, jadi bawaannya belum diganti:
-    #   - 13 dokumen A4 beracuan: 14,89% -> 14,94% (1 membaik, 2 memburuk,
-    #     10 tetap) = di dalam derau, tidak menang dan tidak kalah.
-    #   - foto buku: `rantai` tampak LEBIH BAIK. Pada `tulisanbukubaru (5)`
-    #     dua klausa menjadi benar: "adalah terdapatnya unsur-unsur yang sama
-    #     dalam kalimat" dan "Langkah-langkah membuat tulisan ilmiah adalah
-    #     membuat konsep; menuliskan, dan direvisi". `pita` mengacaukan keduanya.
-    #     Tetapi itu penilaian MATA pada 2 foto tanpa teks acuan.
-    # Untuk mengunci `rantai` sebagai bawaan dibutuhkan teks acuan untuk
-    # beberapa foto buku. Tanpa itu, mengganti bawaan berarti menukar angka
-    # terukur dengan kesan - kesalahan yang sudah berulang di proyek ini.
-    line_grouping: pita         # pita | rantai
+    # BAWAANNYA DIGANTI KE `rantai` PADA 17-11, dan buktinya datang dari modul
+    # KEDALUWARSA - bukan dari foto buku yang sejak 31-10 ditunggu teks acuannya.
+    #
+    #   modul         pita                  rantai
+    #   kedaluwarsa   12 BENAR/3 SALAH/1 DIAM = 75%   13/2/1 = 81%  <- menang
+    #   dokumen       CER 14,89%, median 8,10 s        14,94%, 8,12 s
+    #
+    # Kedaluwarsa: hanya SATU berkas berubah, `mentega` SALAH -> BENAR, nol
+    # regresi pada 15 lainnya. Sebabnya tanggalnya tercetak DIAGONAL (x turun
+    # saat y naik), kemiringan sejatinya -0,418 - di atas `line_slope_max` 0,35
+    # sehingga dibuang jadi 0 - dan taksiran median seluruh potongan hanya
+    # -0,196 karena blok tabel gizi di atasnya hampir datar. Satu angka
+    # kemiringan tidak muat untuk dua blok berorientasi berbeda, masalah yang
+    # SAMA dengan halaman buku melengkung. `rantai` tidak menaksir kemiringan
+    # sama sekali, jadi ia mengikuti cetakan semiring apa pun.
+    #
+    # Dokumen: +0,05 poin CER (1 membaik `r (10)`, 1 memburuk `r (4)`, 11 tetap)
+    # = di dalam derau, direproduksi persis dari pengukuran 31-10.
+    # **PERINGATAN: margin target PRD <= 15% menyusut dari 0,11 ke 0,06 poin.**
+    # Perubahan berikutnya yang menambah 0,06 poin saja akan membuatnya gagal.
+    #
+    # Yang BELUM terbukti dan tetap perlu teks acuan foto buku: keunggulan
+    # `rantai` pada halaman MELENGKUNG. Penggantian ini dibenarkan oleh angka
+    # kedaluwarsa, bukan oleh klaim foto buku yang masih penilaian mata.
+    line_grouping: rantai       # pita | rantai
     line_slope_correct: true
     line_slope_gap_ratio: 3.0   # celah mendatar maksimum antar-kata sebaris, x tinggi huruf
     line_slope_max: 0.35        # taksiran di atas ini dianggap liar dan dibuang (~19 derajat)

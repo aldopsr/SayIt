@@ -659,11 +659,29 @@ def test_dua_baris_miring_tidak_saling_menyisip(cfg):
 
 
 def test_koreksi_kemiringan_bisa_dimatikan(cfg):
+    """`line_slope_correct` hanya berlaku pada `pita`, jadi mode itu dipatok di sini.
+
+    Sejak bawaannya `rantai` (17-11), mematikan koreksi kemiringan TIDAK lagi
+    merusak baris miring - `rantai` tidak memakai taksiran kemiringan sama
+    sekali. Tanpa mematok modenya, tes ini mengukur saklar yang sudah tidak
+    dipakai jalur bawaan.
+    """
+    dasar = copy.deepcopy(cfg)
+    dasar["vision"]["document"]["line_grouping"] = "pita"
+    mati = copy.deepcopy(dasar)
+    mati["vision"]["document"]["line_slope_correct"] = False
+    miring = baris_miring("satu dua tiga empat lima enam", y0=100, slope=-0.12)
+    assert DOC.compose_text(miring, mati, "dokumen") != "satu dua tiga empat lima enam."
+    assert DOC.compose_text(miring, dasar, "dokumen") == "satu dua tiga empat lima enam."
+
+
+def test_rantai_tidak_butuh_koreksi_kemiringan(cfg):
+    """Buah dari penggantian bawaan: baris miring utuh walau koreksi dimatikan."""
     c = copy.deepcopy(cfg)
     c["vision"]["document"]["line_slope_correct"] = False
     miring = baris_miring("satu dua tiga empat lima enam", y0=100, slope=-0.12)
-    assert DOC.compose_text(miring, c, "dokumen") != "satu dua tiga empat lima enam."
-    assert DOC.compose_text(miring, cfg, "dokumen") == "satu dua tiga empat lima enam."
+    assert c["vision"]["document"]["line_grouping"] == "rantai"
+    assert DOC.compose_text(miring, c, "dokumen") == "satu dua tiga empat lima enam."
 
 
 # --------------------------------------------------- pembentukan baris dengan rantai
@@ -703,14 +721,19 @@ def test_rantai_kosong_aman():
     assert DOC.group_lines_chain([], 0.6, 3.0) == []
 
 
-def test_bawaan_pengelompokan_baris_adalah_pita(cfg):
-    """`rantai` DIUKUR 31-10 dan hasilnya terbelah, jadi bawaannya belum diganti.
+def test_bawaan_pengelompokan_baris_adalah_rantai(cfg):
+    """Bawaan diganti 17-11, dan buktinya dari modul KEDALUWARSA.
 
-    Pada 13 dokumen beracuan: 14,89% -> 14,94% (1 membaik, 2 memburuk, 10 tetap)
-    yaitu di dalam derau. Pada foto buku ia tampak lebih baik, tetapi itu
-    penilaian mata pada 2 foto tanpa teks acuan - belum cukup untuk mengunci.
+    16 kemasan beracuan: `pita` 12 BENAR / 3 SALAH / 1 DIAM = 75%, `rantai`
+    13 / 2 / 1 = 81%. Hanya satu berkas berubah (`mentega` SALAH -> BENAR),
+    nol regresi. Pada 13 dokumen beracuan harganya +0,05 poin CER
+    (14,89% -> 14,94%), di dalam derau.
+
+    Sejak 31-10 keputusan ini menunggu teks acuan foto buku yang tidak pernah
+    ada; ternyata data beracuan yang dibutuhkan sudah tersedia di modul lain
+    yang memakai `compose_text` yang sama.
     """
-    assert cfg["vision"]["document"]["line_grouping"] == "pita"
+    assert cfg["vision"]["document"]["line_grouping"] == "rantai"
 
 
 # ------------------------------------------------------------------- pembacaan per pita
