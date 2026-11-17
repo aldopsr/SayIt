@@ -255,17 +255,37 @@ class ExpiryReader:
         if zona is None:
             return self._read_full(image, today, catatan)
 
+        # Eskalasi bertingkat, URUTANNYA yang menentukan biaya. Diukur 16-11:
+        # memindahkan rotasi potongan ke DEPAN jalur ini melambatkan median
+        # 6,54 -> 9,33 detik tanpa menambah satu jawaban benar pun, karena
+        # langkah yang murah dan sering berhasil justru yang ditunda. Jadi:
+        #   1. potongan zona tegak   - paling murah, paling sering benar
+        #   2. OCR seluruh gambar    - murah, dan terbukti menyelamatkan (ajinomoto)
+        #   3. rotasi POTONGAN       - paling mahal, paling jarang menolong
+        # Gambar PENUH yang diputar tidak ada di daftar ini: itu ditangani
+        # `read()`, dan hanya dipakai bila zona tidak ketemu sama sekali.
         hasil = self._read_zone(image, zona, today, catatan)
-        if hasil.found or not self.e.get("full_image_fallback", True):
+        if hasil.found:
             return hasil
 
         # Zona adalah PETUNJUK letak, bukan komitmen. Terbukti 30-09: ajinomoto
         # terdeteksi zonanya dengan skor 0,76, gagal dibaca lewat potongan, padahal
         # OCR seluruh gambar membaca `110426` dengan benar. Sebelum ini sistem
         # terkunci di jalur zona dan membuang jawaban yang sudah ada di tangan.
-        catatan["zone_gagal"] = "potongan zona tidak menghasilkan tanggal, mundur ke seluruh gambar"
-        penuh = self._read_full(image, today, dict(catatan))
-        return penuh if penuh.found else hasil
+        penuh = None
+        if self.e.get("full_image_fallback", True):
+            catatan["zone_gagal"] = "potongan zona tidak menghasilkan tanggal, mundur ke seluruh gambar"
+            penuh = self._read_full(image, today, dict(catatan))
+            if penuh.found:
+                return penuh
+
+        if self.e.get("rotate_crop", False):
+            diputar = self._putar_potongan(image, zona, today, catatan)
+            if diputar.found:
+                return diputar
+            hasil = diputar         # jejak rotasinya ikut, termasuk saat gagal
+
+        return penuh if (penuh is not None and penuh.found) else hasil
 
     def _urai_crop(self, crop, langkah: list[str], today: date,
                    catatan: dict, imbuhan: str = "") -> DateParseResult:
@@ -289,26 +309,29 @@ class ExpiryReader:
         return terurai
 
     def _read_zone(self, image, zona: Zone, today: date, catatan: dict) -> ExpiryResult:
-        """Baca potongan zona, dan bila gagal putar POTONGANNYA - bukan gambar penuh.
+        """Potongan zona TEGAK saja. Rotasinya ditangani `_putar_potongan`, lebih belakang."""
+        crop = crop_with_margin(image, zona.box, float(self.e["crop_margin_ratio"]))
+        catatan["crop_shape"] = tuple(crop.shape[:2])
+        terurai = self._urai_crop(crop, self._langkah("preprocess_chain"), today, catatan)
+        return ExpiryResult(date=terurai, zone=zona, source=SOURCE_ZONE, notes=catatan)
+
+    def _putar_potongan(self, image, zona: Zone, today: date, catatan: dict) -> ExpiryResult:
+        """Langkah eskalasi TERAKHIR: putar potongannya, bukan gambar penuhnya.
 
         Memutar potongan lawan memutar gambar penuh adalah soal apa yang dibayar
         ulang. Satu lintasan gambar penuh berarti deteksi zona YOLO pada gambar
         3000x4000 lagi, lalu potong lagi, lalu OCR lagi; memutar potongan hanya
-        membayar OCR potongan yang kecil. Zona yang sudah ketemu tidak akan
-        hilang karena gambarnya diputar, jadi mendeteksinya ulang tidak membeli apa pun.
+        membayar OCR potongan yang kecil. Zona yang sudah ketemu tidak akan hilang
+        karena gambarnya diputar, jadi mendeteksinya ulang tidak membeli apa pun.
 
-        Saklar `expiry.rotate_crop` dibuat supaya perbandingannya bisa diukur
-        tanpa menyentuh kode: `false` memulihkan perilaku lama persis.
+        Ditempatkan SESUDAH OCR seluruh gambar, bukan sebelumnya. Urutan terbalik
+        sudah diukur 16-11 dan merugikan: median 6,54 -> 9,33 detik, akurasi identik
+        per berkas, melambat di 13 dari 16 kemasan - karena langkah yang murah dan
+        sering berhasil justru ditunda di belakang tiga rotasi yang jarang menolong.
         """
         crop = crop_with_margin(image, zona.box, float(self.e["crop_margin_ratio"]))
-        catatan["crop_shape"] = tuple(crop.shape[:2])
         langkah = self._langkah("preprocess_chain")
-
-        terurai = self._urai_crop(crop, langkah, today, catatan)
-        if terurai.found or not self.e.get("rotate_crop", False):
-            return ExpiryResult(date=terurai, zone=zona, source=SOURCE_ZONE, notes=catatan)
-
-        dicoba: list[int] = []
+        terakhir, dicoba = None, []
         for derajat in self.e.get("rotate_retry") or []:
             ulang = self._urai_crop(rotate_image(crop, int(derajat)), langkah, today,
                                     catatan, f"_putar{int(derajat)}")
@@ -317,10 +340,11 @@ class ExpiryReader:
                 catatan["crop_rotations_tried"] = list(dicoba)
                 return ExpiryResult(date=ulang, zone=zona, source=SOURCE_ZONE, notes=catatan)
             dicoba.append(int(derajat))
-            if not terurai.text.strip():
-                terurai = ulang     # tulisan apa pun lebih berguna daripada kosong
+            if terakhir is None or not terakhir.text.strip():
+                terakhir = ulang    # tulisan apa pun lebih berguna daripada kosong
         catatan["crop_rotations_tried"] = dicoba
-        return ExpiryResult(date=terurai, zone=zona, source=SOURCE_ZONE, notes=catatan)
+        return ExpiryResult(date=terakhir or DateParseResult(), zone=zona,
+                            source=SOURCE_ZONE, notes=catatan)
 
     def _read_full(self, image, today: date, catatan: dict) -> ExpiryResult:
         langkah = self._langkah("fallback_preprocess_chain")

@@ -502,18 +502,38 @@ def _pembaca_zona(cfg, ocr, kotak, skor):
 ZONA = [[100, 200, 300, 250]]       # dengan margin 10% -> potongan (60, 240, 3)
 
 
-def test_potongan_diputar_dan_zona_tidak_dideteksi_ulang(cfg):
-    """Rotasi dibayar pada POTONGAN; deteksi zona 3000x4000 hanya sekali."""
+def test_seluruh_gambar_dicoba_SEBELUM_rotasi_potongan(cfg):
+    """Urutan eskalasinya yang menentukan biaya, bukan pilihan potongan lawan gambar.
+
+    Diukur 16-11: menaruh rotasi potongan di DEPAN jalur ini melambatkan median
+    6,54 -> 9,33 detik tanpa menambah satu jawaban benar pun, karena langkah yang
+    murah dan sering berhasil (OCR seluruh gambar, kasus ajinomoto 30-09) justru
+    ditunda di belakang tiga rotasi yang jarang menolong.
+    """
     cfg["vision"]["expiry"]["rotate_crop"] = True
     ocr = OcrPalsu("NETTO", "EXP 03/12/2026")
+    r, zona = _pembaca_zona(cfg, ocr, ZONA, [0.9])
+    hasil = r.read(FOTO, today=HARI_INI)
+    assert hasil.date.value == date(2026, 12, 3)
+    assert hasil.source == E.SOURCE_FULL
+    # potongan tegak, lalu seluruh gambar - dan rotasi TIDAK dibayar sama sekali
+    assert ocr.panggilan == [(60, 240, 3), FOTO.shape]
+    assert "crop_rotations_tried" not in hasil.notes
+    assert len(zona.model.panggilan) == 1
+
+
+def test_rotasi_potongan_baru_jalan_sesudah_seluruh_gambar_gagal(cfg):
+    """Langkah ketiga: potongan diputar, dan zona 3000x4000 tidak dideteksi ulang."""
+    cfg["vision"]["expiry"]["rotate_crop"] = True
+    ocr = OcrPalsu("NETTO", "NETTO", "EXP 03/12/2026")
     r, zona = _pembaca_zona(cfg, ocr, ZONA, [0.9])
     hasil = r.read(FOTO, today=HARI_INI)
     assert hasil.date.value == date(2026, 12, 3)
     assert hasil.source == E.SOURCE_ZONE
     assert hasil.notes["crop_rotated_deg"] == 180
     assert len(zona.model.panggilan) == 1
-    # lintasan kedua memakai POTONGAN yang diputar, bukan gambar 600x800
-    assert ocr.panggilan == [(60, 240, 3), (60, 240, 3)]
+    # urutannya: potongan tegak -> seluruh gambar -> potongan diputar
+    assert ocr.panggilan == [(60, 240, 3), FOTO.shape, (60, 240, 3)]
 
 
 def test_gambar_penuh_tidak_diputar_bila_potongan_sudah_dicoba_semua(cfg):
@@ -529,15 +549,21 @@ def test_gambar_penuh_tidak_diputar_bila_potongan_sudah_dicoba_semua(cfg):
     assert len(zona.model.panggilan) == 1
 
 
-def test_mundur_ke_seluruh_gambar_tetap_jalan_sesudah_rotasi_potongan(cfg):
-    """Zona tetap PETUNJUK letak: potongan gagal di semua sudut, seluruh gambar menang."""
+def test_jawaban_seluruh_gambar_tidak_dibuang_walau_rotasi_jalan(cfg):
+    """Potongan gagal, seluruh gambar gagal, rotasi potongan juga gagal.
+
+    Yang dikembalikan tetap hasil berjejak rotasi, dan `read()` memakai jejak itu
+    untuk TIDAK memutar gambar penuh - lihat tes berikutnya.
+    """
     cfg["vision"]["expiry"]["rotate_crop"] = True
-    ocr = OcrPalsu("NETTO", "NETTO", "NETTO", "NETTO", "EXP 03/12/2026")
+    ocr = OcrPalsu("NETTO")
     r, _ = _pembaca_zona(cfg, ocr, ZONA, [0.9])
     hasil = r.read(FOTO, today=HARI_INI)
-    assert hasil.date.value == date(2026, 12, 3)
-    assert hasil.source == E.SOURCE_FULL
-    assert ocr.panggilan[-1] == FOTO.shape
+    assert hasil.found is False
+    assert "zone_gagal" in hasil.notes          # seluruh gambar sudah dicoba
+    assert hasil.notes["crop_rotations_tried"] == [180, 90, 270]
+    # 1 potongan tegak + 1 seluruh gambar + 3 potongan diputar
+    assert len(ocr.panggilan) == 5
 
 
 def test_rotate_crop_mati_memulihkan_perilaku_lama(cfg):

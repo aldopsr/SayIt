@@ -514,7 +514,27 @@ sementara 17-11 memberi 13/2/1 - komposisi berbeda pada akurasi yang sama. **Riw
   pra-pemrosesan `chees` justru BENAR dan komposisinya 12/2/2 (satu salah lebih sedikit),
   walau ablasi resmi melaporkan "tidak berpengaruh +0%" karena akurasinya sama-sama 75%.
 
-**Memutar POTONGAN zona TERBANTAH (16-11), `expiry.rotate_crop` tetap `false`:**
+**Urutan eskalasi kedaluwarsa disusun ulang 17-11, dan temuannya bukan soal latensi:**
+- Urutannya sekarang **`potongan tegak -> seluruh gambar -> rotasi potongan`**. `_read_zone`
+  hanya potongan tegak; rotasinya di `_putar_potongan` sebagai langkah terakhir. Rotasi gambar
+  PENUH tidak masuk daftar ini - ia tetap di `read()` dan hanya dipakai bila zona tidak ketemu.
+- Ini **memperbaiki kerugian 16-11**: dua kemasan yang menjawab dari seluruh gambar dulu dihukum
+  urutan lama (`20261008` 15,1 -> 22,5 s, `20270906` 4,3 -> 13,0 s) dan kini kembali normal.
+- **TEMUAN UTAMA: NOL dari 16 kemasan menyentuh langkah 3.** Jejak per berkas: 7 berhenti di
+  potongan tegak, 2 di seluruh gambar, **7 tanpa zona**, 0 sampai rotasi potongan. Jadi kedua
+  kondisi `rotate_crop` menjalankan kode IDENTIK pada ke-16 berkas: akurasi 13/2/1 = 81% memang
+  harus sama, dan selisih median 9,35 lawan 7,35 detik **murni derau** - `tidakada_permen1`
+  10,5 -> 7,2 detik padahal saklar itu tidak menyentuh jalurnya. **Jangan kutip -21% itu.**
+- **`rotate_crop` tetap `false`.** Bukan karena terbantah, tetapi karena **tidak terukur**:
+  kasus yang ia sasar (zona ketemu, potongan gagal, gambar penuh gagal) tidak ada di data uji.
+- **Foto Indomie dari uji lapangan 12-11 TIDAK DISIMPAN** (`find` seluruh repo: tidak ada).
+  Satu-satunya contoh nyata kasus itu hilang. **Aturan proses baru: setiap foto lapangan yang
+  gagal WAJIB langsung disimpan ke `data/uji_kedaluwarsa/` dengan nama bertanggal.**
+- Cakupan zona: **9 dari 14 kemasan bertanggal**, sama persis dengan catatan 30-09. Tetapi itu
+  juga berarti 7 berkas jatuh ke jalur cadangan, dan di situ `rotate_crop`, `crop_margin_ratio`,
+  dan `zone_score_min` tidak berpengaruh sama sekali.
+
+**Catatan 16-11 soal urutan lama (ditahan sebagai jejak):**
 16 kemasan, dua kondisi: akurasi **identik per berkas** (12/3/1 keduanya), latensi JAUH lebih
 buruk - median 6,54 s -> 9,33 s, total 234,4 s -> 344,4 s, terburuk `tolakangin2` 91,7 s ->
 **147,3 s**, melambat di 13 dari 16 berkas. Taksiran 45 s -> 20 s **terbantah, arahnya terbalik**.
