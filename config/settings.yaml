@@ -61,7 +61,43 @@ vision:
     enabled: true
     blur:
       enabled: true
-      min_variance: 100.0       # variance of Laplacian, di bawah ini dianggap buram
+      # DITURUNKAN 100 -> 15 pada 19-11 setelah uji lapangan, dan dasarnya diukur.
+      #
+      # Masalahnya bukan foto pengguna, melainkan ambangnya: 100 dikalibrasi pada
+      # foto UTUH, sedangkan aplikasi mengirim POTONGAN ketat sebatas kurung jingga
+      # (sisi pendek 841 px, terbaca dari log `[quality]`). Diuji pada 15 kemasan
+      # yang TERBUKTI TERBACA sistem, dipotong dan diskalakan seperti aplikasi
+      # memotong, EMPAT di antaranya jatuh di bawah 100:
+      #
+      #   berkas         utuh    dipotong+841
+      #   20270906       86,1        48,4
+      #   merica        149,4        87,9
+      #   permen1        34,7        23,4
+      #   permen2        29,8        19,3
+      #
+      # Foto lapangan pengguna 19-11 jatuh di pita yang sama: 16,3 / 21,9 / 22,5 /
+      # 31,4 / 38,0 / 38,2 / 40,2 - tujuh percobaan, nol yang lolos.
+      #
+      # Sebabnya: variance of Laplacian mengukur KEKAYAAN TEPI, bukan ketajaman
+      # semata. Latar penuh tekstur (meja, keyboard) menaikkannya; permukaan plastik
+      # mengkilap yang memenuhi bingkai menurunkannya. Jadi makin BENAR pengguna
+      # membingkai objeknya, makin RENDAH skornya - ambang lama menghukum
+      # pembidikan yang baik.
+      #
+      # 15 dipilih karena ia di bawah 19,3, skor TERENDAH di antara foto yang
+      # terbaca BENAR. Di bawah itu tidak ada dasarnya; di atas itu ada foto sah
+      # yang ditolak.
+      #
+      # HARGANYA, dan ini nyata: foto yang benar-benar buram kini SAMPAI ke OCR.
+      # Akibatnya bukan jawaban salah - penjaga hilir sudah ada (`unclear_score_min`
+      # untuk dokumen, dan jawaban "tidak menemukan tanggal" untuk kedaluwarsa) -
+      # melainkan latensi yang terbuang pada foto yang memang tidak terbaca.
+      #
+      # YANG BELUM DIUKUR dan menentukan angka yang benar-benar tepat: pada nilai
+      # blur berapa OCR mulai gagal. Itu butuh sapuan blur lawan keterbacaan, dan
+      # belum pernah dijalankan. Sampai itu ada, 15 adalah batas yang SAH dari data,
+      # bukan nilai optimal.
+      min_variance: 15.0        # variance of Laplacian, di bawah ini dianggap buram
       resize_short_side: 720    # gambar dinormalisasi dulu agar ambang tidak ikut berubah saat resolusi kamera berbeda
     dark:
       enabled: true

@@ -64,7 +64,7 @@
 Selesai: config, `audio/io.py`, `audio/stt.py`, `audio/tts.py`, `intent/`, `response/`, skrip cache & demo,
 `vision/quality_gate.py` (PRD 8.2), `vision/preprocess.py` (PRD 8.3), `vision/money.py` (PRD 8.6),
 `vision/date_parser.py` (PRD 8.8.1), `vision/document.py` (PRD 8.7), `vision/expiry.py` (PRD 8.8), `pipeline.py` (PRD 7), `app.py` + `sayit/appkit.py` (Streamlit), `scripts/diagnosa_uang.py`, `scripts/buat_label_uang.py`, `scripts/ukur_dokumen.py`,
-`scripts/ukur_kedaluwarsa.py`, `sayit/gambar.py`, `tests/test_ukur.py`, `scripts/banding_ocr.py`, `scripts/ukur_latensi.py`, 744 tes lulus.
+`scripts/ukur_kedaluwarsa.py`, `sayit/gambar.py`, `tests/test_ukur.py`, `scripts/banding_ocr.py`, `scripts/ukur_latensi.py`, 752 tes lulus.
 `opencv-python`, `ultralytics`, dan `easyocr` terpasang dan masuk `requirements.txt`.
 
 Pra-pemrosesan: tiap langkah adalah fungsi murni `(citra, params) -> citra` di `STEPS`, dirangkai lewat
@@ -353,7 +353,7 @@ Catatan membaca laporan: 457 "dangling-endpoint edge" pada diagnostik BUKAN koru
 
 ## Titik sambung (2 Oktober 2026)
 
-744 tes lulus. Seluruh metrik PRD Bagian 11 kini sudah pernah diukur.
+752 tes lulus. Seluruh metrik PRD Bagian 11 kini sudah pernah diukur.
 
 | Metrik | Hasil | Target | |
 |---|---|---|---|
@@ -503,7 +503,23 @@ klip yang teksnya memang berubah. Klip sekarang **91**, `uang_terpotong` baru da
 dibuat ulang karena teksnya berubah.
 
 **UJI LAPANGAN 19-11 - dua temuan dan satu ralat atas kesimpulan saya sendiri:**
-1. **Foto ditolak "buram" berulang kali, dan sebabnya AUTOFOKUS MENGUNCI KE LATAR.**
+1. **AMBANG BURAM 100 TERBUKTI SALAH, DITURUNKAN KE 15.** Aplikasi mengirim POTONGAN
+   ketat sebatas kurung jingga (sisi pendek **841** px, dari log `[quality]`), sedangkan
+   ambang 100 dikalibrasi pada foto UTUH. Diuji pada 15 kemasan yang TERBUKTI TERBACA,
+   dipotong seperti aplikasi memotong: **4 jatuh di bawah 100** - `20270906` 48,4,
+   `merica` 87,9, `permen1` 23,4, `permen2` 19,3. Foto lapangan pengguna: 16,3 / 21,9 /
+   22,5 / 31,4 / 38,0 / 38,2 / 40,2 - tujuh percobaan, nol lolos.
+   Sebabnya **variance of Laplacian mengukur KEKAYAAN TEPI, bukan ketajaman**: latar
+   bertekstur menaikkannya, plastik mengkilap yang memenuhi bingkai menurunkannya - jadi
+   **makin benar pembingkaiannya, makin rendah skornya**. 15 dipilih karena di bawah 19,3,
+   skor terendah di antara foto yang terbaca benar. **Harganya: foto buram kini sampai ke
+   OCR** (latensi terbuang, bukan jawaban salah - penjaga hilir sudah ada).
+   **BELUM DIUKUR: pada nilai blur berapa OCR mulai gagal.** 15 adalah batas yang sah dari
+   data, bukan nilai optimal.
+1b. **Autofokus mengunci ke latar juga nyata**, terukur pada dua tangkapan layar (bagian
+   tengah 21,6 lawan 72,5 seluruh bingkai). `aturFokus()` dipasang dan dipertahankan, tetapi
+   **ia bukan yang membuka blokade** - foto yang fokusnya baik pun ditolak oleh ambang.
+   Pelajaran: dua tangkapan layar cukup untuk HIPOTESIS, tidak cukup untuk memilih perbaikan.
    Diukur pada dua tangkapan layar pengguna, ambang 100: foto 1 seluruh bingkai **176,8** /
    dalam kurung jingga 108,9 / sepertiga tengah 98,6; foto 2 **72,5** / **21,6** / **13,2**.
    Bagian TENGAH justru jauh lebih buram - latar (keyboard laptop) tajam, objek di tangan tidak.
@@ -521,10 +537,13 @@ dibuat ulang karena teksnya berubah.
    didiagnosis. Diperbaiki, dan server kini mencetak **`[dengar] '<teks>' -> <INTENT>`** untuk
    setiap `/tanya` plus **`[quality] DITOLAK ... blur=`** untuk setiap foto yang ditolak.
    Di ponsel `console.info` tidak terjangkau, jadi jejaknya harus di sisi server.
-4. Hipotesis (BELUM TERBUKTI) kenapa perintah suaranya gagal: intent kendali dicocokkan
-   **PERSIS tanpa fuzzy**, jadi satu kata berbeda dari Whisper sudah cukup - "center",
-   "sentir", "nyalain". **Jangan menambah kata kunci dari tebakan ini**; pakai teks dari
-   log `[dengar]`, dan tiap kata kunci baru wajib berkasus uji.
+4. **TERBUKTI: Whisper menulis "senter" dengan ejaan Inggris `center`**, sesekali `sender`,
+   dan merusak "nyalakan" jadi "Yalahkan"/"Alakan". Log: `'Yalahkan Center Yalahkan Center'`,
+   `'nyalakan center'`, `'Nyalakan center'`, `'Alakan sender'` - **keempatnya TIDAK_DIKENALI**.
+   `center` dan `sender` ditambahkan; sisi MATI pada bobot 3 agar tetap menang. Keempat
+   transcript itu dipakai langsung sebagai kasus uji. `senternya`/`centernya` TIDAK
+   didaftarkan - router sudah memotong akhiran -nya, dan mendaftarkannya merusak kemenangan
+   SENTER_MATI pada "tolong matikan senternya".
 
 **SENTER (torch) 19-11 - jalan di Android, kemungkinan TIDAK di iPhone:**
 `SENTER_NYALA` / `SENTER_MATI` (dua intent, bukan toggle) + tombol `.btn-cam` 56 px di
