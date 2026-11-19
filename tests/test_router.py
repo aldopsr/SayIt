@@ -198,3 +198,42 @@ def test_prompt_stt_memuat_kata_yang_disuruh_diucapkan_aplikasi():
     prompt = load_config()["stt"]["initial_prompt"].lower()
     for kata in ["sayit", "bantuan", "keluar", "putar kamera", "pilih berkas"]:
         assert kata in prompt, f"{kata!r} tidak ada di initial_prompt"
+
+
+# --------------------------------------------------------------- perintah suara senter
+
+@pytest.mark.parametrize("ucapan", [
+    "nyalakan senter", "hidupkan senter", "senter nyala", "senter on", "nyalakan lampu",
+    "hidupkan lampu", "nyalakan flash", "nyalakan blitz", "nyalakan lampu kamera",
+    "kasih cahaya", "senter", "flash", "blitz", "tolong nyalakan senternya",
+])
+def test_senter_nyala(ucapan):
+    assert ROUTER.route(ucapan).intent == K.SENTER_NYALA
+
+
+@pytest.mark.parametrize("ucapan", [
+    "matikan senter", "senter mati", "senter off", "matikan lampu", "matikan flash",
+    "matikan blitz", "matikan lampu kamera", "senternya matikan", "senternya mati",
+    "sudah terang", "tolong matikan senternya",
+])
+def test_senter_mati(ucapan):
+    assert ROUTER.route(ucapan).intent == K.SENTER_MATI
+
+
+def test_matikan_senter_tidak_boleh_terbaca_nyalakan():
+    """Regresi: "matikan senter" memuat kata kunci "senter" milik SENTER_NYALA.
+
+    Pada bobot sama skornya SERI dan pemenangnya ditentukan urutan daftar, dan
+    sebelum diperbaiki yang menang SENTER_NYALA - yaitu menyalakan senter ketika
+    pengguna minta dimatikan. Pengguna tunanetra tidak bisa melihat keadaannya,
+    jadi kesalahan itu tidak akan pernah ia sadari. Dijaga dua lapis: bobot 3
+    pada frasa "matikan", dan SENTER_MATI diletakkan sebelum SENTER_NYALA.
+    """
+    for ucapan in ("matikan senter", "senternya matikan", "matikan lampu kamera"):
+        assert ROUTER.route(ucapan).intent == K.SENTER_MATI, ucapan
+
+
+def test_senter_tidak_menelan_intent_tugas():
+    assert ROUTER.route("uang ini berapa").intent == K.UANG
+    assert ROUTER.route("bacakan tulisannya").intent == K.BACA
+    assert ROUTER.route("kapan kedaluwarsanya").intent == K.KEDALUWARSA

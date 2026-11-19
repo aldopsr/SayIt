@@ -14,12 +14,16 @@ FOTO_BARU = "FOTO_BARU"
 KELUAR = "KELUAR"
 PUTAR_KAMERA = "PUTAR_KAMERA"
 PILIH_BERKAS = "PILIH_BERKAS"
+SENTER_NYALA = "SENTER_NYALA"
+SENTER_MATI = "SENTER_MATI"
 BANTUAN = "BANTUAN"
 TIDAK_DIKENALI = "TIDAK_DIKENALI"
 
 # Urutan prioritas jika skor seri (PRD 8.5 aturan 3)
 TASK_INTENTS = [KEDALUWARSA, UANG, BACA]
-CONTROL_INTENTS = [ULANGI, LANJUT, FOTO_BARU, KELUAR, PUTAR_KAMERA, PILIH_BERKAS, BANTUAN]
+CONTROL_INTENTS = [ULANGI, LANJUT, FOTO_BARU, KELUAR, PUTAR_KAMERA, PILIH_BERKAS,
+                   # SENTER_MATI sebelum SENTER_NYALA: lihat catatan bobot di KEYWORDS
+                   SENTER_MATI, SENTER_NYALA, BANTUAN]
 
 KEYWORDS: dict[str, dict[str, int]] = {
     KEDALUWARSA: {
@@ -51,6 +55,25 @@ KEYWORDS: dict[str, dict[str, int]] = {
     # karena STT Indonesia sering menuliskannya sebagai "fail".
     PILIH_BERKAS: {"pilih berkas": 2, "pilih file": 2, "pilih fail": 2, "dari galeri": 2,
                    "buka galeri": 2, "ambil dari galeri": 2, "unggah": 2, "upload": 2},
+    # Senter dipisah menjadi DUA intent, bukan satu toggle. Toggle akan menyalakan
+    # senter ketika pengguna berkata "matikan senter" dalam keadaan sudah mati -
+    # dan pengguna tunanetra tidak bisa melihat keadaan nyala atau matinya, jadi
+    # kesalahan itu tidak akan pernah ia sadari. Dua intent membuat maksudnya pasti.
+    # "senter" dan "flash" sendirian diarahkan ke NYALA: itu maksud yang jauh lebih
+    # sering. "lampu" sendirian TIDAK dipakai - terlalu umum ("lampu kamar mati").
+    SENTER_NYALA: {"nyalakan senter": 2, "hidupkan senter": 2, "senter nyala": 2, "senter on": 2,
+                   "nyalakan lampu": 2, "hidupkan lampu": 2, "nyalakan flash": 2,
+                   "nyalakan blitz": 2, "nyalakan lampu kamera": 2, "kasih cahaya": 2,
+                   "senter": 2, "flash": 2, "blitz": 2},
+    # Bobot 3, bukan 2, DAN urutannya di depan SENTER_NYALA di CONTROL_INTENTS.
+    # Keduanya diperlukan: "matikan senter" memuat kata "senter" yang juga kata kunci
+    # SENTER_NYALA, jadi pada bobot sama skornya SERI dan pemenangnya ditentukan urutan.
+    # Terukur sebelum diperbaiki: "matikan senter" dan "senternya matikan" keduanya
+    # terbaca SENTER_NYALA - yaitu menyalakan senter ketika pengguna minta dimatikan,
+    # dan pengguna tunanetra tidak akan pernah menyadarinya.
+    SENTER_MATI: {"matikan senter": 3, "senter mati": 3, "senter off": 3, "matikan lampu": 3,
+                  "matikan flash": 3, "matikan blitz": 3, "matikan lampu kamera": 3,
+                  "senternya matikan": 3, "senternya mati": 3, "sudah terang": 3},
     # "apa itu sayit" adalah pintu bantuan yang diumumkan sambutan, jadi ejaannya
     # harus longgar: STT menulis nama aplikasi ini bermacam-macam.
     # BANTUAN paling butuh toleransi justru karena isinya NAMA APLIKASI, yang

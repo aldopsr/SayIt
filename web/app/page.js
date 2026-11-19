@@ -463,6 +463,7 @@ export default function SayItPage() {
   const [capturedImage, setCapturedImage] = useState(null);
   const [isSpeaking, setIsSpeaking] = useState(false); // sistem sedang berbicara (TTS)
   const [facingMode, setFacingMode] = useState('user'); // 'user' = kamera depan, 'environment' = kamera belakang
+  const [senterNyala, setSenterNyala] = useState(false);
   const [capturedMirror, setCapturedMirror] = useState(true); // foto dari kamera depan ditampilkan mirror, kamera belakang & upload tidak
   const [orbSlot, setOrbSlot] = useState({ top: null, scale: 0.9 }); // posisi orb di layar hasil
   const [demo, setDemo] = useState(false);     // DEMO, tetapi lewat state supaya hydrate tetap cocok
@@ -924,6 +925,11 @@ export default function SayItPage() {
     });
     streamRef.current = stream;
     if (videoRef.current) videoRef.current.srcObject = stream;
+    // Torch itu milik TRACK, bukan milik aplikasi. Stream baru = track baru =
+    // senter padam, dan kalau penandanya tidak direset maka tombolnya akan
+    // berkata "matikan senter" untuk senter yang sudah mati - dan pengguna
+    // tunanetra tidak punya cara melihat bahwa penandanya salah.
+    setSenterNyala(false);
     return stream;
   };
 
@@ -1215,6 +1221,37 @@ export default function SayItPage() {
   /** Putar kamera dan UMUMKAN hasilnya. Dipakai tombol maupun perintah suara,
    *  jadi keduanya tidak bisa menyimpang. Pengguna tunanetra tidak melihat
    *  gambarnya berubah - satu-satunya tanda bahwa perintahnya jalan adalah suara. */
+  // === SENTER (torch) ===
+  // Tiga kegagalan yang WAJIB berbunyi dan menyebut jalan keluar, karena pengguna
+  // tunanetra tidak bisa melihat apakah senternya menyala:
+  //   1. kamera depan aktif - torch web hanya ada di kamera belakang
+  //   2. peramban tidak mengekspos `torch` sama sekali (Safari iOS: `getCapabilities`
+  //      tidak ada, jadi caps jatuh ke {} dan cabang ini yang terpakai)
+  //   3. applyConstraints dilempar perangkatnya
+  // Tombol yang gagal dalam DIAM sama tidak bergunanya dengan tombol yang rusak.
+  const setSenter = async (nyala) => {
+    const track = streamRef.current?.getVideoTracks?.()[0];
+    if (!track) { ucapkanKlip('senter_tidak_ada'); return; }
+    if (facingRef.current !== 'environment') { ucapkanKlip('senter_butuh_kamera_belakang'); return; }
+    const caps = track.getCapabilities?.() || {};
+    if (!caps.torch) { ucapkanKlip('senter_tidak_ada'); return; }
+    try {
+      await track.applyConstraints({ advanced: [{ torch: nyala }] });
+      setSenterNyala(nyala);
+      ucapkanKlip(nyala ? 'senter_nyala' : 'senter_mati');
+    } catch {
+      ucapkanKlip('senter_tidak_ada');
+    }
+  };
+
+  const handleSenter = (e) => {
+    e.stopPropagation();               // jangan ikut memicu "ketuk layar untuk memotret"
+    if (appState !== 'CAMERA_READY') return;
+    aktifRef.current = performance.now();
+    hentikanSuara();                   // spec 2: tombol menyela ucapan sistem
+    setSenter(!senterNyala);
+  };
+
   const putarKamera = async () => {
     if (isFlipping.current) return;
     isFlipping.current = true;
@@ -1274,6 +1311,13 @@ export default function SayItPage() {
         berkasMenunggu.current = true;
         pindah('CAMERA_READY');
         ucapkanKlip('sentuh_untuk_berkas');
+        return;
+      case 'SENTER_NYALA':
+      case 'SENTER_MATI':
+        // Server sengaja tidak mengirim audio: hanya klien tahu apakah torch-nya
+        // ada. setSenter yang mengumumkan hasil sesungguhnya, termasuk kegagalannya.
+        pindah('CAMERA_READY');
+        setSenter(j.intent === 'SENTER_NYALA');
         return;
       case 'FOTO_BARU':
         ucapkanJawaban(j.audio, j.teks, { lalu: 'INIT' });
@@ -1701,6 +1745,41 @@ export default function SayItPage() {
             <div style={{ position: 'absolute', bottom: 0, left: 0, width: '40px', height: '40px', borderBottom: '6px solid var(--jingga, #f97316)', borderLeft: '6px solid var(--jingga, #f97316)' }}></div>
             <div style={{ position: 'absolute', bottom: 0, right: 0, width: '40px', height: '40px', borderBottom: '6px solid var(--jingga, #f97316)', borderRight: '6px solid var(--jingga, #f97316)' }}></div>
           </div>
+
+          {/* Senter di KANAN ATAS, sengaja TIDAK di baris bawah.
+              Baris bawah sudah berupa peta tiga posisi yang dihafal pengguna
+              tunanetra: kiri unggah, TENGAH rana, kanan balik kamera. Menyisipkan
+              tombol keempat di situ menggeser rana keluar dari titik tengah, dan
+              titik tengah itulah satu-satunya penanda yang bisa ditemukan tanpa
+              melihat. Senter juga bukan tindakan pemotretan - ia penyiapan kondisi,
+              jadi memisahkannya dari kelompok rana justru benar secara makna.
+              Ukuran mengikuti `.btn-cam` 56 px (di atas minimum 44pt iOS / 48dp
+              Android), dan `aria-pressed` membuat pembaca layar menyebut keadaannya;
+              label ikut berubah karena sebagian pembaca layar seluler tidak
+              mengumumkan `aria-pressed` dengan andal. */}
+          <button
+            className="btn-cam"
+            onClick={handleSenter}
+            aria-pressed={senterNyala}
+            aria-label={senterNyala ? 'Matikan senter' : 'Nyalakan senter'}
+            style={{
+              position: 'absolute',
+              top: 'calc(16px + env(safe-area-inset-top))',
+              right: 'max(16px, env(safe-area-inset-right))',
+              zIndex: 55,
+              backgroundColor: senterNyala ? 'var(--jingga, #f97316)' : 'rgba(255,255,255,0.92)',
+              color: senterNyala ? '#ffffff' : undefined,
+            }}
+          >
+            {/* Bentuk "flashlight" dari Lucide (MIT): badan senter mengerucut
+                dengan satu garis lensa. Bukan ikon bohlam - bohlam terbaca
+                "lampu ruangan", bukan senter di tangan. */}
+            <svg fill="none" stroke="currentColor" strokeWidth="2.2" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M18 6c0 2-2 2-2 4v10a2 2 0 0 1-2 2h-4a2 2 0 0 1-2-2V10c0-2-2-2-2-4V3a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1z"/>
+              <line x1="6" y1="6" x2="18" y2="6"/>
+              <line x1="12" y1="12" x2="12" y2="14"/>
+            </svg>
+          </button>
 
           {/* Baris bawah: upload (kiri) - shutter (tengah) - flip kamera (kanan) */}
           <div style={{

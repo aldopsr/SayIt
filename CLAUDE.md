@@ -64,7 +64,7 @@
 Selesai: config, `audio/io.py`, `audio/stt.py`, `audio/tts.py`, `intent/`, `response/`, skrip cache & demo,
 `vision/quality_gate.py` (PRD 8.2), `vision/preprocess.py` (PRD 8.3), `vision/money.py` (PRD 8.6),
 `vision/date_parser.py` (PRD 8.8.1), `vision/document.py` (PRD 8.7), `vision/expiry.py` (PRD 8.8), `pipeline.py` (PRD 7), `app.py` + `sayit/appkit.py` (Streamlit), `scripts/diagnosa_uang.py`, `scripts/buat_label_uang.py`, `scripts/ukur_dokumen.py`,
-`scripts/ukur_kedaluwarsa.py`, `sayit/gambar.py`, `tests/test_ukur.py`, `scripts/banding_ocr.py`, `scripts/ukur_latensi.py`, 717 tes lulus.
+`scripts/ukur_kedaluwarsa.py`, `sayit/gambar.py`, `tests/test_ukur.py`, `scripts/banding_ocr.py`, `scripts/ukur_latensi.py`, 744 tes lulus.
 `opencv-python`, `ultralytics`, dan `easyocr` terpasang dan masuk `requirements.txt`.
 
 Pra-pemrosesan: tiap langkah adalah fungsi murni `(citra, params) -> citra` di `STEPS`, dirangkai lewat
@@ -327,7 +327,7 @@ Catatan membaca laporan: 457 "dangling-endpoint edge" pada diagnostik BUKAN koru
 
 ## Titik sambung (2 Oktober 2026)
 
-717 tes lulus. Seluruh metrik PRD Bagian 11 kini sudah pernah diukur.
+744 tes lulus. Seluruh metrik PRD Bagian 11 kini sudah pernah diukur.
 
 | Metrik | Hasil | Target | |
 |---|---|---|---|
@@ -475,6 +475,26 @@ tanpa pendaftaran. Wajib mengutip paper dan menyebut KIST.
 `--force` mengubah 91 berkas biner walau yang berubah cuma satu kalimat. Pakai `--kunci` untuk
 klip yang teksnya memang berubah. Klip sekarang **91**, `uang_terpotong` baru dan `foto_gelap`
 dibuat ulang karena teksnya berubah.
+
+**SENTER (torch) 19-11 - jalan di Android, kemungkinan TIDAK di iPhone:**
+`SENTER_NYALA` / `SENTER_MATI` (dua intent, bukan toggle) + tombol `.btn-cam` 56 px di
+**kanan atas**. Klien memakai `track.applyConstraints({advanced:[{torch}]})`.
+- **Torch web hanya ada di kamera BELAKANG, sedangkan bawaan aplikasi kamera DEPAN** -
+  jadi jalur gagal adalah jalur BAWAAN, bukan kasus pinggiran. Tiga cabang gagal punya
+  klipnya sendiri: `senter_butuh_kamera_belakang`, `senter_tidak_ada` (dua kali: `caps.torch`
+  kosong, dan `applyConstraints` dilempar). **Tidak ada bukti Safari iOS mendukung `torch`** -
+  di sana `getCapabilities` tidak ada, jadi `caps` jatuh ke `{}`. **Uji di Android dulu.**
+- **BUG yang hampir lolos:** `matikan senter` terbaca `SENTER_NYALA`, karena frasa itu memuat
+  kata "senter" milik SENTER_NYALA dan pada bobot sama skornya SERI. Pengguna minta dimatikan,
+  sistem menyalakan - dan pengguna tunanetra tidak bisa melihatnya. Dijaga dua lapis: bobot
+  **3** pada frasa "matikan", dan `SENTER_MATI` sebelum `SENTER_NYALA` di `CONTROL_INTENTS`.
+  Itu juga sebabnya BUKAN satu intent toggle.
+- Torch milik **TRACK**: penandanya direset tiap `startStream`, kalau tidak tombolnya akan
+  berkata "matikan senter" untuk senter yang sudah padam.
+- Letaknya kanan atas, **bukan baris bawah**: baris bawah adalah peta tiga posisi (kiri
+  unggah, TENGAH rana, kanan balik kamera) dan tombol keempat akan menggeser rana keluar dari
+  titik tengah - satu-satunya penanda yang bisa ditemukan tanpa melihat.
+- 95 klip sekarang. `menu_bantuan` dibuat ulang karena ikut menyebut perintah senter.
 
 **Quality gate bicara SOLUSI (19-11):** `terpotong_tepi()` di `quality_gate.py` adalah penanda
 murni atas koordinat kotak - ada kotak menempel tepi bingkai (margin 2%) berarti objeknya

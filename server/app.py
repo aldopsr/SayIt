@@ -291,11 +291,13 @@ def tanya(
         if giliran.intent in ("UANG", "BACA", "KEDALUWARSA"):
             ucapan += fixed("tindak_lanjut")
 
-        # PUTAR_KAMERA tidak dirender: hasilnya baru diketahui SETELAH klien memutar
-        # kameranya, dan klien yang mengucapkan "kamera depan/belakang aktif".
+        # PUTAR_KAMERA dan SENTER tidak dirender: hasilnya baru diketahui SETELAH
+        # klien bertindak. Kamera - klien yang mengucapkan "kamera depan/belakang
+        # aktif". Senter - torch web hanya ada di kamera BELAKANG dan di sebagian
+        # peramban tidak ada sama sekali, jadi hanya klien tahu apa yang terjadi.
         # Merender di sini berarti dua kalimat berturut-turut untuk satu tindakan,
         # plus satu detik gTTS yang terbuang.
-        if giliran.intent == "PUTAR_KAMERA":
+        if giliran.intent in ("PUTAR_KAMERA", "SENTER_NYALA", "SENTER_MATI"):
             return {"teks": giliran.text, "intent": giliran.intent,
                     "alasan": giliran.reason, "audio": None}
 

@@ -199,6 +199,13 @@ class Pipeline:
             return self._jawab(fixed("kamera_diputar"), intent, "kendali kamera diteruskan ke klien", catatan)
         if intent == K.PILIH_BERKAS:
             return self._jawab(fixed("buka_berkas"), intent, "pemilih berkas diteruskan ke klien", catatan)
+        # Senter juga tindakan di klien, dan hasilnya BELUM diketahui di sini: torch
+        # web hanya ada di kamera belakang, dan di sebagian peramban (Safari iOS)
+        # tidak ada sama sekali. Jadi klien yang mengumumkan hasil sesungguhnya -
+        # kalimat di sini cuma teks untuk kartu jawaban.
+        if intent in (K.SENTER_NYALA, K.SENTER_MATI):
+            klip = "senter_nyala" if intent == K.SENTER_NYALA else "senter_mati"
+            return self._jawab(fixed(klip), intent, "kendali senter diteruskan ke klien", catatan)
         if intent == K.LANJUT:
             return self._lanjut(catatan)
 

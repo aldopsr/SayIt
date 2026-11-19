@@ -58,7 +58,8 @@ FIXED_PHRASES: dict[str, str] = {
     "menu_bantuan": ("Saya bisa membantu tiga hal: menyebutkan nominal uang kertas, membacakan tulisan, "
                      "dan membacakan tanggal kedaluwarsa. Ambil foto, lalu ajukan pertanyaanmu. "
                      "Semua tombol juga bisa dipanggil dengan suara. Katakan putar kamera untuk "
-                     "berganti kamera, pilih berkas untuk membaca berkas dari penyimpanan, ulangi "
+                     "berganti kamera, nyalakan senter bila ruangannya gelap, "
+                     "pilih berkas untuk membaca berkas dari penyimpanan, ulangi "
                      "untuk mendengar jawaban sekali lagi, foto lagi untuk memotret ulang, atau "
                      "keluar untuk menutup aplikasi. "
                      "Saya tidak bisa memeriksa keaslian uang."),
@@ -102,6 +103,19 @@ FIXED_PHRASES: dict[str, str] = {
     "kamera_tunggal": ("Perangkat ini hanya punya satu kamera. "
                        "Kamu masih bisa memilih berkas dari penyimpanan."),
     "buka_berkas": "Silakan pilih berkas dari penyimpanan.",
+    # Senter. Keadaan nyala/mati WAJIB diucapkan: pengguna tunanetra tidak bisa
+    # melihat apakah senternya menyala, jadi tombol yang bekerja dalam diam sama
+    # tidak bergunanya dengan tombol yang rusak.
+    "senter_nyala": "Senter saya nyalakan.",
+    "senter_mati": "Senter saya matikan.",
+    # Dua kegagalan yang WAJIB berbunyi dan menyebut jalan keluar. Senter web
+    # hanya ada di kamera BELAKANG, dan di Safari iOS kemungkinan tidak ada sama
+    # sekali - jadi diam di sini akan membuat pengguna menekan tombol berulang
+    # tanpa pernah tahu kenapa tidak terjadi apa-apa.
+    "senter_butuh_kamera_belakang": ("Senter hanya ada di kamera belakang. Katakan putar kamera "
+                                     "lebih dulu, lalu nyalakan senter."),
+    "senter_tidak_ada": ("Perangkat ini tidak mengizinkan saya menyalakan senter. Nyalakan "
+                         "senter dari panel cepat ponselmu, atau dekatkan ke lampu."),
     "tidak_ada_tanggal": "Saya tidak menemukan tanggal kedaluwarsa. Coba foto bagian kemasan yang lain.",
     "tulisan_bukan_tanggal": ("Saya menemukan tulisan, tetapi tidak yakin itu tanggal kedaluwarsa. "
                               "Tulisannya:"),
