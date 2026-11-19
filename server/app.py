@@ -186,6 +186,17 @@ def unggah_foto(foto: UploadFile = File(...)):
     with antre():
         giliran = pipeline.set_photo(foto_dari_berkas(_Berkas(data)))
         audio, sr = penyuara.render(giliran.utterance)
+    # Foto yang DITOLAK wajib meninggalkan angkanya di log. Tanpa ini ambang quality
+    # gate hanya bisa dikalibrasi dari tangkapan layar, dan tangkapan layar sudah
+    # dicatat TIDAK SAH untuk itu (latar putih aplikasi merusak `saturated_ratio`).
+    # Uji lapangan 19-11 terhambat persis di sini: foto ditolak berkali-kali dan
+    # tidak ada satu pun angka yang bisa diperiksa sesudahnya.
+    if not giliran.diterima:
+        m = giliran.notes.get("quality") or {}
+        print(f"[quality] DITOLAK {giliran.notes.get('issues')} "
+              f"blur={m.get('blur_variance', 0):.1f} mean={m.get('mean', 0):.1f} "
+              f"jenuh={m.get('saturated_ratio', 0):.3f} sisi={m.get('short_side', 0):.0f}",
+              flush=True)
     return {"teks": giliran.text, "intent": giliran.intent, "alasan": giliran.reason,
             "diterima": giliran.diterima, "audio": _wav_b64(audio, sr)}
 
