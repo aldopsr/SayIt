@@ -248,6 +248,25 @@ vision:
     years_forward: 10
     two_digit_year_base: 2000   # "27" dibaca 2027
     marker_window: 24           # jarak maksimum (karakter) antara penanda dan tanggal
+    # Penanda NEGATIF: angka di dekatnya BUKAN tanggal kedaluwarsa, melainkan kode
+    # produksi atau nomor bets. Dicari di DUA sisi (penanda positif hanya dicari ke
+    # belakang) dan dengan jendelanya sendiri yang lebih lebar.
+    #
+    # Dibuat setelah `chees` 19-11: OCR membaca
+    #   '... 210526 MAR CISTONERSERTICE 0 /Production Code BestBeftore Kode Produksi/'
+    # Parser menjawab 2026-05-21 dari `210526`, padahal kemasannya sendiri menulis
+    # bahwa angka itu kode produksi - labelnya cuma kebetulan berada SESUDAH angkanya,
+    # di luar jangkauan penanda positif yang hanya melihat ke belakang.
+    #
+    # Kandidat yang punya penanda POSITIF sendiri dikecualikan, supaya
+    # "EXP 110426 KODE PRODUKSI 220517" tetap menjawab dari yang berpenanda EXP.
+    #
+    # BUKAN pengganti `require_marker_for_compact`, yang sudah diukur merugikan
+    # (menyalakannya memberi 56% lawan 75%). Ini jauh lebih sempit: ia hanya
+    # menolak yang terbukti berlabel kode produksi, bukan mewajibkan penanda
+    # untuk SEMUA tanggal rapat.
+    negative_markers: [kode produksi, production code, kode prod, batch, no bets, nomor bets]
+    negative_marker_window: 40
     # Tanggal rapat tanpa pemisah (210829) wajib punya penanda di dekatnya, sebab enam
     # angka berderet juga bisa nomor bets atau kode produksi.
     #

@@ -459,9 +459,24 @@ def test_pelonggaran_menerima_tanggal_rapat_tanpa_penanda(cfg):
 
 
 def test_pelonggaran_juga_menerima_yang_seharusnya_ditolak(cfg):
-    """Harga dari pelonggaran itu, ditulis eksplisit supaya tidak terlupakan."""
+    """Harga dari pelonggaran itu - dan penanda NEGATIF kini menutupnya (19-11).
+
+    Tes ini dulu menegaskan bahaya: dengan `require_marker_for_compact` dilonggarkan,
+    "NO BETS 210829" lolos menjadi tanggal. Penanda negatif sekarang menolaknya,
+    karena "no bets" ada di daftar. Jadi dua penjaga itu MELENGKAPI, bukan
+    menggantikan - `require_marker_for_compact` tetap `false` (menyalakannya sudah
+    diukur merugikan: 56% lawan 75%), sementara bahaya yang ia tinggalkan ditutup
+    dari sisi lain.
+
+    Bahayanya tetap diuji di bawah dengan penanda negatif DIKOSONGKAN, supaya
+    kalau daftar itu suatu saat dibersihkan, peringatan aslinya kembali terlihat.
+    """
     cfg["vision"]["date_parser"]["require_marker_for_compact"] = False
-    assert urai("NO BETS 210829 ISI 250 G", cfg).value is not None
+    assert urai("NO BETS 210829 ISI 250 G", cfg).value is None, "penanda negatif harus menolak nomor bets"
+
+    tanpa_penjaga = copy.deepcopy(cfg)
+    tanpa_penjaga["vision"]["date_parser"]["negative_markers"] = []
+    assert urai("NO BETS 210829 ISI 250 G", tanpa_penjaga).value is not None
 
 
 def test_pelonggaran_tidak_mengubah_tanggal_yang_berpemisah(cfg):
@@ -596,3 +611,44 @@ def test_bulan_tahun_berspasi_tidak_butuh_penanda(cfg):
 def test_pola_my_spasi_terdaftar_dan_terpakai(cfg):
     pola = [k.pattern for k in D.find_candidates("12 2027", HARI_INI, cfg)]
     assert pola == ["my_spasi"]
+
+
+# ------------------------------------------------- penanda NEGATIF (kode produksi)
+
+def test_kode_produksi_sesudah_angka_membatalkan_tanggal(cfg):
+    """Kasus `chees` 19-11, teks OCR apa adanya.
+
+    Parser menjawab 2026-05-21 dari `210526` - padahal kemasannya sendiri
+    menulis bahwa angka itu kode produksi. Labelnya hanya kebetulan berada
+    SESUDAH angkanya, sedangkan penanda positif hanya dicari ke belakang.
+    Jawaban yang benar di sini adalah DIAM, bukan tanggal: tanggal keliru
+    lebih berbahaya daripada sistem yang mengaku tidak tahu.
+    """
+    teks = ("Simpan di suhu ruang. Keep refrigerated after opening. "
+            "210526 MAR CISTONERSERTICE 0 /Production Code BestBeftore Kode Produksi/.")
+    assert D.parse_expiry(teks, HARI_INI, cfg).value is None
+
+
+def test_penanda_positif_mengalahkan_penanda_negatif(cfg):
+    """Kandidat berpenanda sendiri dikecualikan, supaya kemasan dengan KEDUANYA tetap terjawab."""
+    h = D.parse_expiry("EXP 110428 KODE PRODUKSI 220517", HARI_INI, cfg)
+    assert h.value == date(2028, 4, 11)
+
+
+def test_tanpa_penanda_negatif_tidak_berubah(cfg):
+    assert D.parse_expiry("EXP 110428", HARI_INI, cfg).value == date(2028, 4, 11)
+
+
+def test_penanda_negatif_dicocokkan_per_kata_bukan_substring(cfg):
+    """Penanda tidak boleh cocok di dalam kata lain yang kebetulan memuatnya."""
+    c = copy.deepcopy(cfg)
+    c["vision"]["date_parser"]["negative_markers"] = ["lot"]
+    # "PILOT" memuat "lot", tetapi bukan penanda - tanggalnya harus tetap terbaca
+    assert D.parse_expiry("PILOT 110428", HARI_INI, c).value == date(2028, 4, 11)
+    assert D.parse_expiry("LOT 110428", HARI_INI, c).value is None
+
+
+def test_penanda_negatif_bisa_dimatikan_lewat_config(cfg):
+    c = copy.deepcopy(cfg)
+    c["vision"]["date_parser"]["negative_markers"] = []
+    assert D.parse_expiry("KODE PRODUKSI 210528", HARI_INI, c).value is not None

@@ -64,7 +64,7 @@
 Selesai: config, `audio/io.py`, `audio/stt.py`, `audio/tts.py`, `intent/`, `response/`, skrip cache & demo,
 `vision/quality_gate.py` (PRD 8.2), `vision/preprocess.py` (PRD 8.3), `vision/money.py` (PRD 8.6),
 `vision/date_parser.py` (PRD 8.8.1), `vision/document.py` (PRD 8.7), `vision/expiry.py` (PRD 8.8), `pipeline.py` (PRD 7), `app.py` + `sayit/appkit.py` (Streamlit), `scripts/diagnosa_uang.py`, `scripts/buat_label_uang.py`, `scripts/ukur_dokumen.py`,
-`scripts/ukur_kedaluwarsa.py`, `sayit/gambar.py`, `tests/test_ukur.py`, `scripts/banding_ocr.py`, `scripts/ukur_latensi.py`, 752 tes lulus.
+`scripts/ukur_kedaluwarsa.py`, `sayit/gambar.py`, `tests/test_ukur.py`, `scripts/banding_ocr.py`, `scripts/ukur_latensi.py`, 757 tes lulus.
 `opencv-python`, `ultralytics`, dan `easyocr` terpasang dan masuk `requirements.txt`.
 
 Pra-pemrosesan: tiap langkah adalah fungsi murni `(citra, params) -> citra` di `STEPS`, dirangkai lewat
@@ -353,7 +353,7 @@ Catatan membaca laporan: 457 "dangling-endpoint edge" pada diagnostik BUKAN koru
 
 ## Titik sambung (2 Oktober 2026)
 
-752 tes lulus. Seluruh metrik PRD Bagian 11 kini sudah pernah diukur.
+757 tes lulus. Seluruh metrik PRD Bagian 11 kini sudah pernah diukur.
 
 | Metrik | Hasil | Target | |
 |---|---|---|---|
@@ -600,6 +600,20 @@ Transcript tetap dikirim server dan tetap masuk `console.info`.
   `compose_text` yang sama, jadi **mengubahnya SELALU menyentuh kedua modul** dan keduanya
   wajib diukur bersamaan.
 - `line_slope_correct` kini hanya berlaku untuk `pita`. Tesnya memakai mode yang dipatok.
+
+**Penanda NEGATIF (`date_parser.negative_markers`, 20-11) - NETRAL, dipasang demi bahaya:**
+A/B 16 kemasan: `[]` 13/2/1 = 81% lawan daftar terisi **13/2/1 = 81%, identik per berkas**.
+Dibiarkan menyala karena bahaya yang ia tutup berjenis JAWABAN SALAH (`"NO BETS 210829"`
+terbaca sebagai tanggal - ada tesnya), bukan karena ia memperbaiki sesuatu yang terukur.
+**Pembenarannya tes bahaya, bukan perbaikan terukur.** Kosongkan daftarnya bila merugikan.
+- **TIDAK memperbaiki `chees`, dan rencana saya terbantah.** Teks yang benar-benar diurai
+  pipeline: `'man.yeg Bes 0re Cae 0 T7 回 回 WOR SUCALNED 210526/ en im ua.'` - **tanpa
+  "Kode Produksi" sama sekali**. Kata itu muncul di diagnosis 19-11 karena OCR dijalankan
+  lewat jalur terpisah. **Diagnosis WAJIB lewat `ExpiryReader.read()`**, bukan memanggil OCR
+  sendiri - teks kedua jalur itu berbeda.
+- **Aturan baru untuk SETIAP sapuan: skrip wajib mencetak NILAI saklar tiap kondisi.**
+  Sapuan pertama penanda negatif memakai `sed` yang polanya tidak cocok, jadi yang tertukar
+  cuma judul kolom dan yang terukur tetap saklar lama. Hasilnya terlihat masuk akal sepenuhnya.
 
 **Dua jawaban salah yang MASIH tersisa di kedaluwarsa (bukan soal urutan bacaan):**
 - `chees` 2026-05-21 (harap 2027-03-21): parser menjawab dari **nomor produksi** `210526`,

@@ -303,6 +303,35 @@ def _nearest_marker(teks: str, mulai: int, cfg: dict, batas: int = 0) -> str:
     return ketemu
 
 
+def _negative_marker(teks: str, mulai: int, akhir: int, cfg: dict) -> str:
+    """Penanda yang menyatakan angka ini BUKAN tanggal kedaluwarsa.
+
+    Berbeda dari `_nearest_marker` dalam dua hal, dan keduanya disengaja:
+
+    1. Dicari di DUA sisi. Terukur pada `chees` 19-11, teks OCR-nya
+       `'... 210526 MAR CISTONERSERTICE 0 /Production Code BestBeftore Kode
+       Produksi/'` - labelnya ada SESUDAH angkanya, sedangkan `_nearest_marker`
+       hanya melihat ke belakang. Karena itu `210526` tampak tidak berpenanda
+       sama sekali dan lolos sebagai tanggal, padahal kemasannya sendiri menulis
+       bahwa itu kode produksi.
+    2. Jendelanya sendiri dan lebih lebar. Pada contoh di atas jarak ke
+       "Production Code" tepat di batas 24 karakter milik penanda positif.
+    """
+    dp = cfg["vision"]["date_parser"]
+    daftar = dp.get("negative_markers") or []
+    if not daftar:
+        return ""
+    jendela = int(dp.get("negative_marker_window") or dp["marker_window"])
+    sekitar = teks[max(0, mulai - jendela):mulai] + " " + teks[akhir:akhir + jendela]
+    bersih = " " + re.sub("[^A-Z0-9]+", " ", sekitar).strip() + " "
+    for m in daftar:
+        # Dinormalkan jadi kata-kata berspasi lalu dicocokkan utuh, bukan substring:
+        # tanpa itu "lot" akan cocok di dalam "PILOT" dan "CHOCOLATE".
+        if f" {m.upper()} " in bersih:
+            return m
+    return ""
+
+
 def _pola_berpenjaga(cfg: dict) -> tuple[str, ...]:
     """Awalan nama pola yang hanya dipercaya bila ada penanda di dekatnya.
 
@@ -373,6 +402,12 @@ def find_candidates(teks: str, today: date, cfg: dict) -> list[DateCandidate]:
     # sebagai tanggal kedaluwarsa. Bisa dilonggarkan lewat config: pada potongan
     # zona yang sempit, potongan itu sendiri sudah menjadi bukti bahwa ini area
     # tanggal, sehingga penanda tidak lagi satu-satunya penjaga.
+    # Kandidat yang bertetangga dengan penanda NEGATIF dibuang, kecuali ia punya
+    # penanda positif sendiri. Urutannya penting: pengecualian itu membuat
+    # "EXP 110426 KODE PRODUKSI 220517" tetap menjawab dari yang berpenanda EXP.
+    hasil = [k for k in hasil
+             if k.marker or not _negative_marker(besar, k.start, k.end, cfg)]
+
     if not berpenjaga:
         return hasil
     return [k for k in hasil if not k.pattern.startswith(berpenjaga) or k.marker]
