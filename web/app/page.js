@@ -1850,7 +1850,21 @@ export default function SayItPage() {
       </div>
 
       {/* === OVERLAY PUTIH UTAMA DENGAN TRANSISI HALUS === */}
+      {/* `inert` + `aria-hidden`, BUKAN hanya `opacity` + `pointerEvents`.
+          Diaudit 19-11 lewat pohon aksesibilitas: dengan opacity saja, panel yang
+          tak aktif hilang dari MATA dan dari MOUSE tetapi TETAP ada untuk pembaca
+          layar. Terukur saat aplikasi di layar kamera, keempat tombol ini masih
+          bisa difokus: "Ulangi pembacaan", "Foto lagi", "Keluar aplikasi",
+          "Mulai lagi". Pengguna tunanetra yang menyapu layar akan menemukan
+          "Keluar aplikasi" saat ia sedang mencoba memotret, dan menutup aplikasi
+          tanpa pernah tahu kenapa. Cacat ini TIDAK MUNGKIN terlihat oleh penguji
+          yang melihat layar - di mata semuanya benar.
+          `inert` mengeluarkan dari pohon aksesibilitas DAN dari urutan fokus;
+          `aria-hidden` ditahan sebagai lapis kedua untuk Safari lama, karena
+          pengguna utama proyek ini memakai iPhone. */}
       <div 
+        inert={isCamera || undefined}
+        aria-hidden={isCamera || undefined}
         style={{
           position: 'absolute',
           inset: 0,
@@ -1864,6 +1878,8 @@ export default function SayItPage() {
       >
         {/* === SCREEN 3: HASIL FOTO & PERTANYAAN === */}
         <div 
+          inert={!isQuestionScreen || undefined}
+          aria-hidden={!isQuestionScreen || undefined}
           style={{
             position: 'absolute',
             inset: 0,
@@ -1883,13 +1899,19 @@ export default function SayItPage() {
           {/* "kamu", bukan "anda": audio /foto mengucapkan "Apa yang ingin kamu
               tanyakan?", dan yang terdengar tidak boleh berbeda dari yang tertulis. */}
           <h2 style={{ position: 'absolute', top: '66%', left: '24px', right: '24px', margin: '0 auto', maxWidth: '560px', fontSize: '20px', fontWeight: '800', textAlign: 'center', color: 'black', lineHeight: 1.3 }}>
-            Apa yang ingin kamu tanyakan<br/>dari foto ini?
+            {/* Spasi sebelum <br/> WAJIB. Tanpa itu pohon aksesibilitas menyambung
+                teksnya tanpa spasi dan pembaca layar mengucapkan "tanyakandari" -
+                satu kata yang tidak ada. Terbaca di mata sebagai dua baris rapi,
+                jadi cacat ini hanya muncul di telinga. Diaudit 19-11. */}
+            Apa yang ingin kamu tanyakan{' '}<br/>dari foto ini?
           </h2>
         </div>
 
         {/* === SCREEN 5: LAYAR HASIL AKHIR (foto -> orb -> output -> 3 tombol) === */}
         {/* Susunan flex: card output tumbuh sesuai panjang teks, ruang orb mengecil otomatis */}
         <div 
+          inert={!isResultScreen || undefined}
+          aria-hidden={!isResultScreen || undefined}
           style={{
             position: 'absolute',
             inset: 0,
@@ -1943,9 +1965,14 @@ export default function SayItPage() {
           }}>
             {/* 18px, bukan 15px: ini isi utama layar hasil, tetapi dulu justru
                 teks terkecil di halaman dan di bawah ambang 16px untuk teks isi. */}
-            <h2 style={{ width: '100%', margin: 'auto 0', fontSize: '18px', fontWeight: '700', textAlign: 'center', color: 'white', lineHeight: '1.5', overflowWrap: 'anywhere' }}>
-              {resultText}
-            </h2>
+            {/* Hanya dirender bila ada isinya. Heading KOSONG tetap diumumkan
+                pembaca layar sebagai heading, dan navigasi antar-heading mendarat
+                di tempat yang tidak mengucapkan apa pun. Diaudit 19-11. */}
+            {resultText ? (
+              <h2 style={{ width: '100%', margin: 'auto 0', fontSize: '18px', fontWeight: '700', textAlign: 'center', color: 'white', lineHeight: '1.5', overflowWrap: 'anywhere' }}>
+                {resultText}
+              </h2>
+            ) : null}
           </div>
 
           {/* 4. TIGA TOMBOL ICON */}
@@ -2018,6 +2045,7 @@ export default function SayItPage() {
           ia gagal diam-diam, jadi inilah yang terlihat. */}
       <div
         aria-hidden={!isSelesai}
+        inert={!isSelesai || undefined}
         style={{
           position: 'absolute', inset: 0, zIndex: 32,
           backgroundColor: 'white',

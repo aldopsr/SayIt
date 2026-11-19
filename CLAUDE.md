@@ -241,6 +241,32 @@ server/   FastAPI membungkus Pipeline                      -> Hugging Face Space
   OCR hanya untuk PDF hasil pindai. Hanya halaman pertama. Tanpa dependensi baru
   (`pypdfium2` sudah ikut paddlex, DOCX hanya zip berisi XML).
 
+**AUDIT AKSESIBILITAS 19-11 lewat pohon aksesibilitas aplikasi berjalan - tiga cacat,
+satu di antaranya kritis. SEMUA SUDAH DIPERBAIKI:**
+1. **KRITIS: tombol dari layar lain bisa difokus pembaca layar.** Saat aplikasi di layar
+   kamera, keempat tombol ini masih terjangkau: "Ulangi pembacaan", "Foto lagi",
+   "Keluar aplikasi", "Mulai lagi". Panel disembunyikan hanya dengan `opacity: 0` +
+   `pointerEvents: 'none'` - hilang dari MATA dan MOUSE, **tidak** dari pohon aksesibilitas.
+   `aria-hidden` saja juga tidak cukup: ia tidak mengeluarkan dari urutan fokus.
+   **Pengguna tunanetra menyapu layar, menemukan "Keluar aplikasi" saat sedang memotret, lalu
+   aplikasinya tertutup tanpa ia tahu kenapa.** Diperbaiki dengan **`inert`** pada keempat
+   panel; `aria-hidden` ditahan sebagai lapis kedua untuk Safari lama (pengguna pakai iPhone).
+2. **Pembaca layar mengucapkan "tanyakandari"** - satu kata yang tidak ada. Sebabnya
+   `tanyakan<br/>dari`: `<br/>` pemisah VISUAL, dan pohon aksesibilitas menyambung tanpa spasi.
+   **Setiap `<br/>` di tengah kalimat adalah calon kata gabungan.** Diperbaiki dengan `{' '}`.
+3. **Heading kosong** pada kartu jawaban (`<h2>{resultText}</h2>` dirender tanpa syarat).
+   Navigasi antar-heading mendarat di tempat yang tidak mengucapkan apa pun.
+
+**Yang WAJIB diperiksa setiap kali `inert` dipakai: wilayah `aria-live` tidak boleh ikut
+terkubur di dalamnya.** Sudah diverifikasi - satu-satunya `[aria-live]` berada di luar seluruh
+subtree inert. Kalau ia ikut masuk, SELURUH pengumuman suara mati, yaitu memperbaiki satu cacat
+dengan membuat cacat yang jauh lebih besar bagi pengguna yang sama.
+
+**Cara mengaudit ini lagi** (tidak butuh pembaca layar): jalankan `api` + `web`, lalu di peramban
+jalankan percobaan fokus pada setiap tombol dan daftar elemen yang bisa dijangkau keyboard.
+Sesudah perbaikan: seluruh percobaan fokus mengembalikan `false` dan daftarnya KOSONG.
+**Cacat jenis ini tidak mungkin terlihat penguji yang melihat layar** - di mata semuanya benar.
+
 **Aksesibilitas - aturan yang tidak boleh dilanggar lagi:**
 setiap peringatan wajib (a) **berbunyi**, bukan hanya tampil, dan (b) menyebut
 **tindakan berikutnya**, bukan hanya kesalahannya. Galat dari server memakai klip gTTS
