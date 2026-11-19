@@ -237,3 +237,30 @@ def test_senter_tidak_menelan_intent_tugas():
     assert ROUTER.route("uang ini berapa").intent == K.UANG
     assert ROUTER.route("bacakan tulisannya").intent == K.BACA
     assert ROUTER.route("kapan kedaluwarsanya").intent == K.KEDALUWARSA
+
+
+# ------------------- ejaan Whisper sungguhan dari log uji lapangan 19-11
+
+@pytest.mark.parametrize("ucapan", [
+    # Disalin APA ADANYA dari log `[dengar]`, bukan dikarang. Keempatnya sempat
+    # jatuh ke TIDAK_DIKENALI, dan itulah sebabnya perintah suara senter
+    # dilaporkan "tidak pernah bekerja" padahal tombolnya berfungsi.
+    "Yalahkan Center Yalahkan Center",
+    "nyalakan center",
+    "Nyalakan center",
+    "Alakan sender",
+])
+def test_ejaan_whisper_untuk_senter_dikenali(ucapan):
+    assert ROUTER.route(ucapan).intent == K.SENTER_NYALA
+
+
+@pytest.mark.parametrize("ucapan", ["matikan center", "centernya matikan", "matikan sender"])
+def test_ejaan_whisper_untuk_matikan_senter(ucapan):
+    """Sisi MATI harus tetap menang walau frasanya memuat kata "center"."""
+    assert ROUTER.route(ucapan).intent == K.SENTER_MATI
+
+
+def test_ejaan_whisper_tidak_menelan_intent_lain():
+    assert ROUTER.route("putar kamera").intent == K.PUTAR_KAMERA
+    assert ROUTER.route("uang ini berapa").intent == K.UANG
+    assert ROUTER.route("bacakan tulisannya").intent == K.BACA
