@@ -46,6 +46,10 @@ SOURCE_FULL = "seluruh gambar"
 class Zone:
     score: float
     box: Box
+    # Kosong berarti modelnya tidak memberi nama kelas yang bisa dipakai - itu
+    # keadaan model 1 kelas yang terpasang sekarang (`expired_date_zone`), dan
+    # seluruh perilaku lama bergantung pada kolom ini boleh kosong.
+    cls: str = ""
 
 
 @dataclass
@@ -96,10 +100,17 @@ def crop_with_margin(image: np.ndarray, box: Box, margin_ratio: float) -> np.nda
 # --------------------------------------------------------------------------- deteksi zona
 
 def extract_zones(results) -> list[Zone]:
-    """Ubah hasil ultralytics menjadi daftar Zone.
+    """Ubah hasil ultralytics menjadi daftar Zone, beserta NAMA KELASNYA bila ada.
 
-    Kelas sengaja diabaikan: model zona hanya punya satu kelas
-    (`expired_date_zone`), jadi tidak ada yang perlu dibedakan.
+    Model yang terpasang sekarang hanya punya satu kelas (`expired_date_zone`),
+    jadi namanya tidak membedakan apa pun dan `Zone.cls` boleh kosong. Nama kelas
+    mulai berguna pada model 4 kelas (`date` / `code` / `due` / `prod`) yang
+    memungkinkan wilayah KODE PRODUKSI ditolak sebelum OCR - akar jawaban salah
+    `chees`, yang tidak bisa diperbaiki dari sisi parser karena OCR tidak pernah
+    membaca labelnya (diukur 20-11).
+
+    Dibuat tahan model lama: bila `names` tidak ada atau indeksnya tidak dikenal,
+    `cls` kosong dan `pick_zone` kembali ke perilaku "ambil skor tertinggi".
     """
     if not results:
         return []
@@ -110,14 +121,36 @@ def extract_zones(results) -> list[Zone]:
     conf = as_float_array(boxes.conf).ravel()
     if xyxy.shape[0] == 0:
         return []
-    return [Zone(score=float(s), box=(float(k[0]), float(k[1]), float(k[2]), float(k[3])))
-            for k, s in zip(xyxy, conf)]
+    nama = getattr(results[0], "names", None) or {}
+    idx = as_float_array(getattr(boxes, "cls", [])).ravel() if hasattr(boxes, "cls") else []
+    kelas = [str(nama.get(int(i), "")).strip().lower() for i in idx] if len(idx) else []
+    return [Zone(score=float(s), box=(float(k[0]), float(k[1]), float(k[2]), float(k[3])),
+                 cls=kelas[i] if i < len(kelas) else "")
+            for i, (k, s) in enumerate(zip(xyxy, conf))]
 
 
-def pick_zone(zones: Sequence[Zone], score_min: float) -> Zone | None:
-    """Zona berskor tertinggi yang lolos ambang. None berarti jalur cadangan."""
-    lolos = [z for z in zones if z.score >= score_min]
-    return max(lolos, key=lambda z: z.score) if lolos else None
+def pick_zone(zones: Sequence[Zone], score_min: float,
+              kelas_tanggal: Sequence[str] = (), kelas_ditolak: Sequence[str] = ()) -> Zone | None:
+    """Zona berskor tertinggi yang lolos ambang. None berarti jalur cadangan.
+
+    Dengan model 4 kelas, wilayah yang jelas-jelas BUKAN tanggal (kode produksi,
+    tanggal produksi) dibuang lebih dulu, lalu kelas `date` diutamakan. Itu
+    menolak kode produksi SEBELUM OCR - jauh lebih kuat daripada menebaknya dari
+    teks hasil OCR, yang pada `chees` terbukti tidak memuat labelnya sama sekali.
+
+    Mundur aman dengan sengaja: zona tanpa nama kelas (model 1 kelas yang
+    terpasang sekarang) tidak pernah dibuang, dan bila tidak ada satu pun zona
+    berkelas `date` maka pilihannya kembali ke "skor tertinggi yang tersisa".
+    Jadi memasang daftar kelas di config TIDAK mengubah apa pun sampai bobot
+    4 kelas benar-benar dipakai.
+    """
+    tolak = {k.strip().lower() for k in kelas_ditolak}
+    tanggal = {k.strip().lower() for k in kelas_tanggal}
+    lolos = [z for z in zones if z.score >= score_min and (not z.cls or z.cls not in tolak)]
+    if not lolos:
+        return None
+    bertanggal = [z for z in lolos if z.cls and z.cls in tanggal]
+    return max(bertanggal or lolos, key=lambda z: z.score)
 
 
 class ZoneDetector:
@@ -246,7 +279,9 @@ class ExpiryReader:
         if self.zones.available:
             semua = self.zones.detect(image)
             catatan["zones_found"] = len(semua)
-            zona = pick_zone(semua, float(self.e["zone_score_min"]))
+            zona = pick_zone(semua, float(self.e["zone_score_min"]),
+                             kelas_tanggal=self.e.get("zone_classes_date") or (),
+                             kelas_ditolak=self.e.get("zone_classes_reject") or ())
             if zona is None:
                 catatan["zone_reason"] = "tidak ada zona yang lolos ambang skor"
         else:

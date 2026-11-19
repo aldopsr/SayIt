@@ -64,7 +64,7 @@
 Selesai: config, `audio/io.py`, `audio/stt.py`, `audio/tts.py`, `intent/`, `response/`, skrip cache & demo,
 `vision/quality_gate.py` (PRD 8.2), `vision/preprocess.py` (PRD 8.3), `vision/money.py` (PRD 8.6),
 `vision/date_parser.py` (PRD 8.8.1), `vision/document.py` (PRD 8.7), `vision/expiry.py` (PRD 8.8), `pipeline.py` (PRD 7), `app.py` + `sayit/appkit.py` (Streamlit), `scripts/diagnosa_uang.py`, `scripts/buat_label_uang.py`, `scripts/ukur_dokumen.py`,
-`scripts/ukur_kedaluwarsa.py`, `sayit/gambar.py`, `tests/test_ukur.py`, `scripts/banding_ocr.py`, `scripts/ukur_latensi.py`, 757 tes lulus.
+`scripts/ukur_kedaluwarsa.py`, `sayit/gambar.py`, `tests/test_ukur.py`, `scripts/banding_ocr.py`, `scripts/ukur_latensi.py`, 764 tes lulus.
 `opencv-python`, `ultralytics`, dan `easyocr` terpasang dan masuk `requirements.txt`.
 
 Pra-pemrosesan: tiap langkah adalah fungsi murni `(citra, params) -> citra` di `STEPS`, dirangkai lewat
@@ -353,7 +353,7 @@ Catatan membaca laporan: 457 "dangling-endpoint edge" pada diagnostik BUKAN koru
 
 ## Titik sambung (2 Oktober 2026)
 
-757 tes lulus. Seluruh metrik PRD Bagian 11 kini sudah pernah diukur.
+764 tes lulus. Seluruh metrik PRD Bagian 11 kini sudah pernah diukur.
 
 | Metrik | Hasil | Target | |
 |---|---|---|---|
@@ -600,6 +600,24 @@ Transcript tetap dikirim server dan tetap masuk `console.info`.
   `compose_text` yang sama, jadi **mengubahnya SELALU menyentuh kedua modul** dan keduanya
   wajib diukur bersamaan.
 - `line_slope_correct` kini hanya berlaku untuk `pita`. Tesnya memakai mode yang dipatok.
+
+**MODUL ZONA SADAR KELAS (20-11), siap menerima bobot 4 kelas:**
+`Zone.cls` + `expiry.zone_classes_date: [date]` / `zone_classes_reject: [code, prod]`.
+`pick_zone` membuang kelas yang ditolak lalu mengutamakan `date`. **Mundur aman dan itu
+DIUJI**: zona tanpa nama kelas tidak pernah dibuang, dan tanpa kelas `date` pilihannya
+kembali ke skor tertinggi - jadi config ini **tidak mengubah apa pun** selama `best_zone.pt`
+(1 kelas) yang dipakai. 7 tes baru.
+- Menyerang `chees` dari sisi yang benar: menolak wilayah kode produksi **sebelum OCR**,
+  jadi label "Kode Produksi" tidak perlu terbaca - dan memang tidak pernah terbaca.
+- **Tahan harapan: batas atas ~+6 poin** (1 berkas dari 16). Jalur zona adalah optimasi
+  LATENSI bukan akurasi (81% dengan maupun tanpa, 02-10).
+- `notebooks/05_zone_4kelas.ipynb` (11 sel, lolos `ast.parse`) melatihnya dari
+  **`esigelec-rniez/expiry`** - 700 gambar, 4 kelas, satu-satunya dari lima kandidat yang
+  punya split train/valid/test lengkap. Notebook memuat penjaga GPU, pemeriksaan dataset
+  sebelum melatih (nama kelas + gambar tanpa label per split), dan penjaga timpa.
+- **Bobot baru disimpan sebagai `models/best_zone_4kelas.pt`, JANGAN menimpa `best_zone.pt`** -
+  itu bukti angka 81% sekarang. Ukur dengan `scripts/ukur_kedaluwarsa.py`, bandingkan
+  benar/salah/diam terhadap dasar **13 / 2 / 1**.
 
 **Penanda NEGATIF (`date_parser.negative_markers`, 20-11) - NETRAL, dipasang demi bahaya:**
 A/B 16 kemasan: `[]` 13/2/1 = 81% lawan daftar terisi **13/2/1 = 81%, identik per berkas**.

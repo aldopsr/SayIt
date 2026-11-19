@@ -487,6 +487,21 @@ vision:
     imgsz: 640
     max_det: 10
     zone_score_min: 0.40        # PRD 8.9, di bawah ini jalur cadangan yang dipakai
+    # Nama kelas model zona. TIDAK BERPENGARUH pada bobot yang terpasang sekarang
+    # (`best_zone.pt`, 1 kelas `expired_date_zone`): zona tanpa nama kelas tidak
+    # pernah dibuang, dan bila tidak ada kelas `date` pilihannya kembali ke skor
+    # tertinggi. Baru berguna setelah model 4 kelas dipasang.
+    #
+    # Dengan 4 kelas, wilayah kode produksi ditolak SEBELUM OCR. Itu menyerang akar
+    # jawaban salah `chees` dari sisi yang benar: dari sisi parser sudah dicoba
+    # 20-11 dan gagal, karena teks OCR-nya tidak memuat label "Kode Produksi"
+    # sama sekali ('man.yeg Bes 0re Cae 0 T7 WOR SUCALNED 210526/ en im ua.').
+    #
+    # Nama kelas mengikuti dataset 4 kelas yang beredar (`date` / `code` / `due` /
+    # `prod`), mis. `esigelec-rniez/expiry` di Roboflow: 700 gambar, bersplit
+    # train/valid/test.
+    zone_classes_date: [date]
+    zone_classes_reject: [code, prod]
     crop_margin_ratio: 0.10     # PRD 8.8 langkah 2
     # Hanya `resize`, tanpa perbaikan citra. Dua alasan terukur yang berbeda:
     #   akurasi - dengan PaddleOCR, CLAHE dan upscale MERUGIKAN modul ini

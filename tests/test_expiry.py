@@ -585,3 +585,55 @@ def test_tanpa_zona_gambar_penuh_tetap_diputar(cfg):
     hasil = pembaca(cfg, ocr).read(FOTO, today=HARI_INI)
     assert hasil.date.value == date(2026, 12, 3)
     assert hasil.notes["rotated_deg"] == 180
+
+
+# ------------------------------------------- zona sadar kelas (model 4 kelas)
+
+def test_model_satu_kelas_tidak_berubah_perilakunya():
+    """Penjaga mundur-aman: zona tanpa nama kelas tidak pernah dibuang.
+
+    Bobot yang terpasang (`best_zone.pt`) hanya punya satu kelas, jadi memasang
+    daftar kelas di config TIDAK boleh mengubah apa pun sampai bobot 4 kelas
+    benar-benar dipakai.
+    """
+    zona = [E.Zone(0.5, (0, 0, 10, 10)), E.Zone(0.8, (20, 20, 30, 30))]
+    pilih = E.pick_zone(zona, 0.4, kelas_tanggal=["date"], kelas_ditolak=["code", "prod"])
+    assert pilih is not None and pilih.score == 0.8
+
+
+def test_kelas_date_diutamakan_walau_skornya_lebih_rendah():
+    """Inti model 4 kelas: kode produksi berskor tinggi tidak boleh menang."""
+    zona = [E.Zone(0.9, (0, 0, 10, 10), cls="code"),
+            E.Zone(0.5, (20, 20, 30, 30), cls="date")]
+    pilih = E.pick_zone(zona, 0.4, kelas_tanggal=["date"], kelas_ditolak=["code", "prod"])
+    assert pilih is not None and pilih.cls == "date"
+
+
+def test_kelas_ditolak_dibuang_walau_satu_satunya():
+    """Hanya ada kode produksi -> jalur cadangan, bukan membaca kode produksi."""
+    zona = [E.Zone(0.9, (0, 0, 10, 10), cls="prod")]
+    assert E.pick_zone(zona, 0.4, kelas_tanggal=["date"], kelas_ditolak=["code", "prod"]) is None
+
+
+def test_kelas_tak_dikenal_tidak_dibuang():
+    """Kelas di luar daftar (mis. `due`) tetap dipakai bila tidak ada `date`."""
+    zona = [E.Zone(0.7, (0, 0, 10, 10), cls="due")]
+    pilih = E.pick_zone(zona, 0.4, kelas_tanggal=["date"], kelas_ditolak=["code", "prod"])
+    assert pilih is not None and pilih.cls == "due"
+
+
+def test_ambang_skor_tetap_berlaku_lebih_dulu():
+    zona = [E.Zone(0.2, (0, 0, 10, 10), cls="date")]
+    assert E.pick_zone(zona, 0.4, kelas_tanggal=["date"]) is None
+
+
+def test_ekstraksi_membaca_nama_kelas_dari_model():
+    hasil = hasil_yolo([[0, 0, 10, 10], [20, 20, 30, 30]], [0.9, 0.5])
+    hasil[0].boxes.cls = np.array([1.0, 0.0], dtype=np.float32)
+    hasil[0].names = {0: "date", 1: "code"}
+    assert [z.cls for z in E.extract_zones(hasil)] == ["code", "date"]
+
+
+def test_ekstraksi_tanpa_nama_kelas_memberi_cls_kosong():
+    """Model lama: tidak ada `names`, jadi `cls` kosong dan perilakunya lama."""
+    assert [z.cls for z in E.extract_zones(hasil_yolo([[0, 0, 10, 10]], [0.9]))] == [""]
