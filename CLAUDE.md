@@ -502,6 +502,30 @@ tanpa pendaftaran. Wajib mengutip paper dan menyebut KIST.
 klip yang teksnya memang berubah. Klip sekarang **91**, `uang_terpotong` baru dan `foto_gelap`
 dibuat ulang karena teksnya berubah.
 
+**UJI LAPANGAN 19-11 - dua temuan dan satu ralat atas kesimpulan saya sendiri:**
+1. **Foto ditolak "buram" berulang kali, dan sebabnya AUTOFOKUS MENGUNCI KE LATAR.**
+   Diukur pada dua tangkapan layar pengguna, ambang 100: foto 1 seluruh bingkai **176,8** /
+   dalam kurung jingga 108,9 / sepertiga tengah 98,6; foto 2 **72,5** / **21,6** / **13,2**.
+   Bagian TENGAH justru jauh lebih buram - latar (keyboard laptop) tajam, objek di tangan tidak.
+   **Dugaan saya bahwa mengukur di dalam kurung akan menolong TERBANTAH**: di dalam kurung
+   justru lebih buruk. Kalimat `foto_buram` karena itu memberi **saran yang salah**
+   ("pegang kamera lebih diam") - kameranya tidak goyang. Diperbaiki dengan `aturFokus()`:
+   `focusMode: continuous` + `pointsOfInterest` tengah, gagal dalam diam.
+   **Menurunkan `blur.min_variance` DITOLAK** - itu hanya meloloskan foto yang tidak terbaca OCR.
+2. **RALAT: perintah suara senter TIDAK bekerja; yang bekerja TOMBOLNYA.** Saya sempat
+   menyimpulkan dari log bahwa rantai suara utuh karena `senter_nyala.mp3` terambil - padahal
+   `GET /klip/...` tidak bisa membedakan pemanggil, sebab `setSenter()` dipanggil kedua jalur.
+   **Log permintaan HTTP tidak membuktikan jalur mana yang memanggilnya.**
+3. **`transcript` tidak ikut dikirim justru pada `PUTAR_KAMERA` dan `SENTER_*`**, sehingga
+   `console.info('didengar: ...')` tidak pernah menyala untuk intent yang paling perlu
+   didiagnosis. Diperbaiki, dan server kini mencetak **`[dengar] '<teks>' -> <INTENT>`** untuk
+   setiap `/tanya` plus **`[quality] DITOLAK ... blur=`** untuk setiap foto yang ditolak.
+   Di ponsel `console.info` tidak terjangkau, jadi jejaknya harus di sisi server.
+4. Hipotesis (BELUM TERBUKTI) kenapa perintah suaranya gagal: intent kendali dicocokkan
+   **PERSIS tanpa fuzzy**, jadi satu kata berbeda dari Whisper sudah cukup - "center",
+   "sentir", "nyalain". **Jangan menambah kata kunci dari tebakan ini**; pakai teks dari
+   log `[dengar]`, dan tiap kata kunci baru wajib berkasus uji.
+
 **SENTER (torch) 19-11 - jalan di Android, kemungkinan TIDAK di iPhone:**
 `SENTER_NYALA` / `SENTER_MATI` (dua intent, bukan toggle) + tombol `.btn-cam` 56 px di
 **kanan atas**. Klien memakai `track.applyConstraints({advanced:[{torch}]})`.

@@ -201,6 +201,21 @@ def unggah_foto(foto: UploadFile = File(...)):
             "diterima": giliran.diterima, "audio": _wav_b64(audio, sr)}
 
 
+def _catat_dengar(giliran) -> None:
+    """Catat APA yang didengar dan ke intent mana ia jatuh.
+
+    Satu-satunya jejak diagnosis perintah suara ada di `console.info` klien, dan
+    di ponsel itu praktis tidak terjangkau. Uji lapangan 19-11 buntu persis di
+    sini: perintah senter dilaporkan tidak bekerja, log server penuh `POST /tanya
+    200 OK`, dan tidak ada cara mengetahui apakah yang salah STT-nya atau routernya.
+    Intent kendali dicocokkan PERSIS (tanpa fuzzy), jadi satu kata yang berbeda
+    sudah cukup membuat perintahnya tidak pernah terbentuk.
+    """
+    t = (giliran.notes or {}).get("transcript")
+    if t is not None:
+        print(f"[dengar] {t!r} -> {giliran.intent} ({giliran.reason})", flush=True)
+
+
 @app.post("/berkas")
 @jaga_antrean
 def unggah_berkas(berkas: UploadFile = File(...)):
@@ -309,7 +324,15 @@ def tanya(
         # Merender di sini berarti dua kalimat berturut-turut untuk satu tindakan,
         # plus satu detik gTTS yang terbuang.
         if giliran.intent in ("PUTAR_KAMERA", "SENTER_NYALA", "SENTER_MATI"):
+            _catat_dengar(giliran)
             return {"teks": giliran.text, "intent": giliran.intent,
+                    # `transcript` sempat TIDAK ikut di cabang ini, padahal justru
+                    # intent-intent inilah yang paling sering perlu didiagnosis -
+                    # dan akibatnya `console.info('didengar: ...')` di klien tidak
+                    # pernah menyala untuk mereka. Terasa saat uji lapangan 19-11:
+                    # perintah suara senter dilaporkan tidak bekerja dan tidak ada
+                    # satu pun jejak tentang APA yang sebenarnya didengar.
+                    "transcript": giliran.notes.get("transcript"),
                     "alasan": giliran.reason, "audio": None}
 
         audio, sr = penyuara.render(ucapan)
@@ -317,6 +340,7 @@ def tanya(
     # `transcript` ikut dikembalikan: tanpa ini tidak ada cara melihat APA yang
     # didengar sistem, dan tiap bug suara harus ditebak. Pipeline sudah
     # menyimpannya di notes, hanya belum pernah diteruskan.
+    _catat_dengar(giliran)
     return {"teks": giliran.text, "intent": giliran.intent, "alasan": giliran.reason,
             "transcript": giliran.notes.get("transcript"),
             "audio": _wav_b64(audio, sr)}

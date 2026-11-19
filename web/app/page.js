@@ -925,6 +925,7 @@ export default function SayItPage() {
     });
     streamRef.current = stream;
     if (videoRef.current) videoRef.current.srcObject = stream;
+    aturFokus(stream);
     // Torch itu milik TRACK, bukan milik aplikasi. Stream baru = track baru =
     // senter padam, dan kalau penandanya tidak direset maka tombolnya akan
     // berkata "matikan senter" untuk senter yang sudah mati - dan pengguna
@@ -1221,6 +1222,35 @@ export default function SayItPage() {
   /** Putar kamera dan UMUMKAN hasilnya. Dipakai tombol maupun perintah suara,
    *  jadi keduanya tidak bisa menyimpang. Pengguna tunanetra tidak melihat
    *  gambarnya berubah - satu-satunya tanda bahwa perintahnya jalan adalah suara. */
+  // === FOKUS ===
+  // Diukur 19-11 pada dua foto lapangan pengguna: bagian TENGAH bingkai justru
+  // JAUH lebih buram daripada keseluruhan (72,5 seluruh bingkai lawan 21,6 di
+  // dalam kurung jingga). Artinya autofokus mengunci ke bidang LATAR - meja dan
+  // keyboard - bukan ke objek yang dipegang di tangan. Foto lalu ditolak "buram"
+  // berkali-kali, dan pengguna tunanetra TIDAK BISA memperbaikinya dengan
+  // mengubah sudut, karena sudutnya memang bukan penyebabnya.
+  //
+  // Dua permintaan, keduanya tidak wajib ada di tiap perangkat:
+  //   focusMode 'continuous'  - terus memburu fokus, bukan mengunci sekali
+  //   pointsOfInterest tengah - memberi tahu KE MANA harus memfokus
+  // Gagal dalam DIAM dengan sengaja: ini bukan tindakan yang diminta pengguna,
+  // jadi mengumumkannya hanya menambah bising. Yang dicatat ke konsol adalah
+  // kemampuan perangkatnya, supaya bisa diperiksa saat diagnosis.
+  const aturFokus = async (stream) => {
+    const track = stream?.getVideoTracks?.()[0];
+    if (!track?.getCapabilities) return;
+    const caps = track.getCapabilities() || {};
+    console.info('[SayIt] kemampuan kamera:', {
+      focusMode: caps.focusMode, pointsOfInterest: 'pointsOfInterest' in caps, torch: !!caps.torch,
+    });
+    const minta = [];
+    if (caps.focusMode?.includes?.('continuous')) minta.push({ focusMode: 'continuous' });
+    if ('pointsOfInterest' in caps) minta.push({ pointsOfInterest: [{ x: 0.5, y: 0.5 }] });
+    for (const c of minta) {
+      try { await track.applyConstraints({ advanced: [c] }); } catch {}
+    }
+  };
+
   // === SENTER (torch) ===
   // Tiga kegagalan yang WAJIB berbunyi dan menyebut jalan keluar, karena pengguna
   // tunanetra tidak bisa melihat apakah senternya menyala:
