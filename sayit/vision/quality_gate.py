@@ -150,3 +150,25 @@ def quality_response(report: QualityReport) -> Utterance:
     if issue is None:
         raise ValueError("Foto lolos quality gate, tidak ada saran yang perlu dibacakan.")
     return fixed(issue.clip_key)
+
+# --------------------------------------------------------------------------- pembingkaian
+
+def terpotong_tepi(boxes, shape, margin_ratio: float) -> bool:
+    """True bila ada kotak yang menempel tepi bingkai, artinya objeknya terpotong.
+
+    Fungsi murni atas koordinat, jadi bisa dipakai modul mana pun yang punya kotak.
+
+    SENGAJA tidak menyebut arah (kiri/kanan/atas/bawah). Kamera bawaan aplikasi
+    adalah kamera DEPAN (`facingMode: 'user'`) dan pratinjaunya dicerminkan lewat
+    CSS, sedangkan gambar yang dikirim ke server tidak dicerminkan - jadi "kanan"
+    pada gambar bukan "kanan" bagi pengguna. Memberi arah yang salah kepada
+    pengguna tunanetra lebih buruk daripada tidak memberi arah sama sekali, sebab
+    ia tidak punya cara memeriksanya. "Mundurkan kamera" benar untuk semua sisi.
+    Untuk arah yang sah, klien harus mengirim `facingMode` lebih dulu.
+    """
+    h, w = shape[:2]
+    if not boxes or h <= 0 or w <= 0:
+        return False
+    mx, my = margin_ratio * w, margin_ratio * h
+    return any(x1 <= mx or y1 <= my or x2 >= w - mx or y2 >= h - my
+               for x1, y1, x2, y2 in boxes)

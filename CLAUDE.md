@@ -64,7 +64,7 @@
 Selesai: config, `audio/io.py`, `audio/stt.py`, `audio/tts.py`, `intent/`, `response/`, skrip cache & demo,
 `vision/quality_gate.py` (PRD 8.2), `vision/preprocess.py` (PRD 8.3), `vision/money.py` (PRD 8.6),
 `vision/date_parser.py` (PRD 8.8.1), `vision/document.py` (PRD 8.7), `vision/expiry.py` (PRD 8.8), `pipeline.py` (PRD 7), `app.py` + `sayit/appkit.py` (Streamlit), `scripts/diagnosa_uang.py`, `scripts/buat_label_uang.py`, `scripts/ukur_dokumen.py`,
-`scripts/ukur_kedaluwarsa.py`, `sayit/gambar.py`, `tests/test_ukur.py`, `scripts/banding_ocr.py`, `scripts/ukur_latensi.py`, 705 tes lulus.
+`scripts/ukur_kedaluwarsa.py`, `sayit/gambar.py`, `tests/test_ukur.py`, `scripts/banding_ocr.py`, `scripts/ukur_latensi.py`, 717 tes lulus.
 `opencv-python`, `ultralytics`, dan `easyocr` terpasang dan masuk `requirements.txt`.
 
 Pra-pemrosesan: tiap langkah adalah fungsi murni `(citra, params) -> citra` di `STEPS`, dirangkai lewat
@@ -327,7 +327,7 @@ Catatan membaca laporan: 457 "dangling-endpoint edge" pada diagnostik BUKAN koru
 
 ## Titik sambung (2 Oktober 2026)
 
-705 tes lulus. Seluruh metrik PRD Bagian 11 kini sudah pernah diukur.
+717 tes lulus. Seluruh metrik PRD Bagian 11 kini sudah pernah diukur.
 
 | Metrik | Hasil | Target | |
 |---|---|---|---|
@@ -449,6 +449,20 @@ Catatan membaca laporan: 457 "dangling-endpoint edge" pada diagnostik BUKAN koru
    lawan ambang **100** - lolos, tetapi margin 37%. Foto malam dalam ruangan duduk di tepi ambang.
    Butuh 2-3 foto ASLI yang DITOLAK untuk mengkalibrasinya; tangkapan layar TIDAK BISA dipakai
    (latar putih aplikasi membuat `saturated_ratio` 0,44 dan hasilnya tidak sah).
+
+**Quality gate bicara SOLUSI (19-11):** `terpotong_tepi()` di `quality_gate.py` adalah penanda
+murni atas koordinat kotak - ada kotak menempel tepi bingkai (margin 2%) berarti objeknya
+terpotong. Modul uang menghitungnya dari deteksi MENTAH dan `money_utterance` menukar
+`tidak_yakin_uang` dengan klip baru **`uang_terpotong`** ("mundurkan kamera sedikit").
+Itu menangkap persis kasus lapangan 12-11: dua lembar jadi tiga kotak SEUKURAN BINGKAI.
+`foto_gelap` juga diubah menyebut **"nyalakan senter di ponselmu"** - pengguna tunanetra bisa
+menyalakan senter sendiri, belum tentu bisa mencari lampu.
+**ARAH (kiri/kanan) SENGAJA TIDAK diberikan.** `web/app/page.js:465` menyetel `facingMode`
+bawaan `'user'` (kamera DEPAN) dan pratinjaunya dicerminkan CSS, sedangkan gambar ke server
+tidak - jadi kanan GAMBAR adalah kiri PENGGUNA. Arah yang salah lebih berbahaya daripada tanpa
+arah. Prasyarat untuk arah: klien mengirim `facingMode`, dan sisi cermin dipastikan dengan foto uji.
+**Klip `uang_terpotong` belum punya berkas suara** sampai `python scriptsuild_tts_cache.py`
+dijalankan (butuh internet).
 
 **DITOLAK pengguna 12-11: menampilkan transcript ("didengar: <teks> -> <intent>") di bawah
 kartu jawaban.** Sudah dibuat lalu di-revert atas permintaan pengguna. Jangan ditawarkan lagi.

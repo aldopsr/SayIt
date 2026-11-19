@@ -195,3 +195,37 @@ def test_respons_suara_untuk_foto_gelap(cfg):
 def test_respons_suara_menolak_foto_yang_lolos(tajam, cfg):
     with pytest.raises(ValueError):
         qg.quality_response(qg.check_quality(tajam, cfg))
+
+
+# ------------------------------------------------- penanda objek terpotong tepi bingkai
+
+BINGKAI = (600, 800, 3)         # tinggi 600, lebar 800 -> margin 2% = 16 x 12 px
+
+
+def test_kotak_di_tengah_tidak_terpotong():
+    assert qg.terpotong_tepi([(100, 100, 700, 500)], BINGKAI, 0.02) is False
+
+
+def test_kotak_menempel_tepi_kanan_terpotong():
+    assert qg.terpotong_tepi([(100, 100, 790, 500)], BINGKAI, 0.02) is True
+
+
+def test_kotak_menempel_tepi_atas_terpotong():
+    assert qg.terpotong_tepi([(100, 5, 700, 500)], BINGKAI, 0.02) is True
+
+
+def test_kotak_seluruh_bingkai_terpotong():
+    """Kasus uji lapangan 12-11: dua lembar jadi kotak seukuran bingkai."""
+    assert qg.terpotong_tepi([(0, 0, 800, 600)], BINGKAI, 0.02) is True
+
+
+def test_satu_kotak_terpotong_sudah_cukup():
+    assert qg.terpotong_tepi([(100, 100, 700, 500), (0, 100, 300, 500)], BINGKAI, 0.02) is True
+
+
+def test_tanpa_kotak_tidak_menuduh_terpotong():
+    assert qg.terpotong_tepi([], BINGKAI, 0.02) is False
+
+
+def test_citra_tanpa_ukuran_tidak_meledak():
+    assert qg.terpotong_tepi([(0, 0, 1, 1)], (0, 0, 3), 0.02) is False

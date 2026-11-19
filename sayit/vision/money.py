@@ -23,6 +23,7 @@ from typing import Any, Callable, Sequence
 import numpy as np
 
 from sayit.config import project_path
+from sayit.vision.quality_gate import terpotong_tepi
 from sayit.response.templates import VALID_NOMINALS, Utterance, fixed, money_response
 from sayit.vision import preprocess as pre
 
@@ -200,9 +201,16 @@ def postprocess(dets: Sequence[Detection], cfg: dict) -> MoneyResult:
 
 
 def money_utterance(hasil: MoneyResult) -> Utterance:
-    """Ujaran untuk pengguna. Tidak yakin -> minta foto ulang, bukan menyebut angka."""
+    """Ujaran untuk pengguna. Tidak yakin -> minta foto ulang, bukan menyebut angka.
+
+    Bila kotaknya menempel tepi bingkai, sarannya diganti yang lebih spesifik:
+    "tidak yakin, foto ulang" tidak memberi tahu APA yang harus diubah, sedangkan
+    pengguna tunanetra tidak bisa melihat bahwa uangnya terpotong. Terbukti pada
+    uji lapangan 12-11: foto dua lembar menghasilkan tiga kotak seluruh bingkai,
+    yaitu persis kasus yang penanda ini tangkap.
+    """
     if not hasil.confident:
-        return fixed("tidak_yakin_uang")
+        return fixed("uang_terpotong" if hasil.notes.get("terpotong") else "tidak_yakin_uang")
     return money_response(hasil.counts)
 
 
@@ -326,4 +334,10 @@ class MoneyDetector:
         mentah, catatan = self.raw_detections(image, preprocess=preprocess)
         hasil = postprocess(mentah, self.cfg)
         hasil.notes.update(catatan)
+        # Dipakai deteksi MENTAH, bukan yang lolos ambang: saat jawabannya tidak
+        # yakin justru kotak mentah itulah satu-satunya petunjuk letak yang ada.
+        bingkai = self.cfg["vision"]["quality_gate"].get("framing") or {}
+        if bingkai.get("enabled", True):
+            hasil.notes["terpotong"] = terpotong_tepi(
+                [d.box for d in mentah], image.shape, float(bingkai["edge_margin_ratio"]))
         return hasil

@@ -425,3 +425,25 @@ def test_kesalahan_terukur_menggelembungkan_jumlah_bukan_mengecilkan():
     dengan = M.count_by_nominal(M.filter_by_relative_score(dets, 0.80))
     assert sum(n * j for n, j in tanpa.items()) == 25000      # jawaban lama, salah
     assert sum(n * j for n, j in dengan.items()) == 5000      # jawaban baru, benar
+
+
+# --------------------------------------------- saran pembingkaian saat jawaban tidak yakin
+
+def test_saran_mundur_saat_uang_menempel_tepi(cfg):
+    """Pengguna tunanetra tidak bisa melihat bahwa uangnya terpotong.
+
+    "Tidak yakin, foto ulang" tidak memberi tahu APA yang harus diubah. Penanda
+    ini menukarnya dengan saran yang bisa dikerjakan: mundurkan kamera.
+    """
+    hasil = M.MoneyResult(confident=False, reason="uji", notes={"terpotong": True})
+    assert M.money_utterance(hasil)[0].key == "uang_terpotong"
+
+
+def test_tanpa_terpotong_tetap_saran_lama(cfg):
+    hasil = M.MoneyResult(confident=False, reason="uji", notes={"terpotong": False})
+    assert M.money_utterance(hasil)[0].key == "tidak_yakin_uang"
+
+
+def test_jawaban_yakin_tidak_diganggu_saran(cfg):
+    hasil = M.MoneyResult(counts={2000: 1}, total=2000, notes={"terpotong": True})
+    assert M.money_utterance(hasil)[0].key != "uang_terpotong"

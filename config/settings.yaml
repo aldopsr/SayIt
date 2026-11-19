@@ -49,6 +49,15 @@ vision:
   # Ambang di bawah ini masih berupa NILAI AWAL PRD 8.2, BELUM dikalibrasi dengan foto tim.
   # Jangan diklaim sebagai hasil kalibrasi. Kalibrasi ulang cukup mengubah angka di sini.
   quality_gate:
+    # Objek yang menempel tepi bingkai dianggap TERPOTONG, dan pengguna diminta
+    # mundur. Dipakai modul uang lewat `MoneyResult.notes['terpotong']`.
+    # Arah (kiri/kanan) SENGAJA tidak diberikan: kamera bawaan adalah kamera DEPAN
+    # dan pratinjaunya dicerminkan CSS sementara gambar ke server tidak, jadi
+    # "kanan" pada gambar bukan "kanan" bagi pengguna. Arah yang salah lebih
+    # berbahaya daripada tanpa arah. Klien harus mengirim `facingMode` dulu.
+    framing:
+      enabled: true
+      edge_margin_ratio: 0.02   # 2% sisi bingkai sudah dianggap menempel tepi
     enabled: true
     blur:
       enabled: true
