@@ -450,6 +450,32 @@ Catatan membaca laporan: 457 "dangling-endpoint edge" pada diagnostik BUKAN koru
    Butuh 2-3 foto ASLI yang DITOLAK untuk mengkalibrasinya; tangkapan layar TIDAK BISA dipakai
    (latar putih aplikasi membuat `saturated_ratio` 0,44 dan hasilnya tidak sah).
 
+**DATASET PUBLIK UNTUK MODUL KEDALUWARSA KETEMU (19-11): ExpDate, Seker & Ahn 2022, KIST.**
+Unduhan: https://github.com/felizang/expdate (tombol Dataset -> Google Drive), **CC BY 4.0**,
+tanpa pendaftaran. Wajib mengutip paper dan menyebut KIST.
+- Enam subset: **Products-Real 1.767 gambar NYATA** (1.102 latih / 665 uji), Products-Synth
+  ~12.000, Date-Synth 128.000, Components-Synth 450.000, plus Date-Real dan Components-Real.
+- **Anotasinya memuat `transcription`**, bukan hanya bbox - jadi ia bisa dipakai untuk
+  **fine-tune PENGENAL**, yang memang penghambat kami, bukan cuma detektor.
+- Kelas deteksinya **`date`, `due mark`, `production mark`, `code mark`**. Model zona kami
+  sekarang hanya SATU kelas (`expired_date_zone`). Dengan empat kelas, wilayah kode produksi
+  bisa **ditolak sebelum OCR** - itu perbaikan di SUMBER untuk kegagalan `chees`, jauh lebih
+  kuat daripada heuristik penanda negatif di parser.
+- Halaman dataset menyebut **"dot-matrix fonts"** eksplisit, plus refleksi, pencahayaan tidak
+  rata, dan beberapa tanggal pada satu produk. 13 format tanggal, bulan singkatan Inggris (OCT).
+- **DUGAAN KUAT: Roboflow `expdate-pj47a/expiery_date` (12.960 gambar) adalah unggahan ulang
+  Products-Synth, yaitu data SINTETIS.** Petunjuknya: kelas `date, code, due, prod` identik,
+  jumlah ~12.000, dan nama workspace-nya literal "EXPDATE". **Ambil dari sumber, bukan cermin
+  Roboflow** - format Roboflow membuang `transcription`, dan sintetis bukan yang kami kurang.
+- **Batasnya: ia TIDAK menggantikan foto kemasan Indonesia.** Yang ia beri: bahan fine-tune
+  dan **tolok ukur PUBLIK** (jawaban langsung untuk kelemahan n=13). Yang tidak: pembenaran
+  mengklaim performa pada kemasan Indonesia. Itu tetap butuh +30 kemasan sendiri.
+
+**`build_tts_cache.py --kunci <nama>` (19-11):** `assets/tts/*.mp3` SENGAJA di-commit, jadi
+`--force` mengubah 91 berkas biner walau yang berubah cuma satu kalimat. Pakai `--kunci` untuk
+klip yang teksnya memang berubah. Klip sekarang **91**, `uang_terpotong` baru dan `foto_gelap`
+dibuat ulang karena teksnya berubah.
+
 **Quality gate bicara SOLUSI (19-11):** `terpotong_tepi()` di `quality_gate.py` adalah penanda
 murni atas koordinat kotak - ada kotak menempel tepi bingkai (margin 2%) berarti objeknya
 terpotong. Modul uang menghitungnya dari deteksi MENTAH dan `money_utterance` menukar

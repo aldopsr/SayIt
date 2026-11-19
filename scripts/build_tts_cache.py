@@ -3,6 +3,10 @@
 Jalankan sekali saat online:
     python scripts/build_tts_cache.py
     python scripts/build_tts_cache.py --force      # buat ulang semua klip
+    python scripts/build_tts_cache.py --kunci foto_gelap   # buat ulang klip tertentu saja
+
+`assets/tts/*.mp3` SENGAJA di-commit, jadi `--force` mengubah ke-91 berkas biner
+sekaligus walau yang berubah teksnya cuma satu kalimat. Pakai `--kunci` untuk itu.
 """
 from __future__ import annotations
 
@@ -22,6 +26,11 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--force", action="store_true")
     ap.add_argument("--delay", type=float, default=0.3, help="jeda antar-permintaan (detik)")
+    # Klip mp3 ikut di-commit, jadi `--force` membuat diff 91 berkas biner untuk satu
+    # kalimat yang berubah. Dengan `--kunci` hanya klip yang teksnya memang berubah
+    # yang dibuat ulang.
+    ap.add_argument("--kunci", nargs="+", metavar="KUNCI", default=None,
+                    help="buat ulang hanya klip ini (nama kunci di CLIP_TEXTS)")
     args = ap.parse_args()
 
     if not internet_available():
@@ -30,7 +39,13 @@ def main():
     cfg = load_config()
     renderer = SpeechRenderer(cfg, online=True)
     kwargs = renderer._synth_kwargs()
-    todo = [k for k in CLIP_TEXTS if args.force or not renderer.clip_path(k).exists()]
+    if args.kunci:
+        asing = [k for k in args.kunci if k not in CLIP_TEXTS]
+        if asing:
+            sys.exit(f"Kunci tidak terdaftar di CLIP_TEXTS: {', '.join(asing)}")
+        todo = list(args.kunci)
+    else:
+        todo = [k for k in CLIP_TEXTS if args.force or not renderer.clip_path(k).exists()]
     print(f"{len(CLIP_TEXTS)} klip terdaftar, {len(todo)} akan dibuat -> {renderer.clip_dir}")
 
     failed = []
