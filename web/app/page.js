@@ -149,10 +149,22 @@ function api(jalur) {
 }
 
 /** ngrok gratis menyelipkan halaman peringatan untuk permintaan yang tampak dari
- *  peramban. Header ini melewatinya. Tidak dikirim saat memakai rewrite sendiri. */
+ *  peramban. Header ini melewatinya.
+ *
+ *  DIKIRIM SELALU, termasuk pada jalur rewrite `/api` - dan itu perbaikan 20-11.
+ *  Dulu header ini sengaja dilewatkan untuk `/api` dengan alasan "rewrite sendiri,
+ *  bukan tunnel". Alasan itu benar saat backend-nya localhost, tetapi SALAH di
+ *  produksi: di Vercel `/api` di-rewrite ke ngrok juga, dan proksi Vercel
+ *  meneruskan User-Agent peramban apa adanya. Akibatnya ngrok membalas halaman
+ *  peringatannya dengan **status 200**, jadi pemeriksaan `r.ok` lolos dan yang
+ *  gagal justru `r.json()` - gejalanya "tidak bisa menghubungi server" padahal
+ *  servernya menjawab dengan benar.
+ *
+ *  Terukur di produksi: tanpa header -> HTML ngrok 200; dengan header -> JSON
+ *  `/sehat` yang benar. Vercel memang meneruskan header ini ke upstream.
+ *  Saat backend-nya localhost, header tambahan ini diabaikan FastAPI. */
 function kepalaApi() {
-  api("");                                     // pastikan _basis sudah dihitung
-  return _basis !== "/api" ? { "ngrok-skip-browser-warning": "1" } : undefined;
+  return { "ngrok-skip-browser-warning": "1" };
 }
 
 /** webm/opus dari MediaRecorder tidak terbaca soundfile di server.
