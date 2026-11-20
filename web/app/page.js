@@ -487,6 +487,7 @@ export default function SayItPage() {
   // === REFS ===
   const videoRef = useRef(null);
   const promptPasangRef = useRef(null);        // event beforeinstallprompt yang ditahan
+  const pantauRef = useRef(null);              // timer pemantau pratinjau kosong
   const streamRef = useRef(null);
   const facingRef = useRef('user');
   const isFlipping = useRef(false);
@@ -1026,6 +1027,38 @@ export default function SayItPage() {
   // Menyalakan kamera sesuai arah (depan/belakang). Stream lama dimatikan dulu,
   // karena banyak HP tidak bisa membuka dua kamera sekaligus.
   // exact = true dipakai saat flip, supaya gagal (dan kita beri tahu user) kalau kamera itu tidak ada.
+  /** Pratinjau kosong WAJIB diberitahukan, bukan dibiarkan.
+   *
+   *  Pengguna tunanetra tidak bisa melihat bahwa kameranya tidak menampilkan
+   *  apa pun. Tanpa pemantau ini ia akan memotret kekosongan dan baru tahu ada
+   *  yang salah setelah jawabannya ngawur - dan ia tidak akan pernah tahu
+   *  sebabnya kamera, bukan modulnya.
+   *
+   *  `videoWidth === 0` berarti elemen video belum pernah menerima satu frame
+   *  pun; `readyState !== 'live'` dan `muted` menangkap track yang mati atau
+   *  berhenti mengirim. 3 detik dipilih supaya kamera lambat tidak dituduh
+   *  rusak - normalnya frame pertama datang jauh di bawah 1 detik setelah
+   *  getUserMedia selesai. */
+  const pantauPratinjau = (stream) => {
+    clearTimeout(pantauRef.current);
+    pantauRef.current = setTimeout(() => {
+      const v = videoRef.current;
+      const t = stream?.getVideoTracks?.()[0];
+      /* `muted` SENGAJA TIDAK dipakai sebagai penanda. Ia menyala sementara di
+         sebagian peramban tepat setelah track dimulai, dan Android juga
+         mematikan track saat aplikasi dilatarbelakangkan - keduanya akan
+         memicu lapor palsu. Yang dipakai hanya dua penanda yang tidak
+         ambigu: nol frame yang pernah diterima, dan track yang sudah mati. */
+      const mati = !v || v.videoWidth === 0 || (t && t.readyState !== 'live');
+      if (!mati) return;
+      console.warn('[SayIt] pratinjau kosong', {
+        videoWidth: v?.videoWidth, readyState: t?.readyState, muted: t?.muted,
+      });
+      peringatkan('Kamera tidak menampilkan gambar',
+        'Ketuk tombol balik kamera di kanan bawah untuk mencoba kamera satunya, atau muat ulang halaman.');
+    }, 3000);
+  };
+
   const startStream = async (facing, exact = false) => {
     if (streamRef.current) {
       streamRef.current.getTracks().forEach((t) => t.stop());
@@ -1039,8 +1072,19 @@ export default function SayItPage() {
       }
     });
     streamRef.current = stream;
-    if (videoRef.current) videoRef.current.srcObject = stream;
+    if (videoRef.current) {
+      videoRef.current.srcObject = stream;
+      /* play() WAJIB dipanggil lagi, bukan mengandalkan atribut `autoPlay`.
+         `autoPlay` hanya menyala sekali saat elemen pertama kali mendapat
+         sumber. Di sini track lama SUDAH dihentikan di atas (`t.stop()`),
+         yang membuat elemen video berhenti - jadi `srcObject` baru belum
+         tentu diputar sendiri. Gejalanya: pratinjau putih polos setelah
+         balik kamera, karena `<main>` berlatar putih dan video tanpa frame
+         membiarkan latar itu terlihat. */
+      videoRef.current.play().catch(() => {});
+    }
     aturFokus(stream);
+    pantauPratinjau(stream);
     // Torch itu milik TRACK, bukan milik aplikasi. Stream baru = track baru =
     // senter padam, dan kalau penandanya tidak direset maka tombolnya akan
     // berkata "matikan senter" untuk senter yang sudah mati - dan pengguna
@@ -1053,6 +1097,7 @@ export default function SayItPage() {
   useEffect(() => {
     return () => {
       if (streamRef.current) streamRef.current.getTracks().forEach((t) => t.stop());
+      clearTimeout(pantauRef.current);
     };
   }, []);
 
