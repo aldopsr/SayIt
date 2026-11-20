@@ -31,7 +31,11 @@ untuk kalau nanti pindah host, tetapi tidak dipakai.
       dan `fase0/fase0_hasil/` (suara orang) tidak ikut
 - [x] **push ke GitHub** — https://github.com/aldopsr/SayIt
 - [x] basis API bisa diganti saat jalan lewat `?api=` (diuji lewat tunnel sungguhan)
-- [ ] deploy frontend ke Vercel — Langkah 3
+- [x] **alur pasang ke layar utama** — `?install=1`, tiga cabang (prompt / iOS / manual),
+      seluruhnya diucapkan; diverifikasi di aplikasi berjalan
+- [ ] deploy frontend ke Vercel sebagai `sayit-app` — Langkah 3 (butuh akun kamu)
+- [ ] domain statis ngrok + `start_url` manifest — Langkah 3.3 (butuh dashboard ngrok kamu)
+- [ ] `NEXT_PUBLIC_PWA_URL` di proyek landing page — Langkah 3.4
 - [ ] uji dari HP sendiri — hanya kamu yang bisa
 
 Jalankan lokal: `.claude/launch.json` punya `api` (port 8000) dan `web` (port 3000).
@@ -132,6 +136,112 @@ gestur, dan iOS memblokirnya.
 
 Kalau ini tidak diperbaiki, gejalanya tepat yang paling buruk: **klip sambutan
 bisu**, yaitu satu-satunya pintu masuk pengguna tunanetra.
+
+---
+
+## Langkah 3 - Frontend ke Vercel sebagai `sayit-app`
+
+Keputusan 20-11 (**pilihan A**): landing page dan PWA ini menjadi **dua proyek
+Vercel dari dua repo**. Alasannya bukan selera - peramban hanya mengizinkan
+sebuah situs memasang DIRINYA SENDIRI, jadi landing page tidak akan pernah bisa
+memasang PWA ini walau digabung dalam satu proyek. Yang bisa ia lakukan hanya
+mengalihkan ke sini.
+
+### 3.1 Buat proyeknya
+
+1. vercel.com -> **Add New -> Project** -> impor `aldopsr/SayIt`.
+2. **Project Name: `sayit-app`** (menghasilkan `https://sayit-app.vercel.app`).
+3. **Root Directory: `web`** - ini yang paling sering salah. Repo ini bukan
+   repo Next.js; `web/` hanya salah satu foldernya.
+4. Framework Preset: Next.js (terdeteksi sendiri setelah Root Directory benar).
+5. Deploy.
+
+### 3.2 Basis API: pilih jalur LANGSUNG, bukan rewrite
+
+Ada dua jalur ke backend, dan di Vercel keduanya TIDAK setara:
+
+| jalur | lewat mana | batas waktu |
+|---|---|---|
+| `API_ORIGIN` (rewrite `/api/*`) | peramban -> **proksi Vercel** -> ngrok -> laptop | **120 detik**, batas Vercel |
+| `?api=<host ngrok>` | peramban -> ngrok -> laptop | tidak ada batas proksi |
+
+**Pakai jalur langsung untuk aplikasi ini.** Sebabnya terukur: foto kedaluwarsa
+terburuk memakan **99,2 detik** (p90 72,9 detik) karena percobaan rotasi. Itu
+muat di dalam 120 detik, tetapi marginnya hanya 20% pada laptop pengembang -
+satu foto yang lebih berat akan menembusnya, dan gejalanya persis yang paling
+menyesatkan: server menjawab 200 dengan benar sementara proksi sudah menyerah
+(`ROUTER_EXTERNAL_TARGET_ERROR`), lalu klien mengumumkan "tidak bisa menghubungi
+server" padahal servernya baik-baik saja.
+
+Catatan: `proxyTimeout: 180_000` di `web/next.config.mjs` **tidak menolong di
+Vercel** - batas 120 detik milik Vercel lebih ketat dan dialah yang menang. Nilai
+itu tetap berguna saat dijalankan sendiri (`npm run dev` / `next start`).
+
+CORS tidak jadi masalah di jalur langsung: `server/app.py` sudah memasang
+`CORSMiddleware` dengan `allow_origins=["*"]`. (Catatan lama "CORS tidak
+dibutuhkan sama sekali" hanya benar untuk jalur rewrite.)
+
+### 3.3 Domain statis ngrok - kerjakan ini SEBELUM membagikan tautan
+
+Paket gratis ngrok memberi **satu domain yang ditetapkan otomatis dan tidak
+berganti saat agen di-restart**. Kalau URL-mu selama ini berganti, kemungkinan
+besar `--url` tidak diberikan - tanpa flag itu ngrok memberi URL sementara.
+
+Lihat domainnya di dashboard ngrok (**Universal Gateway -> Domains**), lalu:
+
+```powershell
+ngrok http 8000 --url=NAMA-STATISMU.ngrok-free.app
+```
+
+Kenapa ini mendesak: **PWA yang sudah terpasang diluncurkan di `start_url` tanpa
+`?api=`**, jadi ia bergantung pada localStorage yang mengingat host lama. Begitu
+URL ngrok berganti, ikon di layar utama menunjuk host mati - dan pengguna
+tunanetra tidak punya cara menempelkan URL baru. Ikon yang bekerja hari ini dan
+gagal dalam diam pekan depan lebih buruk daripada tidak ada ikon.
+
+Setelah domainnya tetap, ubah `web/public/manifest.json`:
+
+```json
+"start_url": "/?api=https://NAMA-STATISMU.ngrok-free.app",
+```
+
+Dengan begitu aplikasi terpasang **selalu** membawa basis API-nya sendiri, tidak
+bergantung pada localStorage sama sekali. Host-nya tetap diperiksa daftar putih
+`API_DIIZINKAN` di `web/app/page.js`.
+
+### 3.4 Sambungkan landing page
+
+Di proyek Vercel milik landing page (`sayit-monorepo`), set environment variable:
+
+```
+NEXT_PUBLIC_PWA_URL = https://sayit-app.vercel.app
+```
+
+Itu dibaca `apps/web/components/install-pwa.tsx`. Tanpa itu ia memakai bawaan
+`https://app.sayit.id`, domain yang belum dimiliki. Deploy ulang landing page
+setelah menyetelnya - variabel `NEXT_PUBLIC_*` dipanggang saat build.
+
+### 3.5 Alur yang dihasilkan
+
+1. Pengguna menekan **Install SayIt** di landing page.
+2. Modal menjelaskan izin yang akan diminta, lalu mengalihkan ke
+   `https://sayit-app.vercel.app/?install=1`.
+3. Aplikasi ini menangkap `?install=1` dan menampilkan panel pasang, **sambil
+   mengucapkannya** lewat `peringatkan()` - bukan hanya menampilkan.
+4. Android/Chrome: tombol **Pasang SayIt** memicu dialog pasang asli.
+   iPhone: tidak ada dialog apa pun (Safari tidak mendukung
+   `beforeinstallprompt`, WebKit bug 255716), jadi yang diucapkan adalah langkah
+   Bagikan -> Tambah ke Layar Utama.
+   Peramban lain yang tidak mengirim eventnya: petunjuk menu peramban.
+5. Selalu ada **Lanjut tanpa memasang** supaya pengguna tidak terkunci.
+
+**Di iPhone alurnya TIDAK pernah otomatis**, dan itu batas Safari, bukan sesuatu
+yang bisa diperbaiki dari sisi kita. Uji di Android dulu.
+
+Saat panel pasang tampil, seluruh layar lain dibuat `inert` - termasuk tombol
+rana, senter, unggah, dan balik kamera. Sudah diverifikasi pada aplikasi berjalan
+dengan kamera palsu: 9 tombol terlihat, **1 yang bisa difokus**, dan wilayah
+`aria-live` berada di luar seluruh subtree `inert`.
 
 ---
 

@@ -467,9 +467,14 @@ export default function SayItPage() {
   const [capturedMirror, setCapturedMirror] = useState(true); // foto dari kamera depan ditampilkan mirror, kamera belakang & upload tidak
   const [orbSlot, setOrbSlot] = useState({ top: null, scale: 0.9 }); // posisi orb di layar hasil
   const [demo, setDemo] = useState(false);     // DEMO, tetapi lewat state supaya hydrate tetap cocok
+  // Cara memasang ke layar utama: null = jangan tawarkan, 'prompt' = peramban
+  // menyediakan dialog pasang, 'ios' = Safari tidak punya dialog itu sama sekali,
+  // 'manual' = peramban mendukung tetapi eventnya tidak datang. Lihat efeknya.
+  const [caraPasang, setCaraPasang] = useState(null);
 
   // === REFS ===
   const videoRef = useRef(null);
+  const promptPasangRef = useRef(null);        // event beforeinstallprompt yang ditahan
   const streamRef = useRef(null);
   const facingRef = useRef('user');
   const isFlipping = useRef(false);
@@ -660,6 +665,104 @@ export default function SayItPage() {
     if (!('serviceWorker' in navigator)) return;
     navigator.serviceWorker.register('/sw.js').catch(() => {});
   }, []);
+
+  /* === PASANG KE LAYAR UTAMA ===
+     Landing page TIDAK BISA memasang aplikasi ini. Peramban hanya mengizinkan
+     sebuah situs memasang DIRINYA SENDIRI, jadi tombol "Install SayIt" di sana
+     cuma bisa mengalihkan ke halaman ini dengan `?install=1`; pemasangan
+     sungguhannya wajib terjadi di origin ini. Itu sebabnya alurnya dua sentuhan
+     dan bukan satu - aturan peramban, bukan pilihan rancangan.
+
+     Tiga cabang, dan yang ketiga yang paling penting bagi pengguna kita:
+
+     - 'prompt': Chrome/Edge mengirim `beforeinstallprompt`. Eventnya DITAHAN
+       (preventDefault) lalu disimpan; tanpa itu peramban memakai UI-nya sendiri
+       yang tidak bisa diumumkan ke pembaca layar, dan `prompt()` hilang.
+     - 'manual': peramban tidak mengirim eventnya padahal bukan iOS (syarat
+       belum terpenuhi, atau sudah terpasang di profil lain). Pengguna datang
+       ke sini KHUSUS untuk memasang, jadi diam bukan pilihan - ia tetap diberi
+       jalan lewat menu peramban.
+     - 'ios': Safari TIDAK PERNAH mengirim event itu (WebKit bug 255716, masih
+       terbuka), jadi menunggu sia-sia. Satu-satunya jalan adalah menu Share
+       milik Safari, yang tidak bisa kita buka maupun soroti.
+
+     Instruksinya DIUCAPKAN lewat peringatkan(), bukan hanya ditampilkan:
+     pengguna tunanetra tidak bisa melihat ikon Share, jadi petunjuk tertulis
+     saja sama saja dengan tidak ada petunjuk. */
+  useEffect(() => {
+    const sudahTerpasang = window.matchMedia?.('(display-mode: standalone)')?.matches
+      || window.navigator.standalone === true;
+    if (sudahTerpasang) return;          // sudah di layar utama: tidak ada yang perlu ditawarkan
+
+    const diminta = new URLSearchParams(location.search).get('install') === '1';
+    const iOS = /iphone|ipad|ipod/i.test(navigator.userAgent)
+      // iPadOS 13+ menyamar sebagai Mac; tanpa cabang ini iPad masuk jalur 'manual'
+      // dan diberi petunjuk menu yang tidak ada di Safari.
+      || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+
+    const onPrompt = (e) => {
+      e.preventDefault();
+      promptPasangRef.current = e;
+      if (diminta) setCaraPasang('prompt');
+    };
+    const onTerpasang = () => {
+      promptPasangRef.current = null;
+      setCaraPasang(null);
+      peringatkan('SayIt sudah terpasang di layar utama', 'Tutup tab ini, lalu buka SayIt dari ikonnya.');
+    };
+    window.addEventListener('beforeinstallprompt', onPrompt);
+    window.addEventListener('appinstalled', onTerpasang);
+
+    let timer;
+    if (diminta && iOS) {
+      setCaraPasang('ios');
+    } else if (diminta) {
+      // Beri peramban waktu mengirim eventnya dulu; kalau tidak datang, pengguna
+      // tetap harus mendapat jalan. 1,5 detik dipilih supaya tidak menyela klip
+      // sambutan yang berbunyi di detik-detik pertama.
+      timer = setTimeout(() => {
+        setCaraPasang((c) => c || 'manual');
+      }, 1500);
+    }
+    return () => {
+      window.removeEventListener('beforeinstallprompt', onPrompt);
+      window.removeEventListener('appinstalled', onTerpasang);
+      clearTimeout(timer);
+    };
+  }, []);
+
+  /* Ucapkan petunjuknya begitu panelnya muncul. Terpisah dari efek di atas supaya
+     peringatkan() yang dipanggil tidak ikut berjalan ulang saat pendengarnya
+     dipasang, dan supaya tiap cabang punya kalimat tindakannya sendiri. */
+  useEffect(() => {
+    if (!caraPasang) return;
+    if (caraPasang === 'prompt') {
+      peringatkan('SayIt siap dipasang di layar utama',
+        'Ketuk tombol Pasang SayIt di tengah layar.');
+    } else if (caraPasang === 'ios') {
+      peringatkan('Di iPhone, pemasangan dilakukan lewat Safari sendiri',
+        'Ketuk tombol Bagikan di bilah bawah Safari, gulir ke bawah, lalu pilih Tambah ke Layar Utama.');
+    } else {
+      peringatkan('Pemasangan otomatis tidak tersedia di peramban ini',
+        'Buka menu peramban, lalu pilih Pasang aplikasi atau Tambahkan ke layar utama.');
+    }
+  }, [caraPasang]);
+
+  /** Dialog pasang milik peramban. Hanya ada di cabang 'prompt'. */
+  const pasangSekarang = async () => {
+    const e = promptPasangRef.current;
+    if (!e) return;
+    promptPasangRef.current = null;          // prompt() hanya boleh dipanggil sekali
+    try {
+      await e.prompt();
+      const { outcome } = await e.userChoice;
+      if (outcome === 'accepted') return;    // 'appinstalled' yang akan mengumumkannya
+      setCaraPasang(null);
+      peringatkan('Pemasangan dibatalkan', 'Kamu tetap bisa memakai SayIt di tab ini.');
+    } catch {
+      setCaraPasang('manual');
+    }
+  };
 
   /* Ambil teks tiap klip sekali, supaya wilayah aria-live memuat kalimat yang
      SAMA dengan yang terdengar tanpa menyalin kalimatnya ke sini.
@@ -1759,9 +1862,17 @@ export default function SayItPage() {
         }}
       />
 
-      {/* === SCREEN 1: UI KAMERA === */}
+      {/* === SCREEN 1: UI KAMERA ===
+          `inert` saat panel pasang tampil: tanpa ini tombol rana, senter, unggah,
+          dan balik kamera tetap bisa difokus pembaca layar DI BALIK panel itu -
+          cacat yang persis sama dengan audit 19-11. Panelnya menutupi layar bagi
+          MATA, dan itu tidak pernah cukup. */}
       {appState === 'CAMERA_READY' && (
-        <div style={{ position: 'absolute', inset: 0, zIndex: 20, pointerEvents: 'none', overflow: 'hidden' }}>
+        <div
+          inert={!!caraPasang || undefined}
+          aria-hidden={!!caraPasang || undefined}
+          style={{ position: 'absolute', inset: 0, zIndex: 20, pointerEvents: 'none', overflow: 'hidden' }}
+        >
           <div ref={bingkaiRef} style={{ 
             position: 'absolute',
             top: 'max(60px, env(safe-area-inset-top))',
@@ -1893,8 +2004,8 @@ export default function SayItPage() {
           `aria-hidden` ditahan sebagai lapis kedua untuk Safari lama, karena
           pengguna utama proyek ini memakai iPhone. */}
       <div 
-        inert={isCamera || undefined}
-        aria-hidden={isCamera || undefined}
+        inert={isCamera || !!caraPasang || undefined}
+        aria-hidden={isCamera || !!caraPasang || undefined}
         style={{
           position: 'absolute',
           inset: 0,
@@ -1908,8 +2019,8 @@ export default function SayItPage() {
       >
         {/* === SCREEN 3: HASIL FOTO & PERTANYAAN === */}
         <div 
-          inert={!isQuestionScreen || undefined}
-          aria-hidden={!isQuestionScreen || undefined}
+          inert={!isQuestionScreen || !!caraPasang || undefined}
+          aria-hidden={!isQuestionScreen || !!caraPasang || undefined}
           style={{
             position: 'absolute',
             inset: 0,
@@ -1940,8 +2051,8 @@ export default function SayItPage() {
         {/* === SCREEN 5: LAYAR HASIL AKHIR (foto -> orb -> output -> 3 tombol) === */}
         {/* Susunan flex: card output tumbuh sesuai panjang teks, ruang orb mengecil otomatis */}
         <div 
-          inert={!isResultScreen || undefined}
-          aria-hidden={!isResultScreen || undefined}
+          inert={!isResultScreen || !!caraPasang || undefined}
+          aria-hidden={!isResultScreen || !!caraPasang || undefined}
           style={{
             position: 'absolute',
             inset: 0,
@@ -2074,8 +2185,8 @@ export default function SayItPage() {
           window.close() hanya berhasil di PWA terpasang. Di tab peramban biasa
           ia gagal diam-diam, jadi inilah yang terlihat. */}
       <div
-        aria-hidden={!isSelesai}
-        inert={!isSelesai || undefined}
+        aria-hidden={!isSelesai || !!caraPasang}
+        inert={!isSelesai || !!caraPasang || undefined}
         style={{
           position: 'absolute', inset: 0, zIndex: 32,
           backgroundColor: 'white',
@@ -2128,6 +2239,82 @@ export default function SayItPage() {
           Mulai lagi
         </button>
       </div>
+
+      {/* === PANEL PASANG KE LAYAR UTAMA ===
+          Dirender bersyarat, BUKAN disembunyikan dengan opacity. Itu disengaja:
+          panel yang hanya diredupkan tetap ada di pohon aksesibilitas dan tetap
+          bisa difokus - cacat kritis yang sudah terjadi sekali di aplikasi ini
+          (audit 19-11, empat tombol dari layar lain terjangkau saat memotret).
+          Tidak merender apa pun sama sekali membuat `inert` tidak diperlukan,
+          sekaligus menjamin wilayah aria-live tidak mungkin ikut terkubur.
+
+          zIndex 40: di atas layar Selesai (32), karena pengguna datang ke sini
+          dari landing page KHUSUS untuk memasang. */}
+      {caraPasang && (
+        <div
+          onClick={(e) => e.stopPropagation()}
+          style={{
+            position: 'absolute', inset: 0, zIndex: 40,
+            backgroundColor: 'white', boxSizing: 'border-box',
+            display: 'flex', flexDirection: 'column',
+            alignItems: 'center', justifyContent: 'center',
+            padding: 'calc(24px + env(safe-area-inset-top)) 0 calc(24px + env(safe-area-inset-bottom))',
+          }}
+        >
+          <div style={{
+            width: '75%', maxWidth: '560px', boxSizing: 'border-box', padding: '18px 20px',
+            backgroundColor: JINGGA_TEKS, borderRadius: '16px',
+            boxShadow: '0 4px 20px rgba(249,115,22,0.2)',
+          }}>
+            <h2 style={{
+              margin: 0, fontSize: '18px', fontWeight: 700, lineHeight: 1.5,
+              textAlign: 'center', color: 'white',
+            }}>
+              {caraPasang === 'prompt'
+                ? 'Pasang SayIt di layar utama'
+                : 'Tambahkan SayIt ke layar utama'}
+            </h2>
+          </div>
+
+          <p style={{
+            width: '75%', maxWidth: '560px', margin: '14px 0 0',
+            fontSize: '14px', lineHeight: 1.6, textAlign: 'center', color: '#6b7280',
+          }}>
+            {caraPasang === 'prompt' && 'Setelah terpasang, SayIt bisa dibuka langsung dari ikonnya tanpa membuka peramban.'}
+            {/* Nama tombolnya disebut apa adanya ("Bagikan", "Tambah ke Layar
+                Utama") supaya kalimat yang terdengar sama dengan label yang
+                dibacakan VoiceOver saat pengguna menyusuri bilah Safari. */}
+            {caraPasang === 'ios' && 'Ketuk tombol Bagikan di bilah bawah Safari, gulir ke bawah, lalu pilih Tambah ke Layar Utama.'}
+            {caraPasang === 'manual' && 'Buka menu peramban, lalu pilih Pasang aplikasi atau Tambahkan ke layar utama.'}
+          </p>
+
+          {caraPasang === 'prompt' && (
+            <button
+              className="btn-icon"
+              onClick={pasangSekarang}
+              style={{ width: '75%', maxWidth: '560px', flex: '0 0 auto', marginTop: '24px', flexDirection: 'row', gap: '10px', fontSize: '16px', fontWeight: 700 }}
+            >
+              <svg fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/>
+              </svg>
+              Pasang SayIt
+            </button>
+          )}
+
+          {/* Selalu ada jalan keluar: pengguna yang tidak jadi memasang tidak
+              boleh terkunci di panel ini tanpa cara mencapai kameranya. */}
+          <button
+            className="btn-icon"
+            onClick={() => {
+              setCaraPasang(null);
+              peringatkan('Pemasangan dilewati', 'Kamu tetap bisa memakai SayIt di tab ini.');
+            }}
+            style={{ width: '75%', maxWidth: '560px', flex: '0 0 auto', marginTop: '12px', flexDirection: 'row', gap: '10px', fontSize: '16px', fontWeight: 700 }}
+          >
+            Lanjut tanpa memasang
+          </button>
+        </div>
+      )}
 
     </main>
   );

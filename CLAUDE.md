@@ -302,6 +302,42 @@ dipasang. `Dockerfile` dibiarkan di repo tetapi tidak dipakai.
 
 Langkah lengkapnya di `docs/deploy.md`.
 
+**ALUR PASANG KE LAYAR UTAMA (20-11), pilihan A: dua proyek Vercel.**
+Landing page rekan tim ada di `landingpage/sayit-monorepo` (repo Git TERPISAH,
+diabaikan `.gitignore`) dan sudah punya `components/install-pwa.tsx` yang benar:
+ia tahu peramban hanya mengizinkan sebuah situs memasang DIRINYA SENDIRI, jadi
+modalnya menjelaskan izin lalu mengalihkan ke `PWA_URL?install=1`.
+- Sisi kita menangani `?install=1` dengan **tiga cabang**: `prompt` (Chrome
+  mengirim `beforeinstallprompt`, ditahan `preventDefault` lalu dipakai tombol
+  "Pasang SayIt"), `ios` (Safari TIDAK PERNAH mengirim event itu - WebKit bug
+  255716 masih terbuka - jadi langkah Bagikan -> Tambah ke Layar Utama
+  diucapkan), dan `manual` (event tidak datang dalam 1,5 detik padahal bukan iOS).
+- **Petunjuknya DIUCAPKAN lewat `peringatkan()`, bukan klip TTS baru.** Itu
+  memang fungsinya: pesan sisi klien yang harus berbunyi walau server tak
+  terjangkau, dan dua argumennya memaksa tiap pesan menyebut tindakan berikutnya.
+  Jadi **tidak ada klip baru** dan `build_tts_cache.py` tidak perlu dijalankan.
+- **Panel pasang membuat SELURUH layar lain `inert`**, termasuk UI kamera yang
+  sebelumnya tidak punya `inert` sama sekali. Tanpa itu tombol rana dan "Keluar
+  aplikasi" terjangkau pembaca layar di balik panel - cacat 19-11 terulang.
+  Diverifikasi pada aplikasi berjalan **dengan kamera palsu** (canvas
+  `captureStream` + `Object.defineProperty` pada `getUserMedia`, lalu HMR;
+  menugaskan `getUserMedia` langsung GAGAL DIAM-DIAM karena propertinya di
+  prototype): 9 tombol terlihat, **1 bisa difokus**, `aria-live` di luar inert.
+- Panelnya juga `stopPropagation`: `<main onClick={handleScreenClick}>` memotret,
+  jadi tanpa itu menekan "Pasang SayIt" akan memasang DAN memotret sekaligus.
+- **Di iPhone alurnya tidak pernah otomatis.** Itu batas Safari. Uji di Android.
+
+**RALAT dua catatan lama di berkas ini:**
+1. "CORS tidak dibutuhkan sama sekali" hanya benar untuk jalur rewrite. Jalur
+   `?api=` menembak ngrok LANGSUNG dan itu lintas-origin; yang menyelamatkannya
+   `CORSMiddleware(allow_origins=["*"])` di `server/app.py`.
+2. `proxyTimeout: 180_000` **tidak berlaku di Vercel**: batas proksi Vercel
+   **120 detik** untuk semua paket, dan itu yang menang. Kedaluwarsa terburuk
+   terukur **99,2 detik**, jadi marginnya cuma 20%. Karena itu jalur yang dipakai
+   di produksi adalah `?api=` LANGSUNG (tanpa proksi Vercel, tanpa batas itu),
+   dan `start_url` manifest sebaiknya memuat `?api=<domain statis ngrok>` supaya
+   aplikasi terpasang tidak bergantung pada localStorage.
+
 ## graphify
 
 Proyek ini punya knowledge graph di `graphify-out/` (2.096 node, 4.127 edge, 177 komunitas,
