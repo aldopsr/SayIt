@@ -49,3 +49,10 @@ notebooks/_ekspor/
 # yang tidak bisa di-clone orang lain. Untuk deploy, landing page dan PWA ini
 # jadi DUA proyek Vercel dari dua repo (keputusan "pilihan A", 20-11).
 landingpage/
+
+# Dokumentasi skill pihak ketiga yang dipasang dari marketplace (animate,
+# apple-design, write-swift, dan lain-lain). Bukan isi proyek ini, dan
+# `skills-lock.json` sudah mencatat sumber + hash tiap skill sehingga semuanya
+# bisa dipasang ulang. Polanya sama seperti node_modules: lockfile disimpan,
+# isinya tidak. `.claude/launch.json` TETAP di-commit - itu milik proyek.
+.claude/skills/
