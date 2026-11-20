@@ -619,6 +619,68 @@ kembali ke skor tertinggi - jadi config ini **tidak mengubah apa pun** selama `b
   itu bukti angka 81% sekarang. Ukur dengan `scripts/ukur_kedaluwarsa.py`, bandingkan
   benar/salah/diam terhadap dasar **13 / 2 / 1**.
 
+**BOBOT 4 KELAS SUDAH DIUKUR 20-11, DAN JAWABANNYA: TETAP PAKAI `best_zone.pt`.**
+Tiga bobot, 16 kemasan, nilai saklar dicetak tiap kondisi:
+
+| bobot | BENAR | SALAH | DIAM | median | zona ketemu |
+|---|---|---|---|---|---|
+| **`best_zone.pt` (1 kelas) - DIPAKAI** | **13** | 2 | 1 | **9,96 s** | **7/16** |
+| 4 kelas satu dataset | 13 | **0** | 3 | 20,23 s | 2/16 |
+| gabungan (notebook 06) | 13 | **0** | 3 | 20,18 s | 3/16 |
+
+- **Menggabungkan dataset TIDAK membeli apa pun.** Cakupan zona 2/16 -> 3/16, satu berkas;
+  akurasi dan latensi identik. Dugaan bahwa cakupan runtuh karena datasetnya kurang
+  mewakili kemasan Indonesia **terbantah**.
+- **20 detik itu BUKAN harga model 4 kelasnya.** Deteksi zona sendiri 6,6 ms. Yang mahal
+  adalah akibatnya: cakupan zona runtuh, jadi 13 berkas jatuh ke OCR seluruh gambar +
+  rotasi. Latensi di modul ini **gejala cakupan**, bukan biaya inferensi.
+- **Kesadaran kelas MEMANG bekerja** - dan itu dipisahkan dengan deteksi mentah pada
+  `conf=0,01` (tanpa OCR, hitungan detik). `chees` memberi `code:0.75` `date:0.54`
+  `date:0.47`: `code` ditolak, `date:0.54` dipakai, hasilnya DIAM bukan SALAH. `ovaltine`
+  memakai `date:0.69`. Kedua jawaban salah hilang karena mekanisme yang dirancang, bukan
+  kebetulan. **Tetapi** cakupan runtuh pada berkas LAIN, karena sebab yang berbeda:
+  `ajinomoto` `code:0.65` lolos ambang lalu ditolak, sementara `date:0.26` ada di bawahnya,
+  jadi `lolos` kosong dan zona dianggap tidak ada.
+- **TUAS AMBANG MATI.** `zone_score_min` 0,40 -> 0,25 pada bobot gabungan: 12/1/3 = 75%,
+  cakupan 3/16 -> 4/16 saja, dan `ajinomoto` BENAR -> SALAH. Kotak `date` berskor rendah
+  itu **berskor rendah karena wilayahnya memang salah**; menurunkan ambang memasukkan zona
+  buruk, bukan memulihkan zona yang terbuang. Dugaan 20-11 soal ambang **terbantah**.
+- Satu temuan yang sah: **menolak `due` adalah kemenangan latensi murni** (akurasi identik
+  per berkas, median 14,97 -> 11,12 s). `due` penanda "EXP", bukan tanggalnya - `20270906`
+  memilih `due:0.45` padahal `date:0.34` ada. Berlaku hanya bila bobot 4 kelas dipakai.
+- **`Zone.cls` TIDAK kosong pada model 1 kelas** - isinya `expired_date_zone`. Mundur aman
+  tetap bekerja tetapi lewat cabang lain: nama itu tidak ada di daftar tolak sehingga lolos,
+  lalu `bertanggal` kosong sehingga pilihan kembali ke skor tertinggi. Baca catatan
+  "zona tanpa nama kelas" di atas sebagai "zona yang kelasnya tidak dikenali config".
+- **Mengutip latensi modul ini: median SAJA menyesatkan.** Pada 1 kelas `tolakangin2`
+  **90-149 detik**, `tolakangin1` 41-62 s, `tisu2` 23-42 s. Sebutkan median DAN terburuknya,
+  atau pembaca akan menyangka pengguna menunggu 8 detik.
+
+**Perbandingan PENUTUP, satu proses (wajib - lihat derau di bawah), dua finalis:**
+
+| kondisi | BENAR | SALAH | DIAM | akurasi | median | terburuk | total | zona |
+|---|---|---|---|---|---|---|---|---|
+| **1 kelas @0,40 - DIPAKAI** | **13** | 2 | 1 | **81%** | **7,82 s** | 90,0 s | **262,1 s** | **7/16** |
+| gabungan @0,25 tolak cpd | 12 | **1** | 3 | 75% | 10,43 s | 86,1 s | 380,4 s | 4/16 |
+
+**1 kelas menang di KEDUA sisi, jadi ini bukan pertukaran.** Akurasi 81% lawan 75%,
+median -33%, total -45%. Dugaan saya bahwa latensinya setara (sehingga pilihannya jadi
+"1 salah lawan 2 salah pada kecepatan sama") **terbantah**. Penyumbang terbesar satu
+berkas: `mentega` 6,1 -> 85,4 detik.
+
+**Dan ini pembenaran aturan "bandingkan DI DALAM satu sesi", dengan angkanya sendiri:**
+kondisi yang sama persis (1 kelas @0,40) memberi median **9,96 s** di satu proses dan
+**7,82 s** di proses lain pada hari yang sama. Membandingkan 9,96 (sesi A) lawan 11,12
+(sesi B) terbaca "nyaris seri" dan **hampir mengubah keputusan ini**.
+
+**Ringkasnya: percobaan 4 kelas adalah temuan NEGATIF, dan itu dilaporkan apa adanya** -
+sejajar dengan ablasi pra-pemrosesan PRD nomor 1. Yang dibelinya bukan model melainkan
+pengetahuan: kesadaran kelas terbukti bekerja, `due` terbukti layak ditolak, dan
+`Zone.cls` ternyata tidak kosong pada model 1 kelas. Kodenya tetap di tempatnya,
+berteskan, dan tidak mengubah apa pun selama bobot 1 kelas dipakai.
+**Jangan ulangi tiga sapuan ini** (gabung dataset, turunkan ambang, banding latensi) -
+ketiganya sudah dijalankan dan hasilnya di atas.
+
 **Penanda NEGATIF (`date_parser.negative_markers`, 20-11) - NETRAL, dipasang demi bahaya:**
 A/B 16 kemasan: `[]` 13/2/1 = 81% lawan daftar terisi **13/2/1 = 81%, identik per berkas**.
 Dibiarkan menyala karena bahaya yang ia tutup berjenis JAWABAN SALAH (`"NO BETS 210829"`
