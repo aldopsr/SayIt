@@ -1094,14 +1094,20 @@ export default function SayItPage() {
     streamRef.current = stream;
     if (videoRef.current) {
       videoRef.current.srcObject = stream;
-      /* play() WAJIB dipanggil lagi, bukan mengandalkan atribut `autoPlay`.
+      /* play() dipanggil lagi, tetapi HANYA bila elemennya memang terjeda.
          `autoPlay` hanya menyala sekali saat elemen pertama kali mendapat
-         sumber. Di sini track lama SUDAH dihentikan di atas (`t.stop()`),
-         yang membuat elemen video berhenti - jadi `srcObject` baru belum
-         tentu diputar sendiri. Gejalanya: pratinjau putih polos setelah
-         balik kamera, karena `<main>` berlatar putih dan video tanpa frame
-         membiarkan latar itu terlihat. */
-      videoRef.current.play().catch(() => {});
+         sumber, sedangkan di sini track lama sudah dihentikan di atas
+         (`t.stop()`) sehingga elemennya berhenti - jadi `srcObject` baru
+         belum tentu diputar sendiri.
+
+         Syarat `paused` itu penting dan bukan kehati-hatian kosong:
+         memanggil play() saat autoplay SEDANG berjalan bisa menolak dengan
+         AbortError ("interrupted by a new load request") dan justru
+         meninggalkan elemennya terjeda. Versi pertama perbaikan ini tanpa
+         syarat itu, dan setelah tayang kamera DEPAN - yang sebelumnya
+         normal - ikut putih. Itu belum terbukti sebabnya, tetapi cukup
+         masuk akal untuk tidak dibiarkan. */
+      if (videoRef.current.paused) videoRef.current.play().catch(() => {});
     }
     aturFokus(stream);
     pantauPratinjau(stream);
