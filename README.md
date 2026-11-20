@@ -160,7 +160,7 @@ Berguna untuk memeriksa modul satu per satu tanpa peramban dan tanpa suara.
 | Konfigurasi | `config/settings.yaml`, `sayit/config.py` | Siap |
 | Rekam/putar audio | `sayit/audio/io.py` | Siap |
 | Speech-to-Text | `sayit/audio/stt.py` | Siap (faster-whisper small + prompt) |
-| Text-to-Speech | `sayit/audio/tts.py` | Siap (edge-tts hibrida, 89 klip offline) |
+| Text-to-Speech | `sayit/audio/tts.py` | Siap (edge-tts hibrida, 95 klip offline) |
 | Intent router | `sayit/intent/` | Siap |
 | Templat respons & angka ke kata | `sayit/response/` | Siap |
 | Quality gate, pra-pemrosesan, uang, dokumen, kedaluwarsa | `sayit/vision/` | Siap |
@@ -173,23 +173,41 @@ Hasil ukur terakhir terhadap target PRD Bagian 11:
 
 | Metrik | Hasil | Target | |
 | :--- | :--- | :--- | :--- |
-| Akurasi kedaluwarsa | 81% (13 benar / 1 salah / 2 diam dari 16) | >= 70% | tercapai |
-| Akurasi uang (total diucapkan) | **90,1%** (73 benar / 8 salah / 0 diam dari 81 foto) | >= 85% | **tercapai** |
-| CER dokumen | **14,89%** | <= 15% | **tercapai** |
+| Akurasi kedaluwarsa | 81% (13 benar / 2 salah / 1 diam dari 16 kemasan) | >= 70% | tercapai |
+| Akurasi uang (total diucapkan) | **85-90%** (k-fold; 68 benar / 11 salah / 1 diam dari 80 foto) | >= 85% | tercapai, tepat di garis |
+| CER dokumen | **14,94%** | <= 15% | tercapai, margin 0,06 poin |
 | Latensi uang / kendali | 1,4 s / 1,3 s | <= 8 s | lolos |
 | Latensi dokumen / kedaluwarsa | 11,5 s / 11,4 s | <= 8 s | penyimpangan diterima |
+| mAP@0,5 model zona | **tidak diukur** | >= 0,75 | tidak dapat disimpulkan |
+| Pengujian pengguna proksi (SUS) | **belum dijalankan** | >= 80% | belum |
 
-Angka akurasi **wajib dilaporkan terpisah** sebagai benar / salah / diam, bukan
-satu persentase. Bagi pengguna tunanetra, tanggal atau nominal yang **salah**
-jauh lebih berbahaya daripada sistem yang diam. Alasan lengkap dan riwayat tiap
-angka ada di `docs/keputusan-teknis.md`.
+Empat catatan yang menyertai tabel ini, dan semuanya disengaja:
+
+1. **Angka akurasi dilaporkan terpisah** sebagai benar / salah / diam, bukan satu
+   persentase. Bagi pengguna tunanetra, tanggal atau nominal yang **salah** jauh
+   lebih berbahaya daripada sistem yang diam.
+2. **Akurasi uang ditulis sebagai rentang 85-90%, bukan satu angka.** Dua kali
+   k-fold pada partisi berbeda memberi 90,1% (81 foto) dan 85,0% (80 foto setelah
+   satu anotasi cacat dikeluarkan). Dengan n=80 dan ~10 kesalahan, selisih itu ada
+   di dalam variasi antar-run, jadi menyebut satu angka presisi akan menyesatkan.
+3. **mAP zona tidak dapat diukur dari repositori ini**: tidak ada kotak acuan, dan
+   mAP dari split test dataset latihnya sesumber dengan data latih sehingga
+   optimistis. Penggantinya yang terukur: tingkat deteksi 9 dari 14 kemasan
+   bertanggal, dengan nol deteksi palsu pada 2 kemasan tanpa tanggal.
+4. **Latensi dokumen dan kedaluwarsa menyimpang dari NFR-01**, diterima dengan
+   sengaja setelah tiga tuas penurun latensi diuji dan semuanya gagal tanpa
+   mengorbankan akurasi.
+
+Alasan lengkap, riwayat tiap angka, dan seluruh uji ablasi beserta temuan
+negatifnya ada di `docs/keputusan-teknis.md`. Ringkasan khusus modul kedaluwarsa
+untuk penulisan jurnal: `docs/bahan_jurnal_kedaluwarsa.md`.
 
 ---
 
 ## Aturan kerja
 
 - `python -m pytest -q` harus lulus **sebelum dan sesudah** setiap perubahan.
-  Saat ini 685 tes.
+  Saat ini 764 tes.
 - Uji asap API: `python server\smoke.py` — memuat model sungguhan, jadi bukan
   bagian dari pytest.
 - Semua parameter di `config/settings.yaml`, dibaca lewat `sayit/config.py`.

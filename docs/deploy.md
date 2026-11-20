@@ -48,7 +48,7 @@ ikut dinilai.
 
 ```bash
 git config --global user.name "aldopsr"
-git config --global user.email "mochammadalthofsr@gmail.com"
+git config --global user.email "email-kamu@contoh.com"   # ganti dengan email akun GitHub-mu
 ```
 
 Lalu dari root `sayit/`:
