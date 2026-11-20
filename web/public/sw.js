@@ -7,7 +7,11 @@
  * kali menggigit proyek ini - klip gTTS lama terus diputar walau berkasnya sudah
  * diganti - jadi jawaban, klip, dan seluruh lalu lintas API dilewatkan apa adanya.
  */
-const CACHE = 'sayit-kerangka-v1';
+// v2 (20-11): ikon diganti dengan logo SayIt milik landing page. Nama cache
+// WAJIB ikut naik setiap kali isi berkas di KERANGKA berubah tanpa ganti nama -
+// `activate` hanya menghapus cache yang namanya BERBEDA, jadi dengan nama yang
+// sama ikon lama akan tetap tersimpan dan terpakai saat luring.
+const CACHE = 'sayit-kerangka-v2';
 const KERANGKA = ['/', '/manifest.json', '/icon-192.png', '/icon-512.png'];
 
 self.addEventListener('install', (e) => {
