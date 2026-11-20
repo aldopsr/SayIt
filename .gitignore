@@ -43,3 +43,9 @@ graphify-out/
 
 # Hasil ekspor notebook (turunan, dibuat scripts/ekspor_notebook.py)
 notebooks/_ekspor/
+
+# Landing page milik rekan tim: repo Git TERPISAH (landingpage/sayit-monorepo/.git).
+# Jangan di-commit ke sini - `git add` akan menanamkannya sebagai embedded repo
+# yang tidak bisa di-clone orang lain. Untuk deploy, landing page dan PWA ini
+# jadi DUA proyek Vercel dari dua repo (keputusan "pilihan A", 20-11).
+landingpage/
