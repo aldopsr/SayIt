@@ -17,7 +17,7 @@ import time
 
 import numpy as np
 import soundfile as sf
-from fastapi import FastAPI, File, Form, UploadFile
+from fastapi import Body, FastAPI, File, Form, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
@@ -270,6 +270,23 @@ def unggah_berkas(berkas: UploadFile = File(...)):
 @app.get("/sehat")
 def sehat():
     return {"status": status}
+
+
+@app.post("/jejak")
+def jejak(data: dict = Body(...)):
+    """Jejak diagnosis dari klien, dicetak ke log server.
+
+    Alasannya satu: **di ponsel `console` tidak terjangkau.** Proyek ini sudah
+    pernah terhambat berhari-hari karena itu - perintah suara senter dinyatakan
+    bekerja berdasarkan log HTTP yang ternyata tidak bisa membedakan pemanggil,
+    dan yang akhirnya membukanya adalah jejak `[dengar]` di sisi server.
+
+    Isinya DIBATASI pada keadaan perangkat (ukuran video, status track,
+    facingMode). Tidak ada foto, tidak ada suara, tidak ada teks pengguna -
+    endpoint ini tidak boleh berkembang menjadi saluran telemetri.
+    """
+    print(f"[jejak] {data}", flush=True)
+    return {"ok": True}
 
 
 @app.get("/klip-teks")

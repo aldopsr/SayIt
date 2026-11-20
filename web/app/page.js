@@ -1050,10 +1050,30 @@ export default function SayItPage() {
          memicu lapor palsu. Yang dipakai hanya dua penanda yang tidak
          ambigu: nol frame yang pernah diterima, dan track yang sudah mati. */
       const mati = !v || v.videoWidth === 0 || (t && t.readyState !== 'live');
+      const s = t?.getSettings?.() || {};
+      const jejak = {
+        apa: 'pratinjau', mati,
+        minta: facingRef.current,
+        dapat: s.facingMode ?? null,
+        ukuran: `${v?.videoWidth ?? 0}x${v?.videoHeight ?? 0}`,
+        trekUkuran: `${s.width ?? 0}x${s.height ?? 0}`,
+        dijeda: v?.paused ?? null,
+        siapData: v?.readyState ?? null,     // 0 = belum ada data sama sekali
+        trek: t?.readyState ?? null,
+        bisu: t?.muted ?? null,
+      };
+      console.info('[SayIt] jejak pratinjau', jejak);
+      /* Dikirim ke server JUGA saat kameranya sehat. Jejak yang hanya ada
+         ketika gagal tidak bisa membedakan "rusak" dari "tidak pernah
+         dicoba" - persis kekeliruan membaca log 19-11. */
+      try {
+        fetch(api('/jejak'), {
+          method: 'POST',
+          headers: { ...kepalaApi(), 'Content-Type': 'application/json' },
+          body: JSON.stringify(jejak),
+        }).catch(() => {});
+      } catch {}
       if (!mati) return;
-      console.warn('[SayIt] pratinjau kosong', {
-        videoWidth: v?.videoWidth, readyState: t?.readyState, muted: t?.muted,
-      });
       peringatkan('Kamera tidak menampilkan gambar',
         'Ketuk tombol balik kamera di kanan bawah untuk mencoba kamera satunya, atau muat ulang halaman.');
     }, 3000);
