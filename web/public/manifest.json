@@ -2,7 +2,7 @@
   "name": "SayIt",
   "short_name": "SayIt",
   "description": "Membacakan nominal uang, tanggal kedaluwarsa, dan tulisan dokumen lewat kamera dan suara.",
-  "start_url": "/",
+  "start_url": "/?api=https://expansive-surely-iodine.ngrok-free.dev",
   "scope": "/",
   "display": "standalone",
   "orientation": "portrait",

@@ -181,45 +181,65 @@ CORS tidak jadi masalah di jalur langsung: `server/app.py` sudah memasang
 `CORSMiddleware` dengan `allow_origins=["*"]`. (Catatan lama "CORS tidak
 dibutuhkan sama sekali" hanya benar untuk jalur rewrite.)
 
-### 3.3 Domain statis ngrok - kerjakan ini SEBELUM membagikan tautan
+### 3.3 Domain ngrok TERNYATA SUDAH STATIS - catatan lama di berkas ini keliru
 
-Paket gratis ngrok memberi **satu domain yang ditetapkan otomatis dan tidak
-berganti saat agen di-restart**. Kalau URL-mu selama ini berganti, kemungkinan
-besar `--url` tidak diberikan - tanpa flag itu ngrok memberi URL sementara.
+Bagian "Jebakan tunnel" di atas menulis URL ngrok berganti tiap restart. **Itu
+terbantah buktinya sendiri**: hostname `expansive-surely-iodine.ngrok-free.dev`
+tercatat di berkas ini pada **11 Oktober** dan masih dipakai pada **20 November**
+- enam minggu, tanpa berubah. Paket gratis ngrok memang memberi satu domain yang
+ditetapkan otomatis dan tetap; yang tidak tetap adalah URL yang didapat kalau
+`--url` tidak diberikan.
 
-Lihat domainnya di dashboard ngrok (**Universal Gateway -> Domains**), lalu:
+Jalankan backend begini supaya domainnya selalu yang itu:
 
 ```powershell
-ngrok http 8000 --url=NAMA-STATISMU.ngrok-free.app
+ngrok http 8000 --url=expansive-surely-iodine.ngrok-free.dev
 ```
 
-Kenapa ini mendesak: **PWA yang sudah terpasang diluncurkan di `start_url` tanpa
-`?api=`**, jadi ia bergantung pada localStorage yang mengingat host lama. Begitu
-URL ngrok berganti, ikon di layar utama menunjuk host mati - dan pengguna
-tunanetra tidak punya cara menempelkan URL baru. Ikon yang bekerja hari ini dan
-gagal dalam diam pekan depan lebih buruk daripada tidak ada ikon.
-
-Setelah domainnya tetap, ubah `web/public/manifest.json`:
+Karena domainnya tetap, `web/public/manifest.json` sekarang memuatnya di
+`start_url`:
 
 ```json
-"start_url": "/?api=https://NAMA-STATISMU.ngrok-free.app",
+"start_url": "/?api=https://expansive-surely-iodine.ngrok-free.dev",
 ```
 
-Dengan begitu aplikasi terpasang **selalu** membawa basis API-nya sendiri, tidak
-bergantung pada localStorage sama sekali. Host-nya tetap diperiksa daftar putih
-`API_DIIZINKAN` di `web/app/page.js`.
+Alasannya: **PWA terpasang diluncurkan di `start_url`**, dan tanpa parameter itu
+ia bergantung sepenuhnya pada localStorage - yang pada pemasangan baru masih
+KOSONG, karena pengguna datang lewat `?install=1` tanpa `?api=`. Dengan parameter
+di manifest, aplikasi terpasang selalu membawa basis API-nya sendiri sejak
+peluncuran pertama, dan permintaannya langsung ke ngrok tanpa melewati batas 120
+detik milik proksi Vercel.
 
-### 3.4 Sambungkan landing page
+**Harga yang harus diketahui:** tiap peluncuran dari ikon menulis ulang nilai ini
+ke localStorage. Kalau suatu saat domain ngrok benar-benar berganti, `?api=` yang
+ditempel manual hanya bertahan sampai peluncuran berikutnya dari ikon - nilai
+manifest akan menimpanya lagi. Yang benar saat itu: ubah manifest lalu deploy
+ulang. Host-nya tetap diperiksa daftar putih `API_DIIZINKAN` di `web/app/page.js`.
 
-Di proyek Vercel milik landing page (`sayit-monorepo`), set environment variable:
+### 3.4 Variabel yang harus diisi di kedua proyek
 
-```
-NEXT_PUBLIC_PWA_URL = https://sayit-app.vercel.app
-```
+Deploy sungguhan 20-11 menghasilkan nama dengan akhiran, bukan nama polos:
 
-Itu dibaca `apps/web/components/install-pwa.tsx`. Tanpa itu ia memakai bawaan
-`https://app.sayit.id`, domain yang belum dimiliki. Deploy ulang landing page
-setelah menyetelnya - variabel `NEXT_PUBLIC_*` dipanggang saat build.
+| proyek | URL | variabel | nilai |
+|---|---|---|---|
+| PWA (repo ini, root `web`) | `https://sayit-app-phi.vercel.app` | `API_ORIGIN` | `https://expansive-surely-iodine.ngrok-free.dev` |
+| Landing page (repo rekan tim) | `https://sayit-web-three.vercel.app` | `NEXT_PUBLIC_PWA_URL` | `https://sayit-app-phi.vercel.app` |
+
+- `API_ORIGIN` **tanpa** awalan `NEXT_PUBLIC_`: dibaca di sisi server oleh
+  `next.config.mjs`. Ia adalah **jaring pengaman** untuk kunjungan polos
+  (`https://sayit-app-phi.vercel.app/` tanpa `?api=` dan tanpa localStorage);
+  tanpa itu rewrite jatuh ke `http://127.0.0.1:8000`, yang di server Vercel
+  berarti localhost milik Vercel dan selalu gagal.
+- `NEXT_PUBLIC_PWA_URL` **wajib** berawalan `NEXT_PUBLIC_`: `install-pwa.tsx`
+  komponen klien, dan tanpa awalan itu nilainya tidak sampai ke peramban
+  sehingga tombol Install mengarah ke bawaan `https://app.sayit.id` yang tidak
+  dimiliki siapa pun di tim.
+- **Keduanya butuh deploy ulang setelah disimpan.** `rewrites()` dievaluasi saat
+  build, dan `NEXT_PUBLIC_*` dipanggang ke dalam bundel klien saat build.
+
+Jadi ada DUA jalur ke backend, dan itu disengaja: aplikasi terpasang memakai
+`?api=` langsung (cepat, tanpa batas 120 detik), kunjungan polos memakai rewrite
+lewat `API_ORIGIN` (lebih lambat batasnya, tetapi jauh lebih baik daripada gagal).
 
 ### 3.5 Alur yang dihasilkan
 
