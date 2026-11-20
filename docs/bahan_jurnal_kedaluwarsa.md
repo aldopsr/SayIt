@@ -65,6 +65,51 @@ Tanggal harapan dibaca dari **nama berkas** (misalnya `20270311_mentega.JPG` =
 | metrik | hasil | target PRD | |
 |---|---|---|---|
 | Akurasi tanggal kedaluwarsa | **81%** (BENAR 13 / SALAH 2 / DIAM 1) | ≥ 70% | **TERCAPAI** |
+| mAP@0,5 model zona | **tidak diukur** (lihat 3.1) | ≥ 0,75 | **tidak dapat disimpulkan** |
+
+### 3.1 mAP model zona: tidak diukur, dan alasannya harus ditulis apa adanya
+
+PRD Bagian 11 menargetkan mAP@0,5 ≥ 0,75 untuk model deteksi zona. **Angka itu tidak
+ada, dan sengaja tidak diisi dengan pengganti.** Tiga sebabnya:
+
+1. **Tidak ada kotak acuan.** mAP menghitung IoU antara kotak prediksi dan kotak
+   sebenarnya. 16 kemasan uji hanya punya tanggal harapan di nama berkasnya, bukan
+   koordinat kotak. Folder `data/zona_sendiri/` yang disiapkan untuk itu masih kosong.
+2. Dataset yang melatih `best_zone.pt` ada di Roboflow, tidak di repositori.
+3. **Yang paling menentukan:** mAP dari split test dataset itu **sesumber dengan data
+   latihnya**, jadi nilainya optimistis — persis jebakan yang sudah tiga kali terjadi di
+   proyek ini. Mengisi sel PRD dengan angka seperti itu lebih buruk daripada
+   membiarkannya kosong, karena pembaca akan membacanya sebagai bukti tentang kemasan
+   Indonesia.
+
+**Pengganti yang SAH dan terukur** (sapuan ambang pada 16 kemasan sendiri, tanpa OCR):
+
+| ambang skor | zona ketemu / 14 bertanggal | laju | deteksi palsu / 2 tanpa-tanggal |
+|---|---|---|---|
+| 0,15 | 12 / 14 | 86% | **0 / 2** |
+| 0,25 | 11 / 14 | 79% | **0 / 2** |
+| **0,40 (dipakai)** | **9 / 14** | **64%** | **0 / 2** |
+| 0,50 | 8 / 14 | 57% | **0 / 2** |
+| 0,60 | 7 / 14 | 50% | **0 / 2** |
+
+Dua hal yang layak disebut:
+
+- **Nol deteksi palsu di SELURUH ambang**, bahkan 0,15. Model tidak mengarang zona pada
+  kemasan yang tidak punya tanggal.
+- Angka ini **mereproduksi persis** catatan 30-09 ("9 dari 14, skor 0,43–0,77") setelah
+  hampir dua bulan — skor terendah yang lolos 0,43, tertinggi 0,77. Reproduksi
+  independen, dan layak disebut justru karena angka 81% **tidak** dapat direproduksi.
+
+**WAJIB ditulis bahwa 64% itu BUKAN recall dan BUKAN mAP.** Tanpa kotak acuan, sebuah
+"ketemu" tidak berarti kotaknya di tempat yang benar. Buktinya ada di data yang sama:
+**`chees` terdeteksi dengan skor 0,72 — tertinggi ketiga — dan kotaknya menunjuk NOMOR
+PRODUKSI**, yang justru sebab jawabannya salah. Dalam mAP sungguhan berkas itu dihitung
+*false positive*. Jadi **64% adalah batas atas**, dan recall sebenarnya lebih rendah.
+
+Cara mendapatkan mAP sungguhan: labeli 14 kemasan bertanggal itu dengan kotak YOLO
+(kotak mengelilingi **tanggalnya saja**, bukan seluruh kemasan) sesuai petunjuk di
+`data/zona_sendiri/README.md`. Itu juga akan memberi angka pada distribusi yang benar —
+kemasan Indonesia — bukan pada dataset latihnya.
 
 Diukur 17 November 2026. **Versi perangkat yang WAJIB ikut ditulis di jurnal**
 (tanpa ini angkanya tidak bisa direproduksi siapa pun):

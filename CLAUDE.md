@@ -361,7 +361,7 @@ PRD Bagian 11 punya delapan metrik; tabel di bawah hanya memuat empat. Yang di l
 | metrik PRD | target | keadaan |
 |---|---|---|
 | **Pengujian pengguna proksi + SUS** | keberhasilan >= 80% | **BELUM PERNAH DIUKUR** - hanya pengguna yang bisa |
-| mAP@0.5 zona kedaluwarsa | >= 0,75 | belum diukur untuk `best_zone.pt` yang dipakai (yang 0,864 itu model 4 kelas yang DITOLAK) |
+| mAP@0.5 zona kedaluwarsa | >= 0,75 | **TIDAK DAPAT diukur dari repo** - `data/zona_sendiri/` kosong jadi tidak ada kotak acuan; angka 0,864 itu milik model 4 kelas yang DITOLAK. Pengganti yang sah: **tingkat deteksi 9/14 = 64% pada ambang 0,40, deteksi palsu 0/2** (dan 12/14 pada 0,15, palsu tetap 0/2). **Itu BATAS ATAS, bukan recall** - `chees` terdeteksi 0,72 tapi kotaknya menunjuk nomor produksi |
 | STT WER | <= 25% | sudah: 7% dengan `initial_prompt` (Fase 0, 1 penutur) |
 | Akurasi intent router | >= 90% | 24/27 = 89% (PRD baris 247), dan **PRD sendiri menyebutnya optimistis** karena aturannya disetel pada data yang sama |
 
