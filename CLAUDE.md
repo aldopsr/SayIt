@@ -353,7 +353,20 @@ Catatan membaca laporan: 457 "dangling-endpoint edge" pada diagnostik BUKAN koru
 
 ## Titik sambung (2 Oktober 2026)
 
-764 tes lulus. Seluruh metrik PRD Bagian 11 kini sudah pernah diukur.
+764 tes lulus.
+
+**RALAT 20-11: klaim lama "seluruh metrik PRD Bagian 11 sudah pernah diukur" SALAH.**
+PRD Bagian 11 punya delapan metrik; tabel di bawah hanya memuat empat. Yang di luar tabel:
+
+| metrik PRD | target | keadaan |
+|---|---|---|
+| **Pengujian pengguna proksi + SUS** | keberhasilan >= 80% | **BELUM PERNAH DIUKUR** - hanya pengguna yang bisa |
+| mAP@0.5 zona kedaluwarsa | >= 0,75 | belum diukur untuk `best_zone.pt` yang dipakai (yang 0,864 itu model 4 kelas yang DITOLAK) |
+| STT WER | <= 25% | sudah: 7% dengan `initial_prompt` (Fase 0, 1 penutur) |
+| Akurasi intent router | >= 90% | 24/27 = 89% (PRD baris 247), dan **PRD sendiri menyebutnya optimistis** karena aturannya disetel pada data yang sama |
+
+Jangan mengutip baris lama itu di laporan - satu metrik yang PRD-nya menargetkan angka
+memang belum dijalankan.
 
 | Metrik | Hasil | Target | |
 |---|---|---|---|
