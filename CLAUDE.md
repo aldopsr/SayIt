@@ -300,6 +300,35 @@ dipasang. `Dockerfile` dibiarkan di repo tetapi tidak dipakai.
    bukan saat disentuh (fetch dalam penangan gestur membuat `play()` kehilangan
    konteks gestur; iOS memblokirnya).
 
+**SUDAH TAYANG (20-11), dan ini alamat sungguhannya:**
+
+| bagian | URL | variabel |
+|---|---|---|
+| PWA (repo ini, Vercel root `web`) | `https://sayit-app-phi.vercel.app` | `API_ORIGIN` = domain ngrok |
+| Landing page (repo rekan tim) | `https://sayit-web-three.vercel.app` | `NEXT_PUBLIC_PWA_URL` = URL PWA |
+| Backend | `https://expansive-surely-iodine.ngrok-free.dev` | - |
+
+Domain ngrok itu **STATIS** - hostname yang sama tercatat 11-10 dan masih dipakai
+20-11, jadi catatan lama "URL berganti tiap restart" keliru. Jalankan backend
+begini supaya pasti mendapat domain itu:
+
+    .venv/Scripts/uvicorn.exe server.app:app --port 8000
+    ngrok http 8000 --url=expansive-surely-iodine.ngrok-free.dev
+
+**Keluhan "aplikasi tidak bisa" -> PERIKSA PORT 8000 DULU.** Pada uji deploy
+pertama 20-11 penyebabnya persis itu: ngrok hidup, backend tidak, dan ngrok
+membalas 502. Dari sisi pengguna itu terlihat sama persis dengan deploy gagal.
+
+**Header pelewat ngrok kini dikirim SELALU**, termasuk pada jalur rewrite `/api`.
+Dulu tidak, dengan alasan "rewrite sendiri, bukan tunnel" - benar saat
+backend-nya localhost, SALAH di produksi karena di Vercel `/api` di-rewrite ke
+ngrok juga dan proksi Vercel meneruskan User-Agent peramban. Gejalanya
+`ERR_NGROK_6024` ber-**status 200**, jadi `r.ok` lolos dan `r.json()` yang gagal.
+
+`start_url` manifest membawa `?api=<domain ngrok>` supaya PWA terpasang punya
+basis API sejak peluncuran pertama - saat pengguna memasang lewat `?install=1`,
+localStorage-nya masih kosong.
+
 Langkah lengkapnya di `docs/deploy.md`.
 
 **ALUR PASANG KE LAYAR UTAMA (20-11), pilihan A: dua proyek Vercel.**
