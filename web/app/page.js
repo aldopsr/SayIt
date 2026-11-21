@@ -49,6 +49,21 @@ const HENING_MS = 3000;    // spec 4: berhenti mendengar setelah 3 detik hening
 // Nilai ini SENGAJA berbeda dari HENING_MS: spec 4 bicara tentang pertanyaan, bukan
 // perintah. Jangan diturunkan lagi tanpa diuji pada penutur yang bicara pelan.
 const HENING_PERINTAH_MS = 1500;
+// BATAS DURASI REKAM - ini menutup BUG, bukan menyetel rasa.
+//
+// Sebelum ini `dengarkan()` hanya punya dua jalan keluar: hening selama
+// `heningMs`, atau tidak ada suara sama sekali sampai `batasSunyi`. Di tempat
+// RAMAI derau latar terus melewati ambang, jadi `diamSejak` disetel ulang tiap
+// frame dan **tidak satu pun jalan keluar itu pernah tercapai** - mikrofon
+// merekam tanpa batas, penyangganya membesar, lalu kalau akhirnya terkirim
+// Whisper harus mengunyah rekaman panjang berisi derau. Itu persis keluhan
+// "di keadaan ramai sistemnya lelet sekali dan mendengarkan terus".
+//
+// Ambangnya juga ikut berperan: `ambang = derau x 3` dibatasi AMBANG_MAKS 0,12,
+// jadi di ruangan yang deraunya di atas 0,04 batas atas itu menahannya tetap
+// rendah dan derau selalu terbaca sebagai suara.
+const MAKS_REKAM_MS = 12000;           // pertanyaan: kalimat terpanjang pun jauh di bawah ini
+const MAKS_REKAM_PERINTAH_MS = 6000;   // perintah menu cuma dua-tiga kata
 const IDLE_MS = 30000;     // spec 7: tutup aplikasi setelah 30 detik tanpa interaksi
 // Penutupan otomatis wajib diumumkan SEBELUM terjadi. Pengguna tunanetra tidak
 // melihat hitungan apa pun, jadi aplikasi yang mendadak diam tidak bisa
@@ -850,16 +865,24 @@ export default function SayItPage() {
   // batasSunyi: tutup sesi kalau tidak ada suara sama sekali selama sekian ms,
   //   lalu pemanggil membukanya lagi. Ini yang menjaga penyangga rekaman tidak
   //   tumbuh terus selama layar kamera dibiarkan terbuka.
-  const dengarkan = (saatSelesai, { tungguSuara = false, batasSunyi = 0, heningMs = HENING_MS } = {}) => {
+  const dengarkan = (saatSelesai, {
+    tungguSuara = false, batasSunyi = 0, heningMs = HENING_MS,
+    maksMs = MAKS_REKAM_MS, kirimSaatMaks = true, diamDiDemo = false,
+  } = {}) => {
     // Mode demo: tidak ada yang bisa menerjemahkan suaranya, jadi mikrofon tidak
-    // dibuka sama sekali. Pendengar layar kamera dikenali dari heningMs-nya yang
-    // pendek dan sengaja TIDAK pernah mendengar apa pun, supaya perintah palsu
-    // tidak muncul sendiri; layar pertanyaan dan menu menjawab setelah jeda,
-    // supaya alurnya berjalan sampai akhir tanpa disentuh.
+    // dibuka sama sekali. Pendengar layar kamera sengaja TIDAK pernah mendengar
+    // apa pun supaya perintah palsu tidak muncul sendiri; layar pertanyaan dan
+    // menu menjawab setelah jeda, supaya alurnya berjalan sampai akhir tanpa
+    // disentuh.
+    //
+    // Penandanya `diamDiDemo` yang EKSPLISIT. Dulu pendengar layar kamera
+    // dikenali dari `heningMs === HENING_PERINTAH_MS`, dan itu rapuh: begitu
+    // pendengar LAIN diberi nilai hening yang sama (layar menu, 20-11), ia ikut
+    // terdiam di demo dan alur demonya putus di tengah tanpa gejala apa pun.
     if (DEMO) {
       const gen = ++dengarGen.current;
       hentiDengarRef.current = () => { dengarGen.current++; };
-      if (heningMs === HENING_PERINTAH_MS) return;
+      if (diamDiDemo) return;
       nanti(() => { if (gen === dengarGen.current) saatSelesai(new Blob(['demo'])); }, 2600);
       return;
     }
@@ -967,6 +990,21 @@ export default function SayItPage() {
         }
         // Tidak ada suara sama sekali sampai batasnya: tutup tanpa mengirim apa pun.
         if (!adaSuara && batasSunyi && now - mulai >= batasSunyi) {
+          tutup();
+          saatSelesai(null);
+          return;
+        }
+        /* Batas durasi: satu-satunya jalan keluar yang TIDAK bergantung pada
+           terdeteksinya hening. Di tempat ramai dua jalan keluar lainnya tidak
+           pernah tercapai, dan tanpa baris ini mikrofon merekam selamanya.
+
+           `kirimSaatMaks` false untuk pendengar layar kamera: ia menunggu
+           perintah pendek, dan mengirim rekaman 12 detik berisi derau setiap
+           12 detik - terus-menerus selama layar kamera terbuka - membuang
+           kuota pengguna, baterai, dan antrean server untuk jawaban yang
+           sudah pasti TIDAK_DIKENALI. Pemanggilnya memasang ulang sendiri. */
+        if (now - mulai >= maksMs) {
+          if (adaSuara && kirimSaatMaks) { tutup(true); return; }
           tutup();
           saatSelesai(null);
           return;
@@ -1166,7 +1204,18 @@ export default function SayItPage() {
       // kembali ke sini - lingkaran tanpa akhir bagi pengguna yang diam.
       // Hening sampai batas berarti pasang lagi, bukan kirim.
       const pasang = () => dengarkan(
-        (wav) => { if (!wav) { pasang(); return; } suaraRef.current = wav; pindah('PROCESSING_Q'); },
+        (wav) => {
+          if (!wav) { pasang(); return; }
+          /* Nada "aku dengar" SEBELUM pindah layar. Layar menu dan layar kamera
+             sudah lama memakainya; jalur pertanyaan ini terlewat, sehingga
+             umpan balik pertama setelah pengguna selesai bicara adalah klip
+             "sedang saya proses" - yang baru berbunyi sesudah jeda hening
+             3 detik DAN sesudah klipnya dimuat. Nada ini dibuat Web Audio,
+             jadi ia berbunyi seketika tanpa jaringan. */
+          bip();
+          suaraRef.current = wav;
+          pindah('PROCESSING_Q');
+        },
         { tungguSuara: true, batasSunyi: 15000 },
       );
       pasang();
@@ -1232,7 +1281,10 @@ export default function SayItPage() {
             .then(tanganiJawaban)
             .catch(() => { galatJaringan(); pasang(); });
         },
-        { tungguSuara: true, batasSunyi: 15000 },
+        {
+          tungguSuara: true, batasSunyi: 15000,
+          heningMs: HENING_PERINTAH_MS, maksMs: MAKS_REKAM_PERINTAH_MS,
+        },
       );
       pasang();
     }
@@ -1361,7 +1413,10 @@ export default function SayItPage() {
             .then((j) => { clearTimeout(penanda); tanganiJawaban(j); })
             .catch(() => { clearTimeout(penanda); pasang(); });
         },
-        { tungguSuara: true, batasSunyi: 15000, heningMs: HENING_PERINTAH_MS },
+        {
+          tungguSuara: true, batasSunyi: 15000, heningMs: HENING_PERINTAH_MS,
+          maksMs: MAKS_REKAM_PERINTAH_MS, kirimSaatMaks: false, diamDiDemo: true,
+        },
       );
     };
     pasang();
