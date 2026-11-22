@@ -1,0 +1,269 @@
+<!doctype html>
+<html lang="id"><head><meta charset="utf-8"><title>jawaban-radit</title><style>
+body { font-family: Calibri, Arial, sans-serif; font-size: 11pt; line-height: 1.45;
+       max-width: 1000px; margin: 28px auto; padding: 0 20px; color: #111; }
+h1 { font-size: 20pt; border-bottom: 2px solid #c2410c; padding-bottom: 6px; margin-top: 28px; }
+h2 { font-size: 15pt; color: #9a3412; margin-top: 24px; }
+h3 { font-size: 12.5pt; margin-top: 18px; }
+table { border-collapse: collapse; width: 100%; margin: 12px 0; font-size: 10pt; }
+th, td { border: 1px solid #999; padding: 5px 8px; text-align: left; vertical-align: top; }
+th { background: #f5e6dc; font-weight: bold; }
+code { font-family: Consolas, monospace; font-size: 9.5pt; background: #f3f3f3; padding: 1px 3px; }
+pre { font-family: Consolas, monospace; font-size: 9.5pt; background: #f3f3f3;
+      border: 1px solid #ddd; padding: 8px; white-space: pre-wrap; }
+hr { border: none; border-top: 1px solid #ccc; margin: 24px 0; }
+li { margin: 3px 0; }
+</style></head><body>
+<h1>Jawaban permintaan data — jurnal kedaluwarsa SayIt</h1>
+<p>Dijawab <strong>22 November 2026</strong>, dari repo pada commit <code>b988ada</code> (<code>origin/main</code>). Penomoran mengikuti berkas permintaanmu persis.</p>
+<p>Penanda asal tiap jawaban:</p>
+<table><thead><tr><th>penanda</th><th>arti</th></tr></thead><tbody>
+<tr><td><strong>[UKUR]</strong></td><td>diukur ulang hari ini di laptop pengembang, perintahnya disebut</td></tr>
+<tr><td><strong>[REPO]</strong></td><td>dibaca langsung dari kode, notebook, EXIF berkas, atau API Roboflow</td></tr>
+<tr><td><strong>[DRIVE]</strong></td><td>diambil dari Google Drive (keluaran Colab yang tersimpan otomatis)</td></tr>
+<tr><td><strong>[JURNAL]</strong></td><td>disalin dari <code>docs/keputusan-teknis.md</code>, tanggal aslinya disebut</td></tr>
+<tr><td><strong>[TIDAK TERCATAT]</strong></td><td>datanya memang tidak ada — tidak diperkirakan</td></tr>
+<tr><td><strong>[KAMU]</strong></td><td>hanya pemilik datanya yang tahu, belum terjawab</td></tr>
+</tbody></table>
+<hr>
+<h1>BACA INI DULU — tiga hal yang tidak kamu tanyakan tapi memengaruhi naskah</h1>
+<h2>A. Tiga dari 16 foto uji adalah TANGKAPAN LAYAR, bukan foto kamera</h2>
+<table><thead><tr><th>berkas</th><th>resolusi</th><th>bukti</th></tr></thead><tbody>
+<tr><td><code>202804_tolakangin2.PNG</code></td><td>828×1792</td><td>PNG, tanpa EXIF kamera, ada bilah hitam atas-bawah</td></tr>
+<tr><td><code>20290821_tisu1.PNG</code></td><td>828×1792</td><td>PNG, tanpa EXIF kamera, ada bilah hitam atas-bawah</td></tr>
+<tr><td><code>20290821_tisu2.PNG</code></td><td>828×1792</td><td>PNG, tanpa EXIF, <strong>antarmuka aplikasi Foto iOS terlihat jelas di dalam gambarnya</strong> — jam 09.41, label &quot;Today&quot;, tombol bagikan/suka/info/hapus, dan deretan mini foto di bawah</td></tr>
+</tbody></table>
+<p>828×1792 adalah resolusi layar iPhone 11/XR tepat. Ketiganya juga bertanda waktu berkas 09.40–09.42, terpisah dari rombongan foto kamera pukul 15.29–15.34.</p>
+<p>Dua berkas lain, <code>tidakada_permen1.jpeg</code> dan <code>tidakada_permen2.jpeg</code>, beresolusi 960×1280 tanpa EXIF sama sekali — bukan keluaran langsung kamera iPhone, tetapi asal persisnya tidak dapat dipastikan dari berkasnya.</p>
+<p><strong>Kenapa ini penting:</strong> repo sudah punya pelajaran tertulis soal ini. Catatan 30 September meralat kesimpulan &quot;model zona tidak bekerja&quot; yang ternyata diambil dari foto berupa tangkapan layar. Ketiga berkas itu masih ada di set uji yang menghasilkan angka 81%, dan kebetulan justru ketiganya yang paling bermasalah: <code>tolakangin2</code> adalah satu-satunya jawaban KOSONG sekaligus berkas terlambat (90–149 detik), sementara <code>tisu1</code> dan <code>tisu2</code> memakan 23–42 detik.</p>
+<p>Saran: sebutkan komposisi set uji apa adanya di subbab data, atau ganti ketiganya dengan foto kamera lalu ukur ulang. Jangan dibiarkan diam-diam.</p>
+<h2>B. &quot;Dengan / tanpa pra-pemrosesan&quot; pada 2 Oktober dan hari ini MENGUKUR HAL BERBEDA</h2>
+<table><thead><tr><th></th><th>kolom &quot;dgn pra&quot; berarti</th><th>kolom &quot;tanpa pra&quot; berarti</th></tr></thead><tbody>
+<tr><td><strong>02-10</strong></td><td>rangkaian <code>kedaluwarsa</code> = <code>[upscale, clahe]</code></td><td>tanpa apa-apa</td></tr>
+<tr><td><strong>hari ini</strong></td><td><code>expiry.preprocess_chain: hanya_resize</code> = <code>[resize]</code></td><td>tanpa apa-apa</td></tr>
+</tbody></table>
+<p>Jadi pengukuran 02-10 membuktikan <strong>upscale+CLAHE merusak</strong> (69% lawan 81%), sedangkan pengukuran hari ini membuktikan <strong>resize membantu</strong> (+6%). Keduanya benar dan tidak bertentangan — rangkaiannya memang sudah diganti sejak itu.</p>
+<p>Dan &quot;tanpa resize&quot; bukan kondisi netral: keluaran PaddleOCR hari ini memasang peringatannya sendiri, <code>Resized image size (3024x4032) exceeds max_side_limit of 4000</code>, artinya ia tetap memperkecil gambar hanya dengan ukuran berbeda. Jadi kolom itu sebenarnya &quot;pakai pengecilan bawaan PaddleOCR&quot;, bukan &quot;tanpa pra-pemrosesan&quot;.</p>
+<p><strong>Jangan satukan angka 02-10 dan angka hari ini ke dalam satu tabel tanpa menyebut perbedaan ini.</strong></p>
+<h2>C. Dua jawaban salah berbeda ARAH, dan bahayanya tidak sama</h2>
+<table><thead><tr><th>berkas</th><th>acuan</th><th>dijawab</th><th>arah</th><th>akibat bagi pengguna</th></tr></thead><tbody>
+<tr><td><code>chees</code></td><td>2027-03-21</td><td>2026-05-21</td><td><strong>lebih awal ~10 bulan</strong></td><td>produk layak dikira basi — makanan terbuang</td></tr>
+<tr><td><code>ovaltine</code></td><td>2027-09-27</td><td>2027-09-30</td><td><strong>lebih lambat 3 hari</strong></td><td>produk basi dikira layak — <strong>arah yang berbahaya</strong></td></tr>
+</tbody></table>
+<p>Menyebut keduanya hanya sebagai &quot;2 salah&quot; menghilangkan perbedaan yang paling penting bagi pengguna tunanetra.</p>
+<hr>
+<h1>0. Konfirmasi</h1>
+<h2>0.1 Perubahan setelah <code>b988ada</code> yang memengaruhi modul kedaluwarsa?</h2>
+<p><strong>[REPO]</strong> Tidak ada. <code>git log b988ada..HEAD</code> kosong — <code>b988ada</code> commit terakhir.</p>
+<p>Pertanyaan yang lebih tepat adalah apa yang berubah <strong>setelah pengukuran 17 November</strong>, dan ada dua yang menyentuh jalur kode modul kedaluwarsa:</p>
+<table><thead><tr><th>commit</th><th>tanggal</th><th>apa</th><th>pengaruh pada 13/2/1</th></tr></thead><tbody>
+<tr><td><code>361e119</code></td><td>20-11</td><td><code>date_parser.negative_markers</code> ditambahkan</td><td><strong>Nol.</strong> A/B 16 kemasan: daftar kosong 13/2/1, daftar terisi 13/2/1, identik per berkas</td></tr>
+<tr><td><code>1d79f07</code></td><td>20-11</td><td><code>expiry.zone_classes_date</code> / <code>zone_classes_reject</code></td><td><strong>Nol</strong> selama bobot 1 kelas dipakai. <code>Zone.cls</code> berisi <code>expired_date_zone</code>, tidak ada di daftar tolak sehingga lolos; lalu karena tidak ada kelas <code>date</code>, pilihan kembali ke skor tertinggi — perilaku lama persis. Dikunci 7 tes</td></tr>
+</tbody></table>
+<p><strong>[UKUR]</strong> Dan ini tidak perlu dipercaya begitu saja: pengukuran ulang hari ini pada <code>b988ada</code> memberi <strong>13 / 2 / 1 = 81%</strong>, sama persis dengan 17 November (rinciannya di bagian 2).</p>
+<p>Dua commit lain di rentang itu (<code>3b198cc</code> ambang buram, <code>f5b9bda</code> quality gate) <strong>tidak menyentuh pengukuran ini sama sekali</strong>: <code>scripts/ukur_kedaluwarsa.py</code> memanggil <code>ExpiryReader.read()</code> langsung, tanpa melewati quality gate.</p>
+<h2>0.2 Apakah 16 foto uji masih sama persis?</h2>
+<p><strong>[REPO]</strong> Ya. Seluruh berkas di <code>data/uji_kedaluwarsa/</code> bertanggal ubah <strong>29 September 2026</strong> dan tidak ada yang berubah sejak itu.</p>
+<hr>
+<h1>1. Yang kosong di naskah</h1>
+<h2>1.1 Data foto uji</h2>
+<p><strong>[REPO]</strong> Dari EXIF, dan dari melihat tiap fotonya.</p>
+<table><thead><tr><th>#</th><th>Nama berkas</th><th>Jenis produk (tanpa merek)</th><th>Bahan kemasan</th><th>Resolusi</th></tr></thead><tbody>
+<tr><td>1</td><td><code>20260411_ajinomoto.JPG</code></td><td>penyedap rasa, sachet</td><td>plastik (sachet)</td><td>4032×3024</td></tr>
+<tr><td>2</td><td><code>20261008.JPG</code></td><td>penganan tradisional (santan, tepung ketan)</td><td>plastik (bungkus putih)</td><td>4032×3024</td></tr>
+<tr><td>3</td><td><code>20270120_miesedap.JPG</code></td><td>mi instan</td><td>plastik (bungkus)</td><td>4032×3024</td></tr>
+<tr><td>4</td><td><code>20270311_mentega.JPG</code></td><td>margarin sachet</td><td>plastik berlapis foil</td><td>4032×3024</td></tr>
+<tr><td>5</td><td><code>20270321_chees.JPG</code></td><td>keju oles</td><td><strong>karton</strong> (kotak)</td><td>4032×3024</td></tr>
+<tr><td>6</td><td><code>20270602_indofood.JPG</code></td><td>bumbu/kecap sachet</td><td>plastik berlapis foil</td><td>4032×3024</td></tr>
+<tr><td>7</td><td><code>20270906.JPG</code></td><td>sachet bungkus putih polos</td><td>plastik (bungkus putih)</td><td>4032×3024</td></tr>
+<tr><td>8</td><td><code>20270927_ovaltine.JPG</code></td><td>minuman serbuk sachet</td><td>plastik berlapis foil</td><td>4032×3024</td></tr>
+<tr><td>9</td><td><code>202804_tolakangin1.HEIC</code></td><td>jamu cair sachet</td><td>plastik berlapis foil</td><td>3024×4032</td></tr>
+<tr><td>10</td><td><code>202804_tolakangin2.PNG</code></td><td>jamu cair sachet (<strong>tangkapan layar</strong>)</td><td>plastik berlapis foil</td><td>828×1792</td></tr>
+<tr><td>11</td><td><code>20290211_kecapasin.JPG</code></td><td>kecap asin botol</td><td><strong>botol</strong>, tanggal tercetak di <strong>tutup plastik</strong></td><td>4032×3024</td></tr>
+<tr><td>12</td><td><code>20290306_merica.JPG</code></td><td>merica bubuk sachet</td><td>plastik (sachet)</td><td>4032×3024</td></tr>
+<tr><td>13</td><td><code>20290821_tisu1.PNG</code></td><td>tisu basah (<strong>tangkapan layar</strong>)</td><td>plastik (kemasan lunak)</td><td>828×1792</td></tr>
+<tr><td>14</td><td><code>20290821_tisu2.PNG</code></td><td>tisu basah (<strong>tangkapan layar</strong>)</td><td>plastik (kemasan lunak)</td><td>828×1792</td></tr>
+<tr><td>15</td><td><code>tidakada_permen1.jpeg</code></td><td>permen mint, tanpa tanggal</td><td>plastik (bungkus)</td><td>960×1280</td></tr>
+<tr><td>16</td><td><code>tidakada_permen2.jpeg</code></td><td>permen mint, tanpa tanggal</td><td>plastik (bungkus)</td><td>960×1280</td></tr>
+</tbody></table>
+<p>Ringkas untuk narasi: <strong>14 dari 16 berkemasan plastik atau plastik berlapis foil</strong>, satu karton (<code>chees</code>), satu botol yang tanggalnya tercetak di tutup plastik (<code>kecapasin</code>). <strong>Tidak ada kaleng sama sekali</strong> — itu batas set uji yang layak disebut.</p>
+<p><strong>Tipe ponsel [REPO]:</strong> dua perangkat, dari EXIF.</p>
+<ul>
+<li><strong>Apple iPhone 12</strong> — 10 berkas, semuanya 4032×3024, dipotret <strong>28 September 2026 pukul 15.29–15.34</strong> (satu sesi, rentang 6 menit).</li>
+<li><strong>Apple iPhone 11</strong> — 1 berkas (<code>tolakangin1.HEIC</code>), 3024×4032, dipotret <strong>28 September 2026 pukul 08.30</strong>.</li>
+<li>5 berkas sisanya tanpa EXIF kamera (tiga tangkapan layar + dua foto permen).</li>
+</ul>
+<p><strong>Pemotret [KAMU]:</strong> EXIF hanya menyebut perangkat, bukan orangnya.</p>
+<h2>1.2 Lisensi dan asal dataset zona</h2>
+<p><strong>[REPO]</strong> Diperiksa ulang lewat API Roboflow Universe pada 22 November 2026.</p>
+<ul>
+<li><strong>Dataset:</strong> <code>coolstuff-rfnc5/expiry-date-detection-i3bav</code>, nama tampilan &quot;Expiry Date Detection&quot;, workspace &quot;CoolSTuff&quot;, <strong>versi 1</strong>. Itu satu-satunya entri aktif di <code>DATASETS</code> pada <code>notebooks/03_zone_build_and_train.ipynb</code>; empat kandidat lain ada di berkas yang sama tetapi dikomentari.</li>
+<li><strong>Lisensi: TIDAK TERCANTUM.</strong> API mengembalikan <code>license: null</code>. Ini bukan &quot;belum dicek&quot; — halaman datasetnya memang tidak menyatakan lisensi apa pun.</li>
+<li><strong>Jumlah citra: 998</strong>, satu kelas bernama <code>Label</code>, terakhir diperbarui 20 Oktober 2024.</li>
+<li><strong>Split latih/validasi/uji: [TIDAK TERCATAT] sebagai angka</strong>, dan alasannya perlu ditulis: notebook <strong>tidak memakai split bawaan Roboflow</strong>. Ia mengunduh seluruh citra, membuang duplikat dengan pHash, lalu membagi ulang <strong>per kelompok kemiripan</strong> memakai <code>SPLIT_RATIO = (0.7, 0.2, 0.1)</code> dan <code>SEED = 42</code>. Jumlah akhir tiap split hanya tercetak saat notebook dijalankan, dan keluaran itu tidak tersimpan (lihat 1.3).</li>
+</ul>
+<p><strong>Risiko untuk jurnal:</strong> lisensi yang tidak tercantum adalah masalah nyata, bukan detail administratif. Alternatif terdekat yang lisensinya jelas: <code>expiry-label-detection/expiry-date-detection-egbf3</code> — <strong>1.014 citra</strong>, satu kelas <code>Label</code>, <strong>CC BY 4.0</strong>. Ukurannya hampir sama, jadi melatih ulang dengan dataset itu layak dipertimbangkan sebelum submit.</p>
+<h2>1.3 Pengaturan pelatihan model zona satu kelas</h2>
+<p><strong>[REPO]</strong> Dari <code>notebooks/03_zone_build_and_train.ipynb</code>:</p>
+<table><thead><tr><th>hal</th><th>nilai</th></tr></thead><tbody>
+<tr><td>Bobot awal</td><td><code>yolov8n.pt</code></td></tr>
+<tr><td><strong>Epoch</strong></td><td><strong>100</strong> (setelan), dengan <code>patience=20</code></td></tr>
+<tr><td><strong>Ukuran masukan</strong></td><td><strong>640 px</strong></td></tr>
+<tr><td>Batch</td><td>16</td></tr>
+<tr><td>Seed</td><td>42</td></tr>
+<tr><td>Nama run</td><td><code>zone_v1</code></td></tr>
+<tr><td>Augmentasi</td><td><code>degrees=180</code>, <code>perspective=0.0005</code>, <code>scale=0.6</code>, <code>translate=0.2</code>, <code>hsv_v=0.5</code>, <code>hsv_s=0.8</code>, <code>fliplr=0.5</code></td></tr>
+</tbody></table>
+<p>Dua catatan yang mudah salah kutip:</p>
+<ol>
+<li><strong>&quot;100 epoch&quot; adalah SETELAN, belum tentu yang benar-benar berjalan.</strong> <code>patience=20</code> menghentikan latihan lebih awal bila validasi berhenti membaik.</li>
+<li><strong><code>degrees=180</code> dan <code>fliplr=0.5</code> disengaja, dan berbeda dari model uang.</strong> Alasannya ada di komentar notebook: kemasan bisa dipegang pada sudut apa pun, dan model ini hanya mencari <strong>letak</strong> tanggalnya, bukan bacaannya — jadi tanggal yang tercermin tetap contoh latih yang sah.</li>
+</ol>
+<ul>
+<li><strong>GPU / lingkungan: [TIDAK TERCATAT].</strong> Notebook tersimpan tanpa keluaran sama sekali (0 dari 25 sel punya <code>outputs</code>).</li>
+<li><strong>Tanggal latih [REPO]:</strong> <code>models/best_zone.pt</code> bertanggal <strong>28 September 2026 08:18</strong>, 6.256.362 bita. Itu tanggal bobotnya masuk ke repo; tanggal latihnya sama atau sedikit lebih awal.</li>
+<li><strong>mAP50 validasi: [TIDAK TERCATAT].</strong> <strong>[KAMU]</strong> Kalau folder <code>runs/zone_v1</code> masih ada di Google Drive, angkanya ada di <code>results.csv</code> di dalamnya. Berbeda dari model 4 kelas, notebook 03 belum menulis ringkasan metrik ke Drive — kebiasaan itu baru dipakai sejak notebook 05.</li>
+</ul>
+<h2>1.4 Kemasan kedua yang salah</h2>
+<p><strong>[UKUR]</strong></p>
+<ul>
+<li><strong>Berkas:</strong> <code>20270321_chees.JPG</code> (keju oles, kemasan karton)</li>
+<li><strong>Tanggal acuan:</strong> 21 Maret 2027</li>
+<li><strong>Tanggal yang diucapkan:</strong> <strong>21 Mei 2026</strong></li>
+<li><strong>Lebih awal / lebih lambat:</strong> <strong>lebih awal</strong>, selisih sekitar 10 bulan</li>
+</ul>
+<p>Lihat juga blok C di atas — arah kedua kesalahan berbeda dan itu layak dibahas.</p>
+<hr>
+<h1>2. Rincian hasil per foto (konfigurasi akhir)</h1>
+<p><strong>[UKUR]</strong> <code>python scripts\ukur_kedaluwarsa.py data\uji_kedaluwarsa --rinci</code>, dijalankan 22 November 2026 pada commit <code>b988ada</code>. Hasil: <strong>13 BENAR / 2 SALAH / 1 KOSONG = 81%</strong>.</p>
+<p>Kolom &quot;jalur&quot; menggabungkan dua pengukuran: alasan parser dari <code>--rinci</code>, dan skor deteksi zona mentah per berkas (diukur 20 November pada ambang 0,01 agar seluruh deteksi terlihat).</p>
+<table><thead><tr><th>#</th><th>Berkas</th><th>Acuan</th><th>Dijawab</th><th>Nilai</th><th>Jalur</th></tr></thead><tbody>
+<tr><td>1</td><td><code>20260411_ajinomoto.JPG</code></td><td>2026-04-11</td><td>2026-04-11</td><td>BENAR</td><td>potongan zona (skor 0,76)</td></tr>
+<tr><td>2</td><td><code>20261008.JPG</code></td><td>2026-10-08</td><td>2026-10-08</td><td>BENAR</td><td><strong>zona ketemu (0,70), potongan gagal, mundur ke seluruh gambar</strong></td></tr>
+<tr><td>3</td><td><code>20270120_miesedap.JPG</code></td><td>2027-01-20</td><td>2027-01-20</td><td>BENAR</td><td>potongan zona (0,62)</td></tr>
+<tr><td>4</td><td><code>20270311_mentega.JPG</code></td><td>2027-03-11</td><td>2027-03-11</td><td>BENAR</td><td>potongan zona (0,56)</td></tr>
+<tr><td>5</td><td><code>20270321_chees.JPG</code></td><td>2027-03-21</td><td><strong>2026-05-21</strong></td><td><strong>SALAH</strong></td><td>potongan zona (0,72)</td></tr>
+<tr><td>6</td><td><code>20270602_indofood.JPG</code></td><td>2027-06-02</td><td>2027-06-02</td><td>BENAR</td><td>potongan zona (0,77)</td></tr>
+<tr><td>7</td><td><code>20270906.JPG</code></td><td>2027-09-06</td><td>2027-09-06</td><td>BENAR</td><td><strong>zona ketemu (0,43), potongan gagal, mundur ke seluruh gambar</strong></td></tr>
+<tr><td>8</td><td><code>20270927_ovaltine.JPG</code></td><td>2027-09-27</td><td><strong>2027-09-30</strong></td><td><strong>SALAH</strong></td><td>potongan zona (0,76)</td></tr>
+<tr><td>9</td><td><code>202804_tolakangin1.HEIC</code></td><td>2028-04</td><td>2028-04</td><td>BENAR</td><td>tanpa zona (0,14), seluruh gambar</td></tr>
+<tr><td>10</td><td><code>202804_tolakangin2.PNG</code></td><td>2028-04</td><td>—</td><td><strong>KOSONG</strong></td><td>tanpa zona (0,03), seluruh gambar</td></tr>
+<tr><td>11</td><td><code>20290211_kecapasin.JPG</code></td><td>2029-02-11</td><td>2029-02-11</td><td>BENAR</td><td>potongan zona (0,65)</td></tr>
+<tr><td>12</td><td><code>20290306_merica.JPG</code></td><td>2029-03-06</td><td>2029-03-06</td><td>BENAR</td><td>tanpa zona (0,28), seluruh gambar</td></tr>
+<tr><td>13</td><td><code>20290821_tisu1.PNG</code></td><td>2029-08-21</td><td>2029-08-21</td><td>BENAR</td><td>tanpa zona (0,27), seluruh gambar</td></tr>
+<tr><td>14</td><td><code>20290821_tisu2.PNG</code></td><td>2029-08-21</td><td>2029-08-21</td><td>BENAR</td><td>tanpa zona (0,20), seluruh gambar</td></tr>
+<tr><td>15</td><td><code>tidakada_permen1.jpeg</code></td><td>kosong</td><td>—</td><td>BENAR</td><td>tanpa zona (0,00), seluruh gambar</td></tr>
+<tr><td>16</td><td><code>tidakada_permen2.jpeg</code></td><td>kosong</td><td>—</td><td>BENAR</td><td>tanpa zona (0,02), seluruh gambar</td></tr>
+</tbody></table>
+<p><strong>Foto yang KOSONG: <code>202804_tolakangin2.PNG</code></strong>, satu-satunya — dan itu salah satu dari tiga tangkapan layar (blok A).</p>
+<p><strong>Rekap jalur:</strong> 7 berkas dijawab dari potongan zona, 2 berkas zonanya ketemu tetapi potongannya gagal sehingga mundur ke OCR seluruh gambar, dan 7 berkas tidak punya zona di atas ambang 0,40 sehingga langsung memakai seluruh gambar. Jadi <strong>zona ditemukan pada 9 dari 16 berkas</strong>, atau 9 dari 14 kemasan bertanggal.</p>
+<hr>
+<h1>3. Angka yang tidak lengkap di catatan repo</h1>
+<h2>3.1 EasyOCR tanpa pra-pemrosesan, pipeline penuh (Tabel 3)</h2>
+<p><strong>[UKUR]</strong> <code>python scripts\ukur_kedaluwarsa.py data\uji_kedaluwarsa --rinci --mesin easyocr</code>, 22 November 2026.</p>
+<table><thead><tr><th>kondisi</th><th>BENAR</th><th>SALAH</th><th>KOSONG</th><th>akurasi</th></tr></thead><tbody>
+<tr><td>EasyOCR <strong>dengan</strong> pra (<code>[resize]</code>)</td><td>7</td><td><strong>0</strong></td><td>9</td><td>44%</td></tr>
+<tr><td>EasyOCR <strong>tanpa</strong> pra</td><td><strong>6</strong></td><td><strong>0</strong></td><td><strong>10</strong></td><td><strong>38%</strong></td></tr>
+</tbody></table>
+<p>Jadi jawaban yang kamu minta: <strong>6 benar / 0 salah / 10 kosong</strong>.</p>
+<p><strong>Yang paling layak dibahas di jurnal dari tabel ini bukan 38%-nya, melainkan kolom SALAH yang NOL.</strong> Profil kegagalan kedua mesin berbeda jenis:</p>
+<ul>
+<li><strong>EasyOCR gagal dengan DIAM.</strong> Nol jawaban salah pada kedua kondisi — ia nyaris tidak membaca cetakan kemasan sama sekali, jadi tidak ada angka untuk disalahtafsirkan parser.</li>
+<li><strong>PaddleOCR gagal dengan JAWABAN SALAH.</strong> Ia membaca lebih banyak, termasuk nomor produksi, dan di situlah dua kesalahan yang tersisa lahir.</li>
+</ul>
+<p>Artinya lompatan 44% → 81% tidak gratis, dan dua akibatnya bisa dipisahkan per berkas:</p>
+<ul>
+<li><strong>Enam berkas berubah KOSONG → BENAR</strong> berkat PaddleOCR: <code>20261008</code>, <code>mentega</code>, <code>20270906</code>, <code>tolakangin1</code>, <code>kecapasin</code>, <code>merica</code>.</li>
+<li><strong>Dua berkas berubah KOSONG → SALAH</strong>: <code>chees</code> dan <code>ovaltine</code>. Pada EasyOCR keduanya diam; PaddleOCR membaca angkanya lalu parser menafsirkannya keliru.</li>
+</ul>
+<p>Jadi pindah mesin menukar <strong>6 diam menjadi benar</strong> dengan harga <strong>2 diam menjadi salah</strong> — dan satu dari dua itu (<code>ovaltine</code>) ke arah yang berbahaya. Itu pertukaran yang layak, tetapi harus ditulis sebagai pertukaran, bukan sebagai perbaikan murni.</p>
+<p><strong>Ingat blok B:</strong> &quot;tanpa pra&quot; di sini berarti tanpa <code>resize</code>, bukan tanpa rangkaian <code>upscale+clahe</code> seperti pada catatan 02-10.</p>
+<h2>3.2 PaddleOCR 1200 px, mesin terisolasi (Tabel 5)</h2>
+<p><strong>[UKUR]</strong> Diukur 22 November 2026, PaddleOCR 1200 px, mesin terisolasi, dua kondisi penanda. Saklarnya disetel di memori — <code>config/settings.yaml</code> tidak disentuh — dan nilainya dicetak di tiap kondisi.</p>
+<table><thead><tr><th>kondisi</th><th>nilai saklar</th><th>BENAR</th><th>SALAH</th><th>DIAM</th><th>akurasi</th></tr></thead><tbody>
+<tr><td>penanda <strong>wajib</strong></td><td><code>require_marker_for_compact = True</code></td><td>8</td><td><strong>1</strong></td><td>7</td><td>50%</td></tr>
+<tr><td>penanda <strong>dilonggarkan</strong></td><td><code>require_marker_for_compact = False</code></td><td><strong>11</strong></td><td><strong>1</strong></td><td>4</td><td><strong>69%</strong></td></tr>
+</tbody></table>
+<h3>Jawaban atas ketidakcocokan yang kamu temukan</h3>
+<p><strong>Tabelnya yang benar; kalimat narasinya yang keliru.</strong></p>
+<p>Catatan 2 Oktober mencatat <strong>SALAH = 1 pada KEDUA kondisi</strong> (6/1/9 dan 9/1/6). Jadi menurut tabelnya sendiri, pelonggaran penanda <strong>tidak pernah menambah jawaban salah</strong> di ukuran 1200 px — ia hanya mengubah DIAM menjadi BENAR. Kalimat narasi yang menyebut &quot;pelonggaran menambah satu jawaban salah di ukuran ini&quot; tidak didukung angka di sebelahnya.</p>
+<p>Pengukuran hari ini menegaskannya: <strong>SALAH tetap 1 pada kedua kondisi</strong>, dan bahkan <strong>berkas yang sama</strong> — <code>20270927_ovaltine</code>, acuan 2027-09-27, dijawab <code>2029-03-26</code>. Pelonggaran menukar <strong>3 DIAM menjadi BENAR</strong> tanpa menyentuh kolom SALAH sama sekali.</p>
+<h3>Kenapa angka hari ini berbeda dari angka 2 Oktober</h3>
+<table><thead><tr><th></th><th>penanda wajib</th><th>penanda dilonggarkan</th></tr></thead><tbody>
+<tr><td>02-10</td><td>6 / 1 / 9 (38%)</td><td>9 / 1 / 6 (56%)</td></tr>
+<tr><td><strong>22-11</strong></td><td><strong>8 / 1 / 7 (50%)</strong></td><td><strong>11 / 1 / 4 (69%)</strong></td></tr>
+</tbody></table>
+<p>Selisihnya <strong>+2 BENAR di kedua kondisi</strong>, dan itu wajar: pengenal <code>PP-OCRv6_medium_rec</code> dan paddleocr 3.7.0 yang terpasang sekarang berbeda dari yang dipakai 2 Oktober, ditambah parser sudah menerima beberapa perbaikan pola sejak itu (<code>my_spasi</code>, penanda negatif).</p>
+<p><strong>Untuk jurnal, pilih satu dan sebutkan tanggalnya.</strong> Jangan mencampur baris 02-10 dan 22-11 dalam satu tabel. Kalau Tabel 5 mengutip angka 02-10, tulis bahwa angka itu <strong>tidak dapat direproduksi hari ini</strong> karena versi pengenal berubah — itu konsisten dengan catatan reproduksibilitas di bagian 4.1.</p>
+<p><strong>Jangan kutip latensi dari pengukuran ini.</strong> Kondisi pertama melaporkan 50,42 detik/foto dan kedua 48,13 detik/foto, sementara proses terpisah pada hari yang sama memberi 32,95 detik/foto untuk kondisi yang sama persis. Beban laptop mendominasi, seperti peringatan di bagian 3.4.</p>
+<h2>3.3 Ambang skor zona 0,25 pada pipeline penuh (Tabel 6)</h2>
+<p><strong>[UKUR, 20 November]</strong> Rinciannya <strong>12 BENAR / 1 SALAH / 3 KOSONG = 75%</strong>.</p>
+<p>Dua hal yang wajib ikut ditulis agar tabelnya tidak disalahartikan:</p>
+<ol>
+<li>Angka itu diukur pada <strong>bobot 4 kelas gabungan</strong>, bukan pada <code>best_zone.pt</code> yang dipakai produksi. Pada bobot 1 kelas, ambang 0,25 <strong>belum pernah diukur</strong>.</li>
+<li>Dua daftar kelas tolak memberi hasil <strong>identik per berkas</strong>: tolak <code>[code, prod]</code> 12/1/3 median 14,97 s; tolak <code>[code, prod, due]</code> 12/1/3 median 11,12 s. Jadi menolak <code>due</code> hanya memperbaiki latensi, bukan akurasi.</li>
+</ol>
+<p>Pembanding pada ambang 0,40 (bobot gabungan): <strong>13 / 0 / 3</strong>. Jadi menurunkan ambang ke 0,25 <strong>menukar satu jawaban benar menjadi satu jawaban salah</strong> (<code>ajinomoto</code>), sementara cakupan zona hanya naik dari 3/16 ke 4/16.</p>
+<h2>3.4 Latensi</h2>
+<p><strong>[JURNAL]</strong> Jawaban per pertanyaan, dengan batas keabsahannya:</p>
+<ul>
+<li><strong>11,4 detik rerata atau median? [TIDAK TERCATAT].</strong> Catatan 2 Oktober hanya menulis &quot;latensi end-to-end 11,4–11,5 detik&quot; tanpa menyebut statistiknya. Jangan ditulis sebagai median maupun rerata — tulis &quot;sekitar 11,4 detik&quot; beserta tanggal pengukurannya.</li>
+<li><strong>Berapa yang diukur?</strong> <strong>64 foto</strong>, dengan STT + pipeline + render suara; pemuatan model tidak dihitung.</li>
+<li><strong>Apakah 7,82 detik hanya <code>ExpiryReader.read()</code>?</strong> <strong>Ya</strong> — tanpa pengenalan suara, tanpa render suara, tanpa jaringan. Jadi <strong>7,82 detik dan 11,4 detik tidak boleh dibandingkan langsung</strong>; keduanya mengukur hal yang berbeda.</li>
+<li><strong>Median dan terburuk per sesi pada konfigurasi akhir:</strong> median <strong>7,82 detik</strong>, terburuk <strong>90,0 detik</strong> (<code>tolakangin2</code>), total 262,1 detik untuk 16 kemasan (diukur 20 November, satu proses).</li>
+</ul>
+<p><strong>Peringatan yang wajib menyertai angka latensi mana pun:</strong> kondisi yang sama persis memberi median <strong>6,54 detik</strong> di satu sesi dan <strong>10,46 detik</strong> di sesi lain pada hari yang sama, dan <strong>9,96 lawan 7,82 detik</strong> pada hari lain — simpangan sampai 60% dari beban laptop. Yang sah dikutip adalah <strong>perbandingan di dalam satu sesi</strong>, bukan angka detiknya sebagai nilai mutlak.</p>
+<h2>3.5 Model zona empat kelas — kedua model</h2>
+<p><strong>[DRIVE]</strong> Ringkasan metrik kedua model ada di <code>MyDrive/sayit/hasil/</code>, ditulis otomatis oleh notebooknya.</p>
+<table><thead><tr><th></th><th>model pertama</th><th>model kedua (gabungan)</th></tr></thead><tbody>
+<tr><td>Run</td><td><code>zone_4kelas_v1</code></td><td><code>zone_gabungan_v1</code></td></tr>
+<tr><td>Waktu latih</td><td>19-11-2026 18:37</td><td>20-11-2026 03:25</td></tr>
+<tr><td>Dataset</td><td><code>esigelec-rniez/expiry v1</code></td><td><code>esigelec-rniez/expiry v1</code> <strong>+</strong> <code>coolstuff-rfnc5/expiry-date-detection-i3bav v1</code></td></tr>
+<tr><td>Jumlah citra</td><td>(tidak dicatat)</td><td><strong>4.478</strong> citra, 1.609 kelompok kemiripan</td></tr>
+<tr><td><strong>Epoch</strong></td><td><strong>80</strong></td><td><strong>100</strong></td></tr>
+<tr><td>Ukuran masukan</td><td>640 px</td><td>640 px</td></tr>
+<tr><td>Augmentasi</td><td>(tidak dicatat)</td><td><code>degrees=15.0 translate=0.1 scale=0.5 fliplr=0.0 mosaic=1.0</code></td></tr>
+<tr><td><strong>mAP50</strong></td><td><strong>0,8643</strong></td><td><strong>0,7813</strong></td></tr>
+<tr><td>mAP50-95</td><td>0,6766</td><td>0,5310</td></tr>
+<tr><td><strong>AP50 <code>date</code></strong></td><td><strong>0,9384</strong></td><td><strong>0,6305</strong></td></tr>
+<tr><td>AP50 <code>code</code></td><td>0,8120</td><td>0,7883</td></tr>
+<tr><td>AP50 <code>due</code></td><td>0,8532</td><td>0,8574</td></tr>
+<tr><td>AP50 <code>prod</code></td><td>0,8488</td><td>0,8488</td></tr>
+</tbody></table>
+<p><strong>Angka ini menjelaskan kenapa penggabungan dataset gagal, dan itu temuan yang layak masuk jurnal.</strong> Menggabungkan dataset satu kelas menjatuhkan AP50 kelas <code>date</code> dari <strong>0,9384 ke 0,6305</strong> — justru kelas yang paling dibutuhkan aplikasi, sementara tiga kelas lain nyaris tidak bergerak. Sebabnya masuk akal: seluruh kotak dataset satu kelas dipetakan menjadi <code>date</code>, padahal sebagiannya sebenarnya kode produksi atau penanda, sehingga definisi <code>date</code> jadi kabur.</p>
+<p>Rantai sebabnya kini utuh sampai ke tingkat model, bukan hanya tingkat sistem: dataset digabung → <code>date</code> kabur → cakupan zona pada 16 kemasan sendiri runtuh (3/16) → banyak berkas jatuh ke jalur cadangan yang lambat → latensi median naik dua kali lipat.</p>
+<p><strong>Peringatan:</strong> kedua mAP50 itu diukur pada split test yang <strong>sesumber dengan data latihnya</strong>, jadi optimistis untuk kemasan Indonesia. Pembanding yang sah tetap hasil pada 16 kemasan sendiri.</p>
+<hr>
+<h1>4. Supaya hasil bisa diulang orang lain</h1>
+<h2>4.1 Model pengenal PP-OCRv6 varian menengah</h2>
+<p><strong>[REPO]</strong></p>
+<ul>
+<li><strong>Tempat simpan:</strong> <code>C:\Users\&lt;pengguna&gt;\.paddlex\official_models\PP-OCRv6_medium_rec\</code> (Linux/Mac: <code>~/.paddlex/official_models/</code>). Model deteksinya, <code>PP-OCRv5_mobile_det</code>, ada di folder yang sama.</li>
+<li><strong>Cara mendapatkannya:</strong> tidak perlu diunduh manual. PaddleOCR mengunduhnya sendiri saat pertama dipakai, asal ada internet; namanya diminta lewat <code>config/settings.yaml</code>. Log saat sudah ada: <code>Model files already exist. Using cached files.</code></li>
+<li><strong>Versi saat angka 81% diukur:</strong> paddleocr <strong>3.7.0</strong>, paddlepaddle <strong>3.3.1</strong>. (Catatan lama yang menulis &quot;paddleocr 3.3.1&quot; keliru — yang 3.3.1 itu paddlepaddle.)</li>
+<li><strong>Layak masuk <code>models/README.md</code>?</strong> Ya. Yang perlu dicatat cuma tiga baris: nama kedua model, versi paddleocr dan paddlepaddle, dan catatan bahwa unduhannya otomatis serta butuh internet pada pemakaian pertama.</li>
+</ul>
+<p><strong>Catatan jujur:</strong> unduhan otomatis mengambil versi model yang tersedia <strong>saat itu</strong>. Kalau PaddleOCR kelak mengubah isi <code>PP-OCRv6_medium_rec</code>, reproduksi di masa depan bisa memberi angka berbeda tanpa ada yang berubah di repo. Satu-satunya penutup celah itu adalah mengarsipkan berkas modelnya sendiri, dan itu belum dilakukan.</p>
+<h2>4.2 Foto uji lapangan 12 November (kemasan mi instan)</h2>
+<p><strong>[REPO] Tidak ada.</strong> Pencarian seluruh repo tidak menemukannya, dan catatan 17 November sudah mencatatnya hilang. <strong>[KAMU]</strong> Kalau fotonya masih ada di galeri ponsel, simpan ke <code>data/uji_kedaluwarsa/</code> dengan nama bertanggal — itu satu-satunya contoh kegagalan lapangan yang pernah terjadi.</p>
+<hr>
+<h1>5. Pertanyaan pendek</h1>
+<h2>5.1 Dua kemasan tanpa tanggal, benar dijawab &quot;tidak menemukan tanggal&quot;?</h2>
+<p><strong>[UKUR] Ya, keduanya benar.</strong> <code>tidakada_permen1.jpeg</code> dan <code>tidakada_permen2.jpeg</code> sama-sama dijawab &quot;tidak menemukan tanggal&quot;, dan keduanya memang dihitung sebagai BENAR di dalam angka 13.</p>
+<p><strong>Koreksi penting untuk kalimat di naskah:</strong> 13 benar itu terdiri dari <strong>11 tanggal yang dibaca benar + 2 penolakan yang benar</strong>. Jadi kalimat &quot;13 dari 16 kemasan tanggalnya terbaca benar&quot; keliru. Yang benar: &quot;13 dari 16 kemasan dijawab dengan benar, termasuk 2 kemasan yang memang tidak punya tanggal&quot;.</p>
+<h2>5.2 Apakah &quot;MAR&quot; ada di dekat nomor produksi 210526 pada kemasan <code>chees</code>?</h2>
+<p><strong>[REPO] YA, dan terlihat jelas pada fotonya.</strong> Yang tercetak di kemasan, dua baris bertumpuk:</p>
+<pre>
+210526/L7A/19:48
+21 MAR 2027
+</pre>
+<p>Jadi tanggal kedaluwarsa <code>21 MAR 2027</code> tercetak <strong>tepat di baris bawah</strong> nomor produksi <code>210526</code>. Itu menguatkan diagnosis di jurnal: parser memilih rangkaian angka yang salah di antara dua yang bersebelahan.</p>
+<p><strong>Tetapi satu hal harus diluruskan agar tidak salah kutip:</strong> teks yang benar-benar diurai pipeline <strong>tidak memuat kata &quot;Kode Produksi&quot; sama sekali</strong>. Teks OCR yang sungguhan adalah <code>&#x27;man.yeg Bes 0re Cae 0 T7 回 回 WOR SUCALNED 210526/ en im ua.&#x27;</code> — angka <code>210526</code> terbaca, <code>21 MAR 2027</code> <strong>tidak</strong>. Jadi pada berkas ini OCR gagal membaca tanggalnya, dan yang tersisa untuk diurai hanya nomor produksinya.</p>
+<h2>5.3 Apakah <code>rantai</code> mengubah mentega jadi benar tanpa regresi?</h2>
+<p><strong>[JURNAL, 17-11] Ya.</strong> <code>pita</code> 12 benar / 3 salah / 1 kosong lawan <code>rantai</code> 13 / 2 / 1 pada 16 kemasan. <strong>Yang berubah hanya satu berkas</strong>: <code>mentega</code> dari salah menjadi benar. <strong>Nol regresi</strong> pada 15 berkas lainnya.</p>
+<p>Sebabnya tercatat rinci: tanggal pada mentega tercetak <strong>diagonal</strong> — <code>02:31</code>(x995,y261) <code>NS</code>(831,362) <code>27</code>(680,428) <code>MAR</code>(418,523) <code>11</code>(238,614), jadi x menurun saat y menaik. Kemiringan sejatinya <strong>−0,418</strong>, di atas <code>line_slope_max</code> 0,35 sehingga dibuang menjadi 0; sementara taksiran median seluruh potongan hanya <strong>−0,196</strong> karena blok tabel gizi di atasnya hampir datar. Satu angka kemiringan tidak muat untuk dua blok berorientasi berbeda.</p>
+<p>Harganya di modul dokumen harus ikut disebut: CER <strong>14,89% → 14,94%</strong> (1 membaik, 1 memburuk, 11 tetap), sehingga margin terhadap target PRD ≤ 15% menyusut dari 0,11 ke 0,06 poin.</p>
+<h2>5.4 Apakah semua 16 foto dipotret orang yang sama dengan satu ponsel?</h2>
+<p><strong>[REPO] Tidak, dan ini pasti dari EXIF</strong> — lihat tabel 1.1. <strong>Dua ponsel berbeda</strong> (iPhone 12 untuk 10 berkas, iPhone 11 untuk 1 berkas), dalam dua sesi terpisah tujuh jam, ditambah 5 berkas tanpa EXIF di antaranya tiga tangkapan layar.</p>
+<p><strong>[KAMU]</strong> Apakah keduanya dipegang orang yang sama, hanya pemiliknya yang tahu. Yang jelas, kalimat &quot;satu pemotret, satu perangkat&quot; tidak boleh ditulis.</p>
+</body></html>
