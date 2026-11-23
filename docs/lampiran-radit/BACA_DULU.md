@@ -438,3 +438,56 @@ masih nilai awal PRD dan belum pernah diuji terhadap potongan. Itu cacat
 struktural yang sama dengan ambang buram yang terbukti salah 19 November.
 Pengukuran waktu respons di berkas ini mengirim gambar **utuh**, jadi ia tidak
 menguji perilaku tersebut.
+
+---
+
+# CARA MELAPORKANNYA DARI DATA YANG ADA: sebut DUA angka
+
+Tiga berkas tangkapan layar itu tidak perlu dipotret ulang untuk diselesaikan.
+Yang lebih kuat untuk jurnal: **laporkan angkanya dua kali** — seluruh 16 berkas,
+dan subset 13 foto kamera saja. Pembaca lalu bisa melihat sendiri berapa besar
+pengaruh mutu data uji, alih-alih harus memercayai satu angka.
+
+Rinciannya di `08_subset_foto_kamera.txt`, dihitung dari hasil yang sudah ada —
+bukan pengukuran baru.
+
+| kondisi | BENAR | SALAH | KOSONG | n | akurasi |
+|---|---|---|---|---|---|
+| Lokal — seluruh berkas | 13 | 2 | 1 | 16 | 81% |
+| **Lokal — foto kamera saja** | **11** | **2** | **0** | **13** | **85%** |
+| Deploy — seluruh berkas | 12 | 2 | 2 | 16 | 75% |
+| **Deploy — foto kamera saja** | **11** | **2** | **0** | **13** | **85%** |
+
+## Tiga hal yang jatuh dari tabel ini
+
+**1. Pada foto kamera saja, lokal dan deploy SAMA PERSIS: 11 / 2 / 0 = 85%.**
+
+Seluruh selisih 81% lawan 75% yang dibahas di bagian sebelumnya ternyata berasal
+dari tiga tangkapan layar itu, dan tidak ada sisanya. Itu penjelasan yang utuh:
+begitu ketiganya dikeluarkan, sistem yang ter-deploy berperilaku **identik**
+dengan pemanggilan modul di laptop.
+
+**2. Nol jawaban KOSONG pada foto kamera.** Setiap foto kamera mendapat jawaban.
+Satu-satunya KOSONG di seluruh set lokal adalah tangkapan layar.
+
+**3. 85% melampaui target PRD ≥ 70% dengan margin lebih lebar**, dan komposisinya
+lebih bersih: dua jawaban salah, nol diam.
+
+## Yang tetap harus disebut
+
+- **n turun dari 16 ke 13**, jadi satu berkas kini bernilai 7,7 poin persentase.
+  Angka 85% berdiri di atas sampel yang lebih kecil, bukan lebih besar.
+- **Dua jawaban salah tidak berubah** (`chees`, `ovaltine`). Tidak ada satu pun
+  kesalahan membaca yang hilang karena penyaringan ini — yang hilang hanya
+  kegagalan yang disebabkan mutu berkasnya.
+- Angka 85% ini **tetap estimasi resubstitusi**: ke-13 foto itu bagian dari set
+  yang sama yang dipakai menyetel tujuh keputusan (lihat bagian 1).
+
+## Saran kalimat untuk naskah
+
+> Pengujian dilakukan pada 16 berkas kemasan. Tiga di antaranya berupa tangkapan
+> layar, bukan keluaran kamera, sehingga hasilnya dilaporkan untuk kedua
+> himpunan: 81% pada seluruh 16 berkas dan 85% pada 13 foto kamera (11 benar,
+> 2 salah, 0 tanpa jawaban). Diukur melalui sistem yang ter-deploy, kedua angka
+> itu menjadi 75% dan 85% — pada foto kamera, hasil lokal dan hasil ter-deploy
+> identik.

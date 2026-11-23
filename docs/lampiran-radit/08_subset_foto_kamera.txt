@@ -1,0 +1,12 @@
+kondisi                                         BENAR  SALAH  KOSONG     n  akurasi
+------------------------------------------------------------------------------------
+LOKAL (ExpiryReader.read) - seluruh berkas         13      2       1    16      81%
+LOKAL (ExpiryReader.read) - foto kamera saja       11      2       0    13      85%
+
+DEPLOY (lewat Vercel+ngrok) - seluruh berkas       12      2       2    16      75%
+DEPLOY (lewat Vercel+ngrok) - foto kamera saja     11      2       0    13      85%
+
+Tiga berkas yang dikeluarkan di baris 'foto kamera saja':
+  202804_tolakangin2.PNG         lokal KOSONG   deploy KOSONG
+  20290821_tisu1.PNG             lokal  BENAR   deploy KOSONG
+  20290821_tisu2.PNG             lokal  BENAR   deploy  BENAR
