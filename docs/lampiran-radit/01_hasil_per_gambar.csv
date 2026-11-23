@@ -1,0 +1,17 @@
+gambar,tanggal_acuan,tanggal_dijawab,nilai,arah_kesalahan,jalur,skor_zona,jenis_berkas
+20260411_ajinomoto.JPG,2026-04-11,2026-04-11,BENAR,,potongan zona,0.76,foto kamera
+20261008.JPG,2026-10-08,2026-10-08,BENAR,,zona ketemu lalu mundur ke seluruh gambar,0.70,foto kamera
+20270120_miesedap.JPG,2027-01-20,2027-01-20,BENAR,,potongan zona,0.62,foto kamera
+20270311_mentega.JPG,2027-03-11,2027-03-11,BENAR,,potongan zona,0.56,foto kamera
+20270321_chees.JPG,2027-03-21,2026-05-21,SALAH,lebih awal 10 bulan,potongan zona,0.72,foto kamera
+20270602_indofood.JPG,2027-06-02,2027-06-02,BENAR,,potongan zona,0.77,foto kamera
+20270906.JPG,2027-09-06,2027-09-06,BENAR,,zona ketemu lalu mundur ke seluruh gambar,0.43,foto kamera
+20270927_ovaltine.JPG,2027-09-27,2027-09-30,SALAH,lebih lambat 3 hari,potongan zona,0.76,foto kamera
+202804_tolakangin1.HEIC,2028-04,2028-04,BENAR,,tanpa zona - seluruh gambar,0.14,foto kamera
+202804_tolakangin2.PNG,2028-04,(tidak menjawab),KOSONG,,tanpa zona - seluruh gambar,0.03,TANGKAPAN LAYAR
+20290211_kecapasin.JPG,2029-02-11,2029-02-11,BENAR,,potongan zona,0.65,foto kamera
+20290306_merica.JPG,2029-03-06,2029-03-06,BENAR,,tanpa zona - seluruh gambar,0.28,foto kamera
+20290821_tisu1.PNG,2029-08-21,2029-08-21,BENAR,,tanpa zona - seluruh gambar,0.27,TANGKAPAN LAYAR
+20290821_tisu2.PNG,2029-08-21,2029-08-21,BENAR,,tanpa zona - seluruh gambar,0.20,TANGKAPAN LAYAR
+tidakada_permen1.jpeg,kosong,(tidak menjawab),BENAR,,tanpa zona - seluruh gambar,0.00,tanpa EXIF kamera
+tidakada_permen2.jpeg,kosong,(tidak menjawab),BENAR,,tanpa zona - seluruh gambar,0.02,tanpa EXIF kamera

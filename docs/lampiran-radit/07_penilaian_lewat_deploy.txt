@@ -1,0 +1,34 @@
+48 percobaan, 16 gambar unik, hari ini = 2026-11-23
+
+gambar                                acuan   nilai  median s   maks s  jawaban
+----------------------------------------------------------------------------------------------------------------------
+20260411_ajinomoto.JPG           2026-04-11   BENAR     8.92s   11.35s  saya kurang yakin, tetapi tanggal yang ter
+20261008.JPG                     2026-10-08   BENAR    30.06s   30.16s  saya kurang yakin, tetapi tanggal yang ter
+20270120_miesedap.JPG            2027-01-20   BENAR     6.36s    7.26s  tanggal kedaluwarsa dua puluh januari dua 
+20270311_mentega.JPG             2027-03-11   BENAR    12.74s   15.54s  tanggal kedaluwarsa sebelas maret dua ribu
+20270321_chees.JPG               2027-03-21   SALAH    51.84s   52.43s  tanggal kedaluwarsa dua puluh satu mei dua
+20270602_indofood.JPG            2027-06-02   BENAR     5.91s    6.66s  tanggal kedaluwarsa dua juni dua ribu dua 
+20270906.JPG                     2027-09-06   BENAR    10.39s   11.22s  saya kurang yakin, tetapi tanggal yang ter
+20270927_ovaltine.JPG            2027-09-27   SALAH     7.36s    8.50s  berlaku sampai september dua ribu dua pulu
+202804_tolakangin1.HEIC             2028-04   BENAR    66.72s   66.76s  saya kurang yakin, tetapi tanggal yang ter
+202804_tolakangin2.PNG              2028-04  KOSONG   121.44s  121.63s  proksi Vercel 502 (>120 s)
+20290211_kecapasin.JPG           2029-02-11  KOSONG    36.44s   37.13s  server sibuk (antrean penuh)
+20290306_merica.JPG              2029-03-06  KOSONG    19.66s   24.66s  server sibuk (antrean penuh)
+20290821_tisu1.PNG               2029-08-21  KOSONG     2.48s    4.83s  DITOLAK quality gate
+20290821_tisu2.PNG               2029-08-21   BENAR    44.75s   46.27s  saya kurang yakin, tetapi tanggal yang ter
+tidakada_permen1.jpeg                kosong   BENAR    12.33s   12.94s  tulisan terbaca, bukan tanggal
+tidakada_permen2.jpeg                kosong   BENAR    12.16s   12.42s  tidak menemukan tanggal
+----------------------------------------------------------------------------------------------------------------------
+LEWAT DEPLOY: 10 BENAR / 2 SALAH / 4 KOSONG dari 16 = 62%
+Pembanding pengukuran LOKAL (ExpiryReader.read langsung): 13 / 2 / 1 = 81%
+
+TOTAL per giliran: median 12.38 s   rerata 26.63 s   maks 121.63 s   n=48
+
+Kegagalan INFRASTRUKTUR, bukan pengenalan: 3 gambar
+  202804_tolakangin2.PNG         proksi Vercel 502 (>120 s)
+  20290211_kecapasin.JPG         server sibuk (antrean penuh)
+  20290306_merica.JPG            server sibuk (antrean penuh)
+DITOLAK quality gate sebelum OCR: 1 gambar
+  20290821_tisu1.PNG             DITOLAK quality gate
+
+Penilaian memakai fungsi ujaran proyek sendiri, bukan pencocokan kata tangan.

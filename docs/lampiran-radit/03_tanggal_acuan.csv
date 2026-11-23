@@ -1,0 +1,17 @@
+gambar,tanggal_acuan,tercetak_di_kemasan,terbaca_jelas,cara_verifikasi,catatan
+20260411_ajinomoto.JPG,2026-04-11,110426,ya,baca langsung dari foto,"dua angka berdekatan: 110425 (kode) dan 110426 (tanggal)"
+20261008.JPG,2026-10-08,EXP : 08 10 26,ya,baca langsung dari foto,"ada label KODE PRODUKSI A dan BATCH 2608109957 di sebelahnya"
+20270120_miesedap.JPG,2027-01-20,E 200127,ya,baca langsung dari foto,
+20270311_mentega.JPG,2027-03-11,11 MAR 27 N8 02:31,ya,baca langsung dari foto,tercetak diagonal
+20270321_chees.JPG,2027-03-21,21 MAR 2027,ya,baca langsung dari foto,"tepat di bawah nomor produksi 210526/L7A/19:48"
+20270602_indofood.JPG,2027-06-02,02 JUN 27 D,ya,baca langsung dari foto,kode produksi 02F506 CKR di baris bawahnya
+20270906.JPG,2027-09-06,EXP. 06 09 27,ya,baca langsung dari foto,
+20270927_ovaltine.JPG,2027-09-27,EXP:27.09.27/L3A,ya,baca langsung dari foto,LOT:2SG4329 di sebelahnya
+202804_tolakangin1.HEIC,2028-04,ED APR 28,ya,perbesar wilayah zona,hanya bulan dan tahun
+202804_tolakangin2.PNG,2028-04,TIDAK TERBACA,TIDAK,diwarisi dari tolakangin1,"TANGKAPAN LAYAR; produk sama dengan tolakangin1 tetapi FOTO BERBEDA (pHash 25)"
+20290211_kecapasin.JPG,2029-02-11,11 FEB 29,ya,baca langsung dari foto,tercetak di tutup plastik; 118601 CKR di sebelahnya
+20290306_merica.JPG,2029-03-06,06 03 2029,ya,baca langsung dari foto,
+20290821_tisu1.PNG,2029-08-21,EXP 210829,ya,perbesar wilayah zona,TANGKAPAN LAYAR tetapi tanggalnya tetap terbaca
+20290821_tisu2.PNG,2029-08-21,TIDAK TERBACA,TIDAK,diwarisi dari tisu1,"TANGKAPAN LAYAR; produk sama dengan tisu1 tetapi FOTO BERBEDA (pHash 25)"
+tidakada_permen1.jpeg,kosong,(tidak ada tanggal),ya,baca langsung dari foto,permen mentos; acuan = sistem harus TIDAK menjawab tanggal
+tidakada_permen2.jpeg,kosong,(tidak ada tanggal),ya,baca langsung dari foto,permen mentos mini; acuan = sistem harus TIDAK menjawab tanggal

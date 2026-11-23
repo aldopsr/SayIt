@@ -1,0 +1,135 @@
+# Konfigurasi modul kedaluwarsa SayIt, commit b988ada, 23 November 2026.
+# Diekstrak dari config yang DIMUAT aplikasi, bukan disalin tangan.
+# Rangkaian yang benar-benar dipakai modul ini: expiry.preprocess_chain
+# menunjuk ke salah satu kunci di preprocess_chains di bawah.
+
+expiry:
+  engine: paddleocr
+  zone_weights: models/best_zone.pt
+  device: cpu
+  imgsz: 640
+  max_det: 10
+  zone_score_min: 0.4
+  zone_classes_date:
+  - date
+  zone_classes_reject:
+  - code
+  - prod
+  crop_margin_ratio: 0.1
+  preprocess_chain: hanya_resize
+  retry_without_steps:
+  - threshold
+  - morphology
+  fallback_preprocess_chain: hanya_resize
+  full_image_fallback: true
+  rotate_crop: false
+  text_score_min: 0.4
+  rotate_retry:
+  - 180
+  - 90
+  - 270
+date_parser:
+  day_first: true
+  years_back: 5
+  years_forward: 10
+  two_digit_year_base: 2000
+  marker_window: 24
+  negative_markers:
+  - kode produksi
+  - production code
+  - kode prod
+  - batch
+  - no bets
+  - nomor bets
+  negative_marker_window: 40
+  require_marker_for_compact: false
+  require_marker_for_spaced: true
+  markers:
+  - exp
+  - expired
+  - exp date
+  - expiry
+  - ed
+  - bb
+  - bbe
+  - best before
+  - use by
+  - kedaluwarsa
+  - kadaluwarsa
+  - kadaluarsa
+  - baik digunakan sebelum
+  - sebaiknya digunakan sebelum
+document:
+  engine: easyocr
+  rotate_retry:
+  - 180
+  - 90
+  - 270
+  rotate_trigger_score: 0.75
+  text_score_min: 0.4
+  line_grouping: rantai
+  line_slope_correct: true
+  line_slope_max: 0.35
+  bands: 1
+  band_pad_ratio: 0.04
+  layout_mode: tersebar
+  unclear_score_min: 0.75
+preprocess_chains:
+  uang:
+  - resize
+  dokumen:
+  - resize
+  - perspective
+  - deskew
+  - clahe
+  kedaluwarsa:
+  - upscale
+  - clahe
+  hanya_resize:
+  - resize
+preprocess_params:
+  enabled: true
+  steps:
+    resize:
+      enabled: true
+      max_side: 1600
+    clahe:
+      enabled: true
+      clip_limit: 2.0
+      tile_grid: 8
+    denoise:
+      enabled: true
+      method: bilateral
+      bilateral:
+        diameter: 9
+        sigma_color: 75
+        sigma_space: 75
+      nlm:
+        h: 18
+        template_window: 7
+        search_window: 21
+    perspective:
+      enabled: true
+      blur_ksize: 5
+      canny_low: 50
+      canny_high: 150
+      approx_epsilon_ratio: 0.02
+      min_area_ratio: 0.5
+      max_area_ratio: 0.95
+    deskew:
+      enabled: true
+      max_angle_deg: 15.0
+      min_angle_deg: 0.3
+    upscale:
+      enabled: true
+      factor: 2.0
+      interpolation: cubic
+    threshold:
+      enabled: true
+      block_size: 31
+      c: 10
+    morphology:
+      enabled: true
+      op: close
+      kernel: 3
+      iterations: 1

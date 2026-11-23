@@ -1,0 +1,49 @@
+gambar,pengulangan,foto_s,tanya_s,total_s,diterima,intent,status,jawaban
+20260411_ajinomoto.JPG,1,1.41,7.51,8.92,True,KEDALUWARSA,200/200,"Saya kurang yakin, tetapi tanggal yang terbaca adalah sebelas April dua ribu dua puluh enam. Produk sudah melewati tanggal kedaluwarsa sejak sekitar delapan bul"
+20261008.JPG,1,1.49,28.67,30.16,True,KEDALUWARSA,200/200,"Saya kurang yakin, tetapi tanggal yang terbaca adalah delapan Oktober dua ribu dua puluh enam. Produk sudah melewati tanggal kedaluwarsa sejak sekitar tujuh min"
+20270120_miesedap.JPG,1,1.72,3.77,5.49,True,KEDALUWARSA,200/200,"Tanggal kedaluwarsa dua puluh Januari dua ribu dua puluh tujuh. Produk masih berlaku, sisa sekitar delapan minggu."
+20270311_mentega.JPG,1,1.64,11.09,12.74,True,KEDALUWARSA,200/200,"Tanggal kedaluwarsa sebelas Maret dua ribu dua puluh tujuh. Produk masih berlaku, sisa sekitar empat bulan."
+20270321_chees.JPG,1,1.64,50.2,51.84,True,KEDALUWARSA,200/200,Tanggal kedaluwarsa dua puluh satu Mei dua ribu dua puluh enam. Produk sudah melewati tanggal kedaluwarsa sejak sekitar enam bulan lalu.
+20270602_indofood.JPG,1,1.52,4.39,5.91,True,KEDALUWARSA,200/200,"Tanggal kedaluwarsa dua Juni dua ribu dua puluh tujuh. Produk masih berlaku, sisa sekitar enam bulan."
+20270906.JPG,1,1.8,8.59,10.39,True,KEDALUWARSA,200/200,"Saya kurang yakin, tetapi tanggal yang terbaca adalah enam September dua ribu dua puluh tujuh. Produk masih berlaku, sisa sekitar sepuluh bulan."
+20270927_ovaltine.JPG,1,0.98,6.38,7.36,True,KEDALUWARSA,200/200,"Berlaku sampai September dua ribu dua puluh tujuh. Produk masih berlaku, sisa sekitar sepuluh bulan."
+202804_tolakangin1.HEIC,1,1.13,65.63,66.76,True,KEDALUWARSA,200/200,"Saya kurang yakin, tetapi tanggal yang terbaca adalah April dua ribu dua puluh delapan. Produk masih berlaku, sisa sekitar satu tahun."
+202804_tolakangin2.PNG,1,1.39,120.24,121.63,True,,200/502,
+20290211_kecapasin.JPG,1,23.26,13.17,36.44,,,200/200,
+20290306_merica.JPG,1,2.73,2.61,5.33,,,200/200,
+20290821_tisu1.PNG,1,3.49,1.34,4.83,False,FOTO,200/200,"Foto terlalu gelap. Nyalakan senter di ponselmu atau dekatkan ke lampu, lalu foto ulang."
+20290821_tisu2.PNG,1,1.09,43.67,44.75,True,KEDALUWARSA,200/200,"Saya kurang yakin, tetapi tanggal yang terbaca adalah dua puluh satu Agustus dua ribu dua puluh sembilan. Produk masih berlaku, sisa sekitar tiga tahun."
+tidakada_permen1.jpeg,1,0.23,12.1,12.33,True,KEDALUWARSA,200/200,"Saya menemukan tulisan, tetapi tidak yakin itu tanggal kedaluwarsa. Tulisannya: mentos."
+tidakada_permen2.jpeg,1,0.21,7.35,7.55,True,KEDALUWARSA,200/200,Saya tidak menemukan tanggal kedaluwarsa. Coba foto bagian kemasan yang lain.
+20260411_ajinomoto.JPG,2,3.74,5.12,8.86,True,KEDALUWARSA,200/200,"Saya kurang yakin, tetapi tanggal yang terbaca adalah sebelas April dua ribu dua puluh enam. Produk sudah melewati tanggal kedaluwarsa sejak sekitar delapan bul"
+20261008.JPG,2,1.65,19.9,21.54,True,KEDALUWARSA,200/200,"Saya kurang yakin, tetapi tanggal yang terbaca adalah delapan Oktober dua ribu dua puluh enam. Produk sudah melewati tanggal kedaluwarsa sejak sekitar tujuh min"
+20270120_miesedap.JPG,2,3.05,4.2,7.26,True,KEDALUWARSA,200/200,"Tanggal kedaluwarsa dua puluh Januari dua ribu dua puluh tujuh. Produk masih berlaku, sisa sekitar delapan minggu."
+20270311_mentega.JPG,2,3.91,11.63,15.54,True,KEDALUWARSA,200/200,"Tanggal kedaluwarsa sebelas Maret dua ribu dua puluh tujuh. Produk masih berlaku, sisa sekitar empat bulan."
+20270321_chees.JPG,2,2.11,50.33,52.43,True,KEDALUWARSA,200/200,Tanggal kedaluwarsa dua puluh satu Mei dua ribu dua puluh enam. Produk sudah melewati tanggal kedaluwarsa sejak sekitar enam bulan lalu.
+20270602_indofood.JPG,2,2.07,4.59,6.66,True,KEDALUWARSA,200/200,"Tanggal kedaluwarsa dua Juni dua ribu dua puluh tujuh. Produk masih berlaku, sisa sekitar enam bulan."
+20270906.JPG,2,2.33,8.89,11.22,True,KEDALUWARSA,200/200,"Saya kurang yakin, tetapi tanggal yang terbaca adalah enam September dua ribu dua puluh tujuh. Produk masih berlaku, sisa sekitar sepuluh bulan."
+20270927_ovaltine.JPG,2,1.67,6.82,8.5,True,KEDALUWARSA,200/200,"Berlaku sampai September dua ribu dua puluh tujuh. Produk masih berlaku, sisa sekitar sepuluh bulan."
+202804_tolakangin1.HEIC,2,1.62,65.11,66.72,True,KEDALUWARSA,200/200,"Saya kurang yakin, tetapi tanggal yang terbaca adalah April dua ribu dua puluh delapan. Produk masih berlaku, sisa sekitar satu tahun."
+202804_tolakangin2.PNG,2,0.98,120.23,121.2,True,,200/502,
+20290211_kecapasin.JPG,2,17.67,15.96,33.63,,KEDALUWARSA,200/200,"Tanggal kedaluwarsa sebelas Februari dua ribu dua puluh sembilan. Produk masih berlaku, sisa sekitar dua tahun."
+20290306_merica.JPG,2,2.41,17.25,19.66,True,KEDALUWARSA,200/200,"Saya kurang yakin, tetapi tanggal yang terbaca adalah enam Maret dua ribu dua puluh sembilan. Produk masih berlaku, sisa sekitar dua tahun."
+20290821_tisu1.PNG,2,1.51,0.97,2.48,False,FOTO,200/200,"Foto terlalu gelap. Nyalakan senter di ponselmu atau dekatkan ke lampu, lalu foto ulang."
+20290821_tisu2.PNG,2,0.95,39.9,40.85,True,KEDALUWARSA,200/200,"Saya kurang yakin, tetapi tanggal yang terbaca adalah dua puluh satu Agustus dua ribu dua puluh sembilan. Produk masih berlaku, sisa sekitar tiga tahun."
+tidakada_permen1.jpeg,2,0.4,12.54,12.94,True,KEDALUWARSA,200/200,"Saya menemukan tulisan, tetapi tidak yakin itu tanggal kedaluwarsa. Tulisannya: mentos."
+tidakada_permen2.jpeg,2,0.38,11.79,12.16,True,KEDALUWARSA,200/200,Saya tidak menemukan tanggal kedaluwarsa. Coba foto bagian kemasan yang lain.
+20260411_ajinomoto.JPG,3,3.55,7.79,11.35,True,KEDALUWARSA,200/200,"Saya kurang yakin, tetapi tanggal yang terbaca adalah sebelas April dua ribu dua puluh enam. Produk sudah melewati tanggal kedaluwarsa sejak sekitar delapan bul"
+20261008.JPG,3,1.77,28.29,30.06,True,KEDALUWARSA,200/200,"Saya kurang yakin, tetapi tanggal yang terbaca adalah delapan Oktober dua ribu dua puluh enam. Produk sudah melewati tanggal kedaluwarsa sejak sekitar tujuh min"
+20270120_miesedap.JPG,3,2.28,4.08,6.36,True,KEDALUWARSA,200/200,"Tanggal kedaluwarsa dua puluh Januari dua ribu dua puluh tujuh. Produk masih berlaku, sisa sekitar delapan minggu."
+20270311_mentega.JPG,3,1.77,7.97,9.73,True,KEDALUWARSA,200/200,"Tanggal kedaluwarsa sebelas Maret dua ribu dua puluh tujuh. Produk masih berlaku, sisa sekitar empat bulan."
+20270321_chees.JPG,3,1.26,21.37,22.64,True,KEDALUWARSA,200/200,Tanggal kedaluwarsa dua puluh satu Mei dua ribu dua puluh enam. Produk sudah melewati tanggal kedaluwarsa sejak sekitar enam bulan lalu.
+20270602_indofood.JPG,3,1.16,2.39,3.55,True,KEDALUWARSA,200/200,"Tanggal kedaluwarsa dua Juni dua ribu dua puluh tujuh. Produk masih berlaku, sisa sekitar enam bulan."
+20270906.JPG,3,1.16,5.36,6.52,True,KEDALUWARSA,200/200,"Saya kurang yakin, tetapi tanggal yang terbaca adalah enam September dua ribu dua puluh tujuh. Produk masih berlaku, sisa sekitar sepuluh bulan."
+20270927_ovaltine.JPG,3,1.46,3.75,5.2,True,KEDALUWARSA,200/200,"Berlaku sampai September dua ribu dua puluh tujuh. Produk masih berlaku, sisa sekitar sepuluh bulan."
+202804_tolakangin1.HEIC,3,1.8,50.95,52.75,True,KEDALUWARSA,200/200,"Saya kurang yakin, tetapi tanggal yang terbaca adalah April dua ribu dua puluh delapan. Produk masih berlaku, sisa sekitar satu tahun."
+202804_tolakangin2.PNG,3,1.22,120.22,121.44,True,,200/502,
+20290211_kecapasin.JPG,3,16.81,20.32,37.13,,,200/200,
+20290306_merica.JPG,3,6.08,18.58,24.66,True,KEDALUWARSA,200/200,"Saya kurang yakin, tetapi tanggal yang terbaca adalah enam Maret dua ribu dua puluh sembilan. Produk masih berlaku, sisa sekitar dua tahun."
+20290821_tisu1.PNG,3,1.04,0.85,1.9,False,FOTO,200/200,"Foto terlalu gelap. Nyalakan senter di ponselmu atau dekatkan ke lampu, lalu foto ulang."
+20290821_tisu2.PNG,3,0.89,45.38,46.27,True,KEDALUWARSA,200/200,"Saya kurang yakin, tetapi tanggal yang terbaca adalah dua puluh satu Agustus dua ribu dua puluh sembilan. Produk masih berlaku, sisa sekitar tiga tahun."
+tidakada_permen1.jpeg,3,0.21,12.09,12.3,True,KEDALUWARSA,200/200,"Saya menemukan tulisan, tetapi tidak yakin itu tanggal kedaluwarsa. Tulisannya: mentos."
+tidakada_permen2.jpeg,3,0.23,12.18,12.42,True,KEDALUWARSA,200/200,Saya tidak menemukan tanggal kedaluwarsa. Coba foto bagian kemasan yang lain.
