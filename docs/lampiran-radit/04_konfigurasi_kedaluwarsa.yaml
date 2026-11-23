@@ -1,8 +1,10 @@
-# Konfigurasi modul kedaluwarsa SayIt, commit b988ada, 23 November 2026.
+# Konfigurasi modul kedaluwarsa SayIt, 24 November 2026.
 # Diekstrak dari config yang DIMUAT aplikasi, bukan disalin tangan.
-# Rangkaian yang benar-benar dipakai modul ini: expiry.preprocess_chain
-# menunjuk ke salah satu kunci di preprocess_chains di bawah.
-
+#
+# Yang menentukan perilaku modul ini:
+#   expiry.preprocess_chain menunjuk ke salah satu kunci preprocess_chains
+#   expiry.budget_s         anggaran waktu, menutup batas 120 detik proksi Vercel
+#   quality_gate            DILEWATI oleh scripts/ukur_kedaluwarsa.py, TIDAK dilewati aplikasi
 expiry:
   engine: paddleocr
   zone_weights: models/best_zone.pt
@@ -28,6 +30,7 @@ expiry:
   - 180
   - 90
   - 270
+  budget_s: 90.0
 date_parser:
   day_first: true
   years_back: 5
@@ -74,6 +77,26 @@ document:
   band_pad_ratio: 0.04
   layout_mode: tersebar
   unclear_score_min: 0.75
+quality_gate:
+  framing:
+    enabled: true
+    edge_margin_ratio: 0.02
+  enabled: true
+  blur:
+    enabled: true
+    min_variance: 15.0
+    resize_short_side: 720
+  dark:
+    enabled: true
+    max_mean: 60.0
+  bright:
+    enabled: true
+    min_mean: 245.0
+    saturated_level: 250
+    max_saturated_ratio: 0.25
+  resolution:
+    enabled: true
+    min_short_side: 480
 preprocess_chains:
   uang:
   - resize

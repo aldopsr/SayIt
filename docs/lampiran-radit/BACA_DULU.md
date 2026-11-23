@@ -2,6 +2,8 @@
 
 Disusun 23 November 2026, repo pada commit `b988ada`.
 
+**Bingung buka yang mana? Lihat `00_PETA_BERKAS.md`.**
+
 | berkas | untuk permintaan |
 |---|---|
 | `01_hasil_per_gambar.csv` | 1, 4 |
@@ -10,6 +12,7 @@ Disusun 23 November 2026, repo pada commit `b988ada`.
 | `04_konfigurasi_kedaluwarsa.yaml` | 3 |
 | `05_dataset_zona.md` | 3 |
 | `06_waktu_respons_deploy.csv` | 5 |
+| `08_subset_foto_kamera.txt` | 1 |
 | `07_penilaian_lewat_deploy.txt` | 1, 5 |
 | berkas ini | penjelasan 1, 2, 5 |
 
