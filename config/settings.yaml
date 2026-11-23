@@ -535,6 +535,26 @@ vision:
     # sudah ditangani sayit/gambar.py; ini untuk foto yang EXIF-nya hilang atau
     # salah, misalnya tangkapan layar dan hasil potong. Kosongkan untuk mematikan.
     rotate_retry: [180, 90, 270]
+    # ANGGARAN WAKTU untuk seluruh ExpiryReader.read(), dalam detik.
+    #
+    # Angkanya dari BATAS ARSITEKTUR, bukan dari apa yang kebetulan cocok untuk
+    # 16 kemasan uji - menyetelnya pada set itu adalah jebakan resubstitusi yang
+    # sudah dicatat 23-11. Dasarnya: proksi Vercel memutus permintaan pada
+    # 120 detik untuk SEMUA paket, dan sisanya disisakan untuk unggah foto,
+    # render suara, serta jaringan.
+    #
+    # KENAPA ADA: diukur 23-11 lewat deploy sungguhan, `202804_tolakangin2.PNG`
+    # memakan 120,2 detik pada TIGA dari tiga pengulangan dan dibalas 502. Dan
+    # servernya tidak ikut berhenti - ia terus bekerja sambil memegang kunci
+    # antrean, sehingga DUA giliran berikutnya ikut gagal dengan `server_sibuk`.
+    #
+    # Yang dipotong hanya percobaan ROTASI gambar penuh, dan hanya bila taksiran
+    # satu lintasan lagi tidak muat di sisa anggaran. Lintasan pertama tidak
+    # pernah dipotong, jadi foto yang terbaca di percobaan pertama tidak
+    # terpengaruh sama sekali.
+    #
+    # Kosongkan atau 0 untuk mematikan (perilaku lama, bisa menembus 120 detik).
+    budget_s: 90.0
 
 # Perangkaian seluruh modul (PRD 7).
 pipeline:

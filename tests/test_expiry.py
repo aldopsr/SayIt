@@ -637,3 +637,91 @@ def test_ekstraksi_membaca_nama_kelas_dari_model():
 def test_ekstraksi_tanpa_nama_kelas_memberi_cls_kosong():
     """Model lama: tidak ada `names`, jadi `cls` kosong dan perilakunya lama."""
     assert [z.cls for z in E.extract_zones(hasil_yolo([[0, 0, 10, 10]], [0.9]))] == [""]
+
+
+# --------------------------------------------------------------------------- anggaran waktu
+#
+# Latar: proksi Vercel memutus permintaan pada 120 detik untuk SEMUA paket, dan
+# 23-11 batas itu terlanggar sungguhan - satu kemasan memakan 120,2 detik pada
+# tiga dari tiga pengulangan dan dibalas 502, lalu dua giliran BERIKUTNYA ikut
+# gagal karena servernya terus bekerja sambil memegang kunci antrean.
+
+
+class OcrLambat(OcrPalsu):
+    """OcrPalsu yang memajukan jam tiruan tiap kali dipanggil.
+
+    Waktu dipalsukan, bukan ditunggu: tes yang benar-benar tidur selama puluhan
+    detik tidak akan pernah dijalankan orang, dan tes yang tidak dijalankan sama
+    saja dengan tidak ada.
+    """
+
+    def __init__(self, *jawaban, detik_per_panggilan=30.0):
+        super().__init__(*jawaban)
+        self.detik = detik_per_panggilan
+        self.jam = 0.0
+
+    def ocr_boxes(self, image):
+        self.jam += self.detik
+        return super().ocr_boxes(image)
+
+
+def _pasang_jam(monkeypatch, ocr):
+    monkeypatch.setattr(E.time, "perf_counter", lambda: ocr.jam)
+
+
+def test_anggaran_memotong_rotasi_gambar_penuh(cfg, monkeypatch):
+    """Satu lintasan 30 detik, anggaran 90 detik: rotasi harus dipotong.
+
+    Tanpa pemotongan, empat lintasan = 120 detik, yaitu tepat batas Vercel.
+    """
+    cfg["vision"]["expiry"]["budget_s"] = 90.0
+    cfg["vision"]["expiry"]["rotate_retry"] = [180, 90, 270]
+    ocr = OcrLambat("tidak ada tanggal di sini", detik_per_panggilan=30.0)
+    _pasang_jam(monkeypatch, ocr)
+    hasil = pembaca(cfg, ocr).read(FOTO, today=date(2026, 1, 1))
+
+    assert not hasil.date.found
+    assert "anggaran_habis" in hasil.notes
+    # Lintasan pertama 30 s; 30 + 30 = 60 <= 90 jadi rotasi pertama berjalan.
+    # Sesudahnya 60 + 30 = 90 yang TIDAK lebih besar dari 90, jadi rotasi kedua
+    # juga berjalan; 90 + 30 = 120 > 90 menghentikan yang ketiga.
+    assert hasil.notes["rotasi_dilewati"] == [270]
+    assert hasil.notes["total_s"] <= 90.0
+
+
+def test_anggaran_ketat_memotong_seluruh_rotasi(cfg, monkeypatch):
+    """Anggaran lebih kecil daripada dua lintasan: tidak ada rotasi sama sekali."""
+    cfg["vision"]["expiry"]["budget_s"] = 45.0
+    cfg["vision"]["expiry"]["rotate_retry"] = [180, 90, 270]
+    ocr = OcrLambat("tidak ada tanggal", detik_per_panggilan=30.0)
+    _pasang_jam(monkeypatch, ocr)
+    hasil = pembaca(cfg, ocr).read(FOTO, today=date(2026, 1, 1))
+
+    assert hasil.notes["rotasi_dilewati"] == [180, 90, 270]
+    assert hasil.notes["total_s"] <= 45.0
+
+
+def test_anggaran_tidak_menyentuh_foto_yang_terbaca_di_lintasan_pertama(cfg):
+    """Penjaga regresi yang paling penting.
+
+    Foto yang menjawab pada percobaan pertama TIDAK BOLEH terpengaruh anggaran,
+    berapa pun ketatnya - ia tidak pernah sampai ke tahap rotasi.
+    """
+    cfg["vision"]["expiry"]["budget_s"] = 1.0
+    ocr = OcrLambat("EXP 11 02 2029", detik_per_panggilan=30.0)
+    hasil = pembaca(cfg, ocr).read(FOTO, today=date(2026, 1, 1))
+
+    assert hasil.date.found
+    assert hasil.date.value == date(2029, 2, 11)
+    assert "anggaran_habis" not in hasil.notes
+
+
+def test_anggaran_nol_mengembalikan_perilaku_lama(cfg):
+    """0 atau kosong = mati, supaya ablasi bisa membandingkan dengan perilaku lama."""
+    cfg["vision"]["expiry"]["budget_s"] = 0
+    cfg["vision"]["expiry"]["rotate_retry"] = [180, 90, 270]
+    ocr = OcrLambat("tidak ada tanggal", detik_per_panggilan=30.0)
+    hasil = pembaca(cfg, ocr).read(FOTO, today=date(2026, 1, 1))
+
+    assert "anggaran_habis" not in hasil.notes
+    assert hasil.notes["rotations_tried"] == [180, 90, 270]

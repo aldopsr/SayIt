@@ -244,7 +244,27 @@ class ExpiryReader:
         today = today or date.today()
         t_mulai = time.perf_counter()
 
+        # ANGGARAN WAKTU. Alasannya arsitektur, bukan selera: proksi Vercel
+        # memutus permintaan pada 120 detik untuk SEMUA paket, dan 23-11 batas
+        # itu benar-benar terlanggar - `tolakangin2` memakan 120,2 detik pada
+        # TIGA dari tiga pengulangan dan dibalas 502. Lebih buruk lagi,
+        # servernya tidak ikut berhenti: ia terus bekerja sambil memegang kunci
+        # antrean, sehingga dua giliran BERIKUTNYA ikut gagal dengan
+        # `server_sibuk`. Satu foto lambat merusak tiga giliran.
+        #
+        # Jadi anggaran ini bukan optimasi kecepatan, melainkan penjaga supaya
+        # kegagalan jaringan yang tidak bisa dijelaskan kepada pengguna
+        # tunanetra berubah menjadi jawaban "tidak menemukan tanggal" yang
+        # bisa ia pahami dan tindaklanjuti.
+        anggaran = float(self.e.get("budget_s") or 0.0)
+
+        t_lintasan = time.perf_counter()
         hasil = self._read_once(image, today)
+        # Biaya satu lintasan penuh diukur, tidak ditebak. Tiap percobaan rotasi
+        # mengulang pekerjaan yang sama persis, jadi lintasan pertama adalah
+        # penaksir terbaik yang tersedia untuk lintasan berikutnya.
+        biaya_lintasan = time.perf_counter() - t_lintasan
+
         if not hasil.found and hasil.notes.get("crop_rotations_tried"):
             # Zona SUDAH ketemu dan potongannya sudah dicoba di seluruh sudut.
             # Memutar gambar penuh di sini hanya mengulang deteksi zona yang tadi
@@ -256,6 +276,19 @@ class ExpiryReader:
         elif not hasil.found:
             dicoba: list[int] = []
             for derajat in self.e.get("rotate_retry") or []:
+                # Diperiksa SEBELUM memulai, dan memakai taksiran biaya - bukan
+                # "sudah lewat anggaran belum". Memeriksa waktu lewat saja tetap
+                # membiarkan satu lintasan penuh dimulai tepat sebelum batas,
+                # lalu berjalan sampai jauh melewatinya.
+                lewat = time.perf_counter() - t_mulai
+                if anggaran and lewat + biaya_lintasan > anggaran:
+                    hasil.notes["anggaran_habis"] = (
+                        f"berhenti setelah {lewat:.1f} s; satu lintasan lagi "
+                        f"ditaksir {biaya_lintasan:.1f} s, anggaran {anggaran:.0f} s")
+                    hasil.notes["rotasi_dilewati"] = [
+                        int(d) for d in (self.e.get("rotate_retry") or [])
+                        if int(d) not in dicoba]
+                    break
                 ulang = self._read_once(rotate_image(image, derajat), today)
                 if ulang.found:
                     ulang.notes["rotated_deg"] = int(derajat)
@@ -269,6 +302,7 @@ class ExpiryReader:
                 hasil.notes["rotations_tried"] = dicoba
 
         hasil.notes["total_s"] = time.perf_counter() - t_mulai
+        hasil.notes["anggaran_s"] = anggaran
         return hasil
 
     def _read_once(self, image: np.ndarray, today: date) -> ExpiryResult:

@@ -850,6 +850,30 @@ lain pada hari yang sama - simpangan 60% dari beban laptop. Yang sah dikutip ada
 perbandingan DI DALAM satu sesi, bukan angka detiknya. Kalau jurnal menulis satu angka latensi,
 sebutkan ia median satu sesi dan berderau besar.
 
+**ANGGARAN WAKTU `expiry.budget_s: 90.0` (24-11) - menutup batas 120 detik Vercel.**
+Sebelum tiap percobaan rotasi gambar penuh, `read()` memeriksa
+`lewat + biaya_lintasan > anggaran`; `biaya_lintasan` **DIUKUR dari lintasan pertama**,
+bukan ditebak. Memeriksa "sudah lewat belum" saja tidak cukup: tanpa taksiran, satu
+lintasan 40 detik tetap boleh dimulai tepat sebelum batas lalu berjalan jauh melewatinya.
+- **Lintasan pertama TIDAK PERNAH dipotong**, berapa pun ketat anggarannya. Ada tes khusus.
+- Angka 90 dari **batas arsitektur** (120 detik proksi Vercel dikurangi unggah foto,
+  render suara, jaringan), **bukan** dari 16 kemasan uji - set itu sudah dipakai memilih
+  tujuh keputusan lain, jadi menyetelnya di situ adalah resubstitusi.
+- Hasil diukur ulang lewat deploy, 48 percobaan: maksimum **121,63 -> 80,17 detik**,
+  502 **3 dari 3 -> nol**, kegagalan infrastruktur **3 gambar -> nol**, dan
+  **median praktis tidak berubah** (12,38 -> 12,20 detik). Akurasi deploy **62% -> 75%**.
+- Akurasi LOKAL tidak berubah: 13/2/1 = 81%, identik per berkas.
+- `budget_s: 0` mengembalikan perilaku lama untuk ablasi.
+
+**AKURASI LOKAL 81% DAN AKURASI DEPLOY 75% MENGUKUR CAKUPAN BERBEDA.**
+`scripts/ukur_kedaluwarsa.py` memanggil `ExpiryReader.read()` langsung, jadi ia
+melewatkan **quality gate** dan **seluruh lapisan jaringan**. Selisih satu berkas yang
+tersisa (`tisu1`, ditolak quality gate "foto terlalu gelap") seluruhnya dari situ.
+Ukur lewat deploy dengan `scripts/ukur_respons_deploy.py` lalu
+`scripts/nilai_respons_deploy.py`; penilainya memakai fungsi ujaran proyek sendiri dan
+**memisahkan SEBAB dari NILAI**, supaya kegagalan infrastruktur tidak terbaca sebagai
+kesalahan pengenalan.
+
 **Konfigurasi terkunci (jangan diubah tanpa mengukur ulang):**
 mesin OCR dipisah per modul - dokumen EasyOCR, kedaluwarsa PaddleOCR + `mobile_det`;
 `expiry.preprocess_chain: hanya_resize` (resize WAJIB ada, ia pengendali latensi);

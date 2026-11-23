@@ -328,3 +328,83 @@ percobaan `tolakangin2` yang masing-masing mentok di batas 120 detik.
 Catatan: median 12,38 detik ini **lebih besar** daripada 11,4 detik yang tercatat
 di naskah, dan itu wajar — yang ini memuat jaringan, proksi, dan antrean,
 sedangkan yang 11,4 detik tidak.
+
+---
+
+# PERBAIKAN 24-11: batas 120 detik ditutup, akurasi deploy 62% → 75%
+
+Temuan di bagian sebelumnya ditindaklanjuti, bukan hanya dicatat.
+
+## Apa yang diubah
+
+Ditambahkan **anggaran waktu** pada `ExpiryReader.read()`
+(`vision.expiry.budget_s`, bawaan **90 detik**). Sebelum tiap percobaan rotasi
+gambar penuh, sistem memeriksa apakah **taksiran satu lintasan lagi** masih muat
+di sisa anggaran — bukan sekadar "waktunya sudah lewat atau belum".
+
+```python
+lewat = time.perf_counter() - t_mulai
+if anggaran and lewat + biaya_lintasan > anggaran:
+    break
+```
+
+`biaya_lintasan` **diukur dari lintasan pertama, bukan ditebak**: tiap rotasi
+mengulang pekerjaan yang sama persis. Memeriksa waktu lewat saja tetap
+membiarkan satu lintasan 40 detik dimulai tepat sebelum batas, lalu berjalan
+jauh melewatinya.
+
+**Lintasan pertama tidak pernah dipotong**, berapa pun ketat anggarannya — foto
+yang terbaca pada percobaan pertama tidak terpengaruh sama sekali. Ada tes
+khusus untuk sifat itu.
+
+Angka 90 detik diambil dari **batas arsitektur** — 120 detik proksi Vercel
+dikurangi ruang untuk unggah foto, render suara, dan jaringan — **bukan** dari
+apa yang kebetulan cocok untuk 16 kemasan uji. Menyetelnya pada set yang sama
+adalah jebakan resubstitusi yang dijelaskan di bagian 1 berkas ini.
+
+## Hasilnya, diukur ulang lewat deploy yang sama (48 percobaan)
+
+| | sebelum perbaikan | sesudah perbaikan |
+|---|---|---|
+| **Akurasi lewat deploy** | 10 / 2 / 4 = **62%** | **12 / 2 / 2 = 75%** |
+| **Maksimum** | **121,63 s** | **80,17 s** |
+| Balasan 502 | 3 dari 3 pada `tolakangin2` | **nol** |
+| Kegagalan infrastruktur | 3 gambar | **nol** |
+| `/foto` maksimum | 23,26 s | 3,59 s |
+| **Median TOTAL** | 12,38 s | **12,20 s** |
+| Rerata TOTAL | 26,63 s | 23,73 s |
+
+Tiga hal yang layak dibaca dari tabel ini:
+
+1. **Median praktis tidak berubah** (12,38 → 12,20 detik). Perbaikan ini tidak
+   membebani foto normal sama sekali; ia hanya memotong ekornya.
+2. **Kegagalan berantainya hilang seluruhnya.** `kecapasin` dan `merica` yang
+   sebelumnya ditolak `server_sibuk` kini keduanya BENAR. Itu menegaskan
+   diagnosisnya: keduanya memang korban antrean yang tersumbat, bukan kemasan
+   yang sulit dibaca.
+3. **`tolakangin2` kini memberi jawaban, bukan galat jaringan.** Ia masih tidak
+   menemukan tanggal — tetapi menjawab "tulisan terbaca, bukan tanggal" dalam
+   80 detik, bukan dibalas 502 setelah 120 detik. Bagi pengguna tunanetra,
+   bedanya adalah antara penjelasan yang bisa ditindaklanjuti dan kegagalan
+   tanpa sebab.
+
+## Akurasi lokal TIDAK berubah
+
+Diukur ulang pada 16 kemasan: **13 BENAR / 2 SALAH / 1 KOSONG = 81%, identik
+per berkas** dengan sebelum perbaikan. Anggaran tidak memakan satu pun jawaban
+benar. 768 tes lulus (764 lama + 4 tes anggaran baru).
+
+## Selisih yang tersisa antara lokal dan deploy
+
+| | BENAR | SALAH | KOSONG | akurasi |
+|---|---|---|---|---|
+| Lokal (`ExpiryReader.read` langsung) | 13 | 2 | 1 | 81% |
+| Lewat deploy, sesudah perbaikan | 12 | 2 | 2 | **75%** |
+
+Selisihnya kini tinggal **satu berkas**: `20290821_tisu1.PNG`, yang **ditolak
+quality gate** ("foto terlalu gelap") sebelum OCR. Skrip pengukur lokal memanggil
+`ExpiryReader.read()` langsung sehingga tidak pernah melewati quality gate.
+
+Itu bukan kegagalan infrastruktur dan bukan kesalahan membaca — itu tahap nyata
+dalam aplikasi yang skrip pengukur lokal lewati. Untuk jurnal, cukup disebut
+bahwa kedua angka mengukur cakupan yang berbeda.
