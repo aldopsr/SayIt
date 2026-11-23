@@ -408,3 +408,33 @@ quality gate** ("foto terlalu gelap") sebelum OCR. Skrip pengukur lokal memanggi
 Itu bukan kegagalan infrastruktur dan bukan kesalahan membaca — itu tahap nyata
 dalam aplikasi yang skrip pengukur lokal lewati. Untuk jurnal, cukup disebut
 bahwa kedua angka mengukur cakupan yang berbeda.
+
+### Dan penolakan itu sendiri ternyata artefak tangkapan layar
+
+Ditelusuri 24-11. `20290821_tisu1.PNG` punya **38% bingkai berupa bilah hitam** —
+344+344 piksel dari 1792, bawaan tangkapan layar yang menampilkan foto potret di
+layar yang lebih lebar. Bilah itu menyeret rata-rata intensitasnya:
+
+| berkas | bilah hitam | mean UTUH | mean TANPA bilah |
+|---|---|---|---|
+| `20290821_tisu1.PNG` | 38% | **51,4 → DITOLAK** | **83,5 → lolos** |
+| `202804_tolakangin2.PNG` | 38% | 62,1 | 100,8 |
+| `20290821_tisu2.PNG` | 7% | 66,5 | 71,1 |
+
+Ambangnya `dark.max_mean = 60`. **Tiga nilai mean terendah di seluruh set adalah
+tepat ketiga tangkapan layar**; foto kamera sungguhan semuanya **101–132**, jauh
+di atas ambang dan tidak ada satu pun yang mendekatinya. Jadi yang gelap bukan
+fotonya, melainkan letterbox-nya.
+
+**Ambangnya sengaja TIDAK diturunkan.** Menyetelnya supaya `tisu1` lolos berarti
+mengkalibrasi pada data uji yang tidak sah — kesalahan yang sudah tiga kali
+tercatat di proyek ini. Perbaikannya mengganti ketiga tangkapan layar itu dengan
+foto kamera, yaitu saran yang sama dengan bagian 1 berkas ini.
+
+**Satu risiko yang belum pernah diperiksa, dan sebaiknya disebut sebagai
+keterbatasan:** aplikasi sungguhan mengirim **potongan ketat sebatas kurung
+jingga** (sisi pendek 841 piksel), bukan foto utuh — sedangkan `dark.max_mean`
+masih nilai awal PRD dan belum pernah diuji terhadap potongan. Itu cacat
+struktural yang sama dengan ambang buram yang terbukti salah 19 November.
+Pengukuran waktu respons di berkas ini mengirim gambar **utuh**, jadi ia tidak
+menguji perilaku tersebut.
