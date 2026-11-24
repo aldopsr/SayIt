@@ -24,7 +24,9 @@ from __future__ import annotations
 
 import argparse
 import re
+import statistics
 import sys
+import time
 import unicodedata
 from pathlib import Path
 
@@ -171,6 +173,9 @@ def main() -> int:
     ap.add_argument("--rec-model", default=None,
                     help="timpa paddle.text_recognition_model_name "
                          "(mis. PP-OCRv5_mobile_rec; butuh internet saat pertama)")
+    ap.add_argument("--engine", default=None,
+                    help="timpa paddle.engine, backend inferensi "
+                         "(mis. onnxruntime; butuh internet saat pertama)")
     # Setengah biaya EasyOCR ada di tahap DETEKSI, dan deteksi dibayar per PIKSEL,
     # bukan per baris - terukur 16-11 pada tiga dokumen: deteksi 4,4-7,3 s lawan
     # pengenalan 2,6-6,5 s. Karena itu `resize.max_side` adalah tuas latensi
@@ -207,19 +212,32 @@ def main() -> int:
     if args.pita is not None:
         cfg["vision"]["document"]["bands"] = args.pita
         print(f"vision.document.bands ditimpa menjadi {args.pita} untuk pengukuran ini.")
-    paddle = cfg["vision"]["document"].setdefault("paddle", {})
+    dok = cfg["vision"]["document"]
+    paddle = dok.setdefault("paddle", {})
     if args.rec_batch is not None:
         paddle["text_recognition_batch_size"] = args.rec_batch
         print(f"text_recognition_batch_size ditimpa menjadi {args.rec_batch}.")
     if args.rec_model is not None:
         paddle["text_recognition_model_name"] = args.rec_model
         print(f"text_recognition_model_name ditimpa menjadi {args.rec_model!r}.")
+    if args.engine is not None:
+        paddle["engine"] = args.engine
+        print(f"paddle.engine ditimpa menjadi {args.engine!r}.")
+    # Aturan 20-11: setiap sapuan WAJIB mencetak NILAI saklarnya tiap kondisi,
+    # supaya kondisi yang tertukar tidak lolos terlihat masuk akal.
+    print(f"[saklar] mesin={dok.get('engine', 'easyocr')} "
+          f"backend={paddle.get('engine') or 'paddle (bawaan)'} "
+          f"det={paddle.get('text_detection_model_name')} "
+          f"rec={paddle.get('text_recognition_model_name')}")
     ocr = DocumentReader(cfg)
     ocr.load()
 
-    print(f"\n{'berkas':<34} {'CER dgn pra':>12} {'CER tanpa':>12} {'kata':>6}")
-    print("-" * 68)
+    print(f"\n{'berkas':<34} {'CER dgn pra':>12} {'CER tanpa':>12} {'kata':>6} {'detik':>8}")
+    print("-" * 77)
     kumpulan = {True: [], False: []}
+    # Waktu hanya diukur pada kondisi APA ADANYA (dengan pra-pemrosesan), karena itu
+    # yang dijalankan aplikasi. Lintasan `tanpa` ada demi ablasi CER, bukan latensi.
+    waktu: list[float] = []
     acuan_teks: dict[Path, str] = {}
     markup = 0
     for gambar, acuan_p in berkas:
@@ -229,19 +247,27 @@ def main() -> int:
         img = baca(gambar)
         nilai = {}
         for pakai in (True, False):
+            t0 = time.perf_counter()
             hasil = ocr.read(img, preprocess=pakai)
+            if pakai:
+                waktu.append(time.perf_counter() - t0)
             nilai[pakai] = cer(teks_acuan, hasil.text)
             kumpulan[pakai].append(nilai[pakai])
             if args.rinci and pakai:
                 print(f"    acuan : {normalkan(teks_acuan)[:110]}")
                 print(f"    hasil : {normalkan(hasil.text)[:110]}")
         print(f"{gambar.name:<34} {nilai[True]:>11.1%} {nilai[False]:>11.1%} "
-              f"{len(teks_acuan.split()):>6}")
+              f"{len(teks_acuan.split()):>6} {waktu[-1]:>7.2f}s")
 
-    print("-" * 68)
+    print("-" * 77)
     n = len(berkas)
     rerata = {k: sum(v) / len(v) for k, v in kumpulan.items()}
     print(f"{'RERATA (' + str(n) + ' dokumen)':<34} {rerata[True]:>11.1%} {rerata[False]:>11.1%}")
+    if waktu:
+        # Median DAN terburuk: pada modul ini satu berkas pernah menyeret rerata
+        # jauh dari pengalaman sebenarnya, jadi satu angka saja menyesatkan.
+        print(f"Waktu OCR (kondisi apa adanya): median {statistics.median(waktu):.2f}s   "
+              f"terburuk {max(waktu):.2f}s   total {sum(waktu):.1f}s")
     print(f"\nTarget PRD Bagian 11: CER <= 15%. "
           f"{'TERCAPAI' if rerata[True] <= 0.15 else 'BELUM TERCAPAI'} pada kondisi apa adanya.")
     selisih = rerata[False] - rerata[True]

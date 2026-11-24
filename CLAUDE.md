@@ -290,6 +290,16 @@ jadi `NaN`, kanvasnya **0x0**, dan `toDataURL` mengembalikan `"data:,"`. Gambar 
 koneksinya sehat. **Setiap `toDataURL` wajib didahului penjaga `videoWidth > 0`**, dan
 penjaga di sekitar `fetch` TIDAK menolong: `fetch("data:,")` tidak pernah melempar.
 
+**LONJAKAN TTS: ada, acak, dan SEBABNYA TIDAK DIKETAHUI.** Sintesis 40 kata normalnya
+**0,77 detik** (median 40 panggilan beruntun), tetapi sekitar 2 dari 20 panggilan melonjak
+ke 5,5-7,2 detik. Empat dugaan diuji dan **keempatnya terbantah**: `is_online()` hanya
+0,08 detik; jeda antar panggilan tidak berpengaruh (lonjakan pada jeda 0 dan 5, nol pada
+15 dan 30); jawaban dokumen hanya punya **1** bagian `Text`, bukan banyak; dan 40 panggilan
+beruntun datar tanpa tanda pembatasan laju. Kemungkinan terbesar variasi sisi layanan
+Microsoft. **Jangan menambalnya tanpa sebab yang dipahami** - dan jangan menyalakan
+`tts.cache_dynamic_text` untuk itu: ia menyimpan isi dokumen pengguna ke disk permanen,
+yang justru dihindari `_render_text` dengan `TemporaryDirectory`. Itu keputusan privasi.
+
 Sudah di-push: https://github.com/aldopsr/SayIt
 
 **Hosting backend: laptop sendiri + `ngrok http 8000`, BUKAN Hugging Face Spaces.**
@@ -449,7 +459,7 @@ memang belum dijalankan.
 | CER dokumen | **14,94%** (17-11, `line_grouping: rantai`; 14,89% dengan `pita`) | <= 15% | **TERCAPAI, margin 0,06 poin** |
 | Akurasi uang (total diucapkan) | **85,0%** (68 benar / 11 salah / 1 diam, k-fold v3, 80 foto bersih, ambang 0,30); 86,25% pada ambang 0,25 | >= 85% | **TERCAPAI, tepat di garis** |
 | Latensi uang / kendali | 1,4 s / 1,3 s | <= 8 s | **LOLOS** |
-| Latensi dokumen / kedaluwarsa | 11,5 s / 11,4 s | <= 8 s | **penyimpangan diterima** |
+| Latensi dokumen / kedaluwarsa | **5,0 s / 3,0 s** (24-11, sesudah ONNX) | <= 8 s | **LOLOS, penyimpangan DICABUT** |
 
 **Modul tulisan, pembaruan 31-10 (urutan bacaan + penjaga mutu):**
 - **CER 15,30% -> 14,89%, target PRD tercapai.** Dari `line_slope_correct`: kemiringan baris
@@ -884,8 +894,41 @@ Ukur lewat deploy dengan `scripts/ukur_respons_deploy.py` lalu
 **memisahkan SEBAB dari NILAI**, supaya kegagalan infrastruktur tidak terbaca sebagai
 kesalahan pengenalan.
 
+**BACKEND ONNX RUNTIME, DIPASANG 24-11 - kemenangan terbesar proyek ini sejauh ini.**
+paddlex 3.7.2 punya engine `onnxruntime`, `onnxruntime` sudah ikut terpasang sejak dulu,
+dan paddlex mengunduh sendiri varian `*_onnx` dari model yang sama. **Nol dependensi
+baru, nol konversi, tanpa paddle2onnx.** Saklarnya `vision.document.paddle.engine`.
+
+| | sebelum | sesudah |
+|---|---|---|
+| dokumen CER | 14,9% (EasyOCR) | **9,0%** |
+| dokumen median / terburuk | 8,04 s / 12,29 s | **2,08 s / 2,62 s** |
+| kedaluwarsa | 81% | **81%, identik per berkas** |
+| kedaluwarsa median / terburuk | 7,40 s / **90,50 s** | **2,39 s / 9,74 s** |
+| giliran dokumen penuh | 11,72 s | **3,38 s** |
+| `Pipeline.load()` | 10,83 s | **9,77 s** |
+
+Ekor kedaluwarsa 90,50 -> 9,74 detik berarti `expiry.budget_s: 90.0` tidak akan pernah
+tersentuh dan batas 120 detik Vercel berhenti jadi risiko arsitektur.
+Ablasi pra-pemrosesan **BERBALIK ARAH**: dengan EasyOCR netral-cenderung merugikan
+(14,9% dengan, 14,2% tanpa), dengan ONNX **membantu +3,4 poin** (9,0% lawan 12,4%).
+Jadi kesimpulan lama "Ablasi PRD nomor 1 negatif" **tidak lagi berlaku untuk mesin ini**.
+
+**PENGENALNYA WAJIB TERPISAH PER MODUL, dan itu terukur.** `PP-OCRv5_mobile_rec` yang
+memenangkan dokumen menjatuhkan kedaluwarsa **81% -> 62%** (`tolakangin1`, `kecapasin`,
+`merica` jadi DIAM): cetakan dot-matrix kemasan butuh `PP-OCRv6_medium_rec`, kertas A4
+tidak. Karena itu `vision.expiry.paddle` boleh menimpa `vision.document.paddle`, dan
+timpaan apa pun **memaksa pembaca terpisah** walau mesinnya sama.
+**Aturan itu punya SATU rumah: `pipeline.cfg_ocr_kedaluwarsa()`.** Skrip ukur WAJIB
+memakainya. Versi pertama perubahan ini membiarkan `scripts/ukur_kedaluwarsa.py`
+menyusun confignya sendiri, skrip itu melewatkan timpaannya, dan melaporkan **62% untuk
+config yang sebenarnya 81%** - angkanya masuk akal sepenuhnya dan satu-satunya petunjuk
+adalah baris `[saklar]`. **Kedua skrip ukur juga TIDAK PERNAH mencatat waktu sebelum
+24-11**; kolom `detik` dan median/terburuk/total baru ditambahkan hari itu.
+
 **Konfigurasi terkunci (jangan diubah tanpa mengukur ulang):**
-mesin OCR dipisah per modul - dokumen EasyOCR, kedaluwarsa PaddleOCR + `mobile_det`;
+mesin OCR **PaddleOCR + `onnxruntime` untuk dua-duanya**, pengenal berbeda
+(dokumen `PP-OCRv5_mobile_rec`, kedaluwarsa bawaan `PP-OCRv6_medium_rec`), `mobile_det`;
 `expiry.preprocess_chain: hanya_resize` (resize WAJIB ada, ia pengendali latensi);
 `resize.max_side: 1600`; `rotate_retry: [180, 90, 270]`; `zone_score_min: 0.40`.
 
@@ -974,7 +1017,14 @@ Laporan status untuk tim: `docs/status-proyek.md` (28-10), memuat daftar angka U
 (laporan, README, video demo, slide). `assets/tts/` sudah lengkap 69 klip.
 
 Utang yang sudah diketahui:
-- **PENYIMPANGAN PRD NFR-01 diterima dengan sengaja (02-10): latensi end-to-end 11,4-11,5 detik untuk
+- **PENYIMPANGAN NFR-01 DICABUT 24-11.** Sesudah backend ONNX, keempat intent lolos: uang 1,4 s,
+  kendali 1,3 s, kedaluwarsa 3,0 s, dokumen 5,0 s - seluruhnya di bawah 8 detik, dan PRD Bagian 11
+  menilai dari median. **Tetap sebutkan ekornya**: dokumen maks 9,5 s dan kedaluwarsa maks 11,9 s,
+  jadi sebagian foto masih lewat walau mediannya lolos. **Putaran PERTAMA hari itu memberi dokumen
+  12,4 detik dan itu artefak transien** - putaran kedua 5,0 detik, dan yang kedua dipercaya karena
+  cocok dengan pengukuran komponen terpisah (STT 1,3 + pipeline 2,6 + TTS 1,2), bukan karena lebih
+  bagus. Satu putaran tidak boleh dikutip. Paragraf di bawah ini ditahan sebagai JEJAK SEJARAH:
+- ~~**PENYIMPANGAN PRD NFR-01 diterima dengan sengaja (02-10)**~~ (sudah tidak berlaku): latensi end-to-end 11,4-11,5 detik untuk
   intent dokumen dan kedaluwarsa, sedangkan NFR-01 menulis <= 8 detik.** Diukur pada 64 foto dengan
   STT + pipeline + TTS render, pemuatan model tidak dihitung. Yang lolos: uang 1,4 s dan kendali 1,3 s.
   Tiga tuas dicoba dan semuanya gagal menurunkan latensi tanpa mengorbankan akurasi:

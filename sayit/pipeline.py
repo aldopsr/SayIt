@@ -51,6 +51,37 @@ class Turn:
         return to_plain_text(self.utterance)
 
 
+def berbagi_pembaca_kedaluwarsa(cfg: dict) -> bool:
+    """Bolehkah modul kedaluwarsa memakai pembaca OCR milik modul dokumen?
+
+    Hanya bila mesinnya sama DAN setelannya tidak ditimpa. Memuat dua kali memakan
+    waktu dan memori dua kali lipat, jadi berbagi adalah bawaan - tetapi mesin yang
+    sama belum tentu berarti setelan yang sama.
+    """
+    e = cfg["vision"]["expiry"]
+    mesin = e.get("engine")
+    sama = not mesin or mesin == cfg["vision"]["document"].get("engine", "easyocr")
+    return sama and not (e.get("paddle") or {})
+
+
+def cfg_ocr_kedaluwarsa(cfg: dict) -> dict:
+    """Salinan config dengan mesin dan timpaan `vision.expiry.paddle` diterapkan.
+
+    SATU-SATUNYA tempat aturan ini ditulis. Skrip pengukuran WAJIB memakainya, bukan
+    menyusun ulang sendiri: versi pertama perubahan 24-11 membiarkan
+    `scripts/ukur_kedaluwarsa.py` membangun pembacanya sendiri, dan skrip itu diam-diam
+    melewatkan timpaannya sehingga melaporkan 62% untuk config yang sebenarnya 81%.
+    Angkanya terlihat masuk akal sepenuhnya - hanya baris `[saklar]` yang membocorkannya.
+    """
+    import copy as _copy
+    c = _copy.deepcopy(cfg)
+    e = cfg["vision"]["expiry"]
+    if e.get("engine"):
+        c["vision"]["document"]["engine"] = e["engine"]
+    c["vision"]["document"].setdefault("paddle", {}).update(e.get("paddle") or {})
+    return c
+
+
 class Pipeline:
     def __init__(self, cfg: dict, transcriber=None, money: MoneyDetector | None = None,
                  ocr: DocumentReader | None = None, expiry: ExpiryReader | None = None,
@@ -84,12 +115,9 @@ class Pipeline:
         Tes yang ingin menghindari pemuatan mesin kedua cukup mengoper `ocr_expiry=`
         atau `expiry=`; keduanya mendahului pembuatan otomatis di sini.
         """
-        mesin = self.cfg["vision"]["expiry"].get("engine")
-        if not mesin or mesin == self.cfg["vision"]["document"].get("engine", "easyocr"):
+        if berbagi_pembaca_kedaluwarsa(self.cfg):
             return self.ocr
-        cfg_exp = copy.deepcopy(self.cfg)
-        cfg_exp["vision"]["document"]["engine"] = mesin
-        return DocumentReader(cfg_exp)
+        return DocumentReader(cfg_ocr_kedaluwarsa(self.cfg))
 
     # ------------------------------------------------------------------ pemuatan
 

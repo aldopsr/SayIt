@@ -453,6 +453,7 @@ def test_mesin_sama_memakai_satu_pembaca(cfg):
     """Memuat dua kali memakan 4 detik dan memori dua kali lipat."""
     cfg["vision"]["document"]["engine"] = "easyocr"
     cfg["vision"]["expiry"]["engine"] = "easyocr"
+    cfg["vision"]["expiry"]["paddle"] = {}      # tanpa timpaan setelan
     dok = object()
     p = Pipeline(cfg, ocr=dok)
     assert p.ocr_expiry is dok
@@ -460,6 +461,29 @@ def test_mesin_sama_memakai_satu_pembaca(cfg):
 
 def test_engine_kedaluwarsa_kosong_memakai_mesin_dokumen(cfg):
     cfg["vision"]["expiry"]["engine"] = None
+    cfg["vision"]["expiry"]["paddle"] = {}      # tanpa timpaan setelan
     dok = object()
     p = Pipeline(cfg, ocr=dok)
     assert p.ocr_expiry is dok
+
+
+def test_timpaan_paddle_expiry_memaksa_pembaca_terpisah(cfg):
+    """Mesin sama belum tentu setelan sama.
+
+    Terukur 24-11: `PP-OCRv5_mobile_rec` memberi dokumen CER 9,0% pada 2,16 detik
+    tetapi menjatuhkan kedaluwarsa 81% -> 62%. Jadi begitu `vision.expiry.paddle`
+    mengisi sesuatu, pembacanya TIDAK boleh dipakai bersama walau mesinnya sama -
+    kalau dipakai bersama, modul kedaluwarsa diam-diam ikut memakai mobile_rec.
+    """
+    cfg["vision"]["document"]["engine"] = "paddleocr"
+    cfg["vision"]["expiry"]["engine"] = "paddleocr"
+    cfg["vision"]["document"]["paddle"]["text_recognition_model_name"] = "PP-OCRv5_mobile_rec"
+    cfg["vision"]["expiry"]["paddle"] = {"text_recognition_model_name": None}
+    dok = object()
+    p = Pipeline(cfg, ocr=dok)
+    assert p.ocr_expiry is not dok
+    # dan timpaannya benar-benar sampai ke pembaca kedaluwarsa
+    assert p.ocr_expiry.d["paddle"]["text_recognition_model_name"] is None
+    # tanpa mengubah config milik modul dokumen
+    assert (cfg["vision"]["document"]["paddle"]["text_recognition_model_name"]
+            == "PP-OCRv5_mobile_rec")

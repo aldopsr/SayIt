@@ -22,6 +22,8 @@ Pemakaian:
 from __future__ import annotations
 
 import argparse
+import time
+import statistics
 import sys
 from datetime import date
 from pathlib import Path
@@ -30,6 +32,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from sayit.config import load_config, project_path            # noqa: E402
 from sayit.gambar import baca, daftar_gambar                  # noqa: E402
+from sayit.pipeline import cfg_ocr_kedaluwarsa          # noqa: E402
 from sayit.vision.document import DocumentReader              # noqa: E402
 from sayit.vision.expiry import ExpiryReader                  # noqa: E402
 
@@ -61,6 +64,11 @@ def main() -> int:
     # Memutar POTONGAN zona lawan memutar gambar penuh. Uji lapangan 12-11:
     # Indomie 44,9 detik habis di rotate_retry yang mengulang deteksi zona pada
     # gambar 3000x4000 empat kali, padahal zonanya ketemu di lintasan pertama.
+    ap.add_argument("--engine", default=None,
+                    help="timpa vision.document.paddle.engine, backend inferensi "
+                         "(mis. onnxruntime)")
+    ap.add_argument("--rec-model", default=None,
+                    help="timpa vision.document.paddle.text_recognition_model_name")
     ap.add_argument("--rotasi-potongan", dest="rotasi_potongan",
                     action=argparse.BooleanOptionalAction, default=None,
                     help="timpa vision.expiry.rotate_crop untuk pengukuran ini saja")
@@ -83,19 +91,33 @@ def main() -> int:
     # Modul kedaluwarsa boleh memakai mesin OCR sendiri (`vision.expiry.engine`),
     # sama seperti yang dilakukan Pipeline. Tanpa ini skrip akan mengukur mesin
     # modul dokumen dan angkanya tidak mewakili perilaku aplikasi.
-    mesin = args.mesin or cfg["vision"]["expiry"].get("engine")
+    # Mesin DAN timpaan setelan modul kedaluwarsa diambil dari satu tempat yang sama
+    # dengan yang dipakai Pipeline. Menyusunnya ulang di sini pernah membuat skrip
+    # melaporkan 62% untuk config yang sebenarnya 81% (24-11).
+    if args.mesin:
+        cfg["vision"]["expiry"]["engine"] = args.mesin
+    mesin = cfg["vision"]["expiry"].get("engine")
+    cfg = cfg_ocr_kedaluwarsa(cfg)
     if mesin:
-        cfg["vision"]["document"]["engine"] = mesin
         print(f"Mesin OCR modul kedaluwarsa: {mesin!r}.")
+    # Aturan 20-11: cetak NILAI saklar tiap kondisi. Baris inilah yang menangkap
+    # bug 24-11 - akurasinya terbaca 62% dan masuk akal, dan satu-satunya petunjuk
+    # bahwa yang terukur bukan config sungguhan adalah `rec` di baris ini.
+    pdl = cfg["vision"]["document"].get("paddle", {})
+    print(f"[saklar] mesin={mesin} backend={pdl.get('engine') or 'paddle (bawaan)'} "
+          f"det={pdl.get('text_detection_model_name')} "
+          f"rec={pdl.get('text_recognition_model_name') or 'bawaan (PP-OCRv6_medium_rec)'}")
     ocr = DocumentReader(cfg)
     ocr.load()
     pembaca = ExpiryReader(cfg, ocr=ocr)
     hari_ini = date.today()
 
-    print(f"\n{'berkas':<32} {'harapan':>12} {'dgn pra':>12} {'tanpa pra':>12}")
-    print("-" * 72)
+    print(f"\n{'berkas':<32} {'harapan':>12} {'dgn pra':>12} {'tanpa pra':>12} {'detik':>8}")
+    print("-" * 81)
     benar = {True: 0, False: 0}
     dinilai = 0
+    # Waktu hanya pada kondisi APA ADANYA - itu yang dijalankan aplikasi.
+    waktu: list[float] = []
     for p in berkas:
         harapan, hanya_bulan = harapan_dari_nama(p)
         if harapan is None:
@@ -105,7 +127,10 @@ def main() -> int:
         img = baca(p)
         tampil = {}
         for pakai in (True, False):
+            t0 = time.perf_counter()
             hasil = pembaca.read(img, today=hari_ini) if pakai else baca_tanpa_pra(pembaca, img, hari_ini)
+            if pakai:
+                waktu.append(time.perf_counter() - t0)
             nilai = hasil.date.value
             if harapan == "kosong":
                 cocok = nilai is None
@@ -126,14 +151,20 @@ def main() -> int:
         teks_harapan = ("kosong" if harapan == "kosong"
                         else (f"{harapan.year}-{harapan.month:02d}" if hanya_bulan
                               else harapan.isoformat()))
-        print(f"{p.name:<32} {teks_harapan:>12} {tampil[True]:>12} {tampil[False]:>12}")
+        print(f"{p.name:<32} {teks_harapan:>12} {tampil[True]:>12} {tampil[False]:>12} "
+              f"{waktu[-1]:>7.2f}s")
 
-    print("-" * 72)
+    print("-" * 81)
     if not dinilai:
         print("Tidak ada berkas yang bisa dinilai.")
         return 1
     a, b = benar[True] / dinilai, benar[False] / dinilai
     print(f"{'AKURASI (' + str(dinilai) + ' kemasan)':<32} {'':>12} {a:>11.0%} {b:>11.0%}")
+    if waktu:
+        # Median SAJA menyesatkan di modul ini: satu kemasan pernah 90-149 detik.
+        # Aturan tercatat 20-11 - sebutkan median DAN terburuknya.
+        print(f"Waktu (kondisi apa adanya): median {statistics.median(waktu):.2f}s   "
+              f"terburuk {max(waktu):.2f}s   total {sum(waktu):.1f}s")
     print(f"\nTarget PRD Bagian 11: >= 70%. {'TERCAPAI' if a >= 0.7 else 'BELUM TERCAPAI'} "
           f"pada kondisi apa adanya.")
     e = cfg["vision"]["expiry"]

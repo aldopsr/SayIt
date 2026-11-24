@@ -538,6 +538,11 @@ def _buat_paddle(d: dict):
         extra["text_recognition_model_name"] = p["text_recognition_model_name"]
     if p.get("text_recognition_batch_size"):
         extra["text_recognition_batch_size"] = int(p["text_recognition_batch_size"])
+    # Backend inferensi. Bawaan PaddlePaddle; `onnxruntime` memakai varian ONNX dari
+    # model yang sama (paddlex mengunduhnya sendiri sebagai `<nama>_onnx`, tidak perlu
+    # paddle2onnx). `onnxruntime` sudah ikut terpasang, jadi ini bukan dependensi baru.
+    if p.get("engine"):
+        extra["engine"] = p["engine"]
     return PaddleOCR(
         lang=p.get("lang", "id"),
         ocr_version=p.get("ocr_version", "PP-OCRv5"),

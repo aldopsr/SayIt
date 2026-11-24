@@ -307,7 +307,12 @@ vision:
 
   # Modul dokumen (PRD 8.7). Bobot EasyOCR diunduh otomatis saat pertama dipakai.
   document:
-    engine: easyocr             # "easyocr" atau "paddleocr"; lihat ablasi PRD nomor 2
+    # DIUBAH 24-11 easyocr -> paddleocr, setelah backend ONNX membuatnya menang di
+    # KEDUA sumbu sekaligus pada 13 dokumen beracuan, satu sesi:
+    #   EasyOCR            CER 14,9%  median 8,04 s  terburuk 12,29 s
+    #   paddle (bawaan)    CER  9,0%  median 20,40 s
+    #   ONNX + mobile_rec  CER  9,0%  median  2,16 s  terburuk  2,71 s   <- ini
+    engine: paddleocr           # "easyocr" atau "paddleocr"; lihat ablasi PRD nomor 2
     paddle:                     # hanya dipakai bila engine = paddleocr
       # PERINGATAN (07-10): begitu `text_detection_model_name` diisi, PaddleOCR
       # MENGABAIKAN `lang` dan `ocr_version` - lognya menyebut itu sendiri, dan
@@ -318,6 +323,9 @@ vision:
       # PP-OCRv6 (bawaan paddleocr 3.7) menabrak NotImplementedError di oneDNN pada
       # paddlepaddle 3.3.1, jadi versi model dipaksa v5 dan oneDNN dimatikan.
       ocr_version: PP-OCRv5
+      # Backend inferensi: null = PaddlePaddle bawaan, "onnxruntime" = varian ONNX
+      # dari model yang sama (paddlex mengunduhnya sendiri). Diukur 24-11.
+      engine: onnxruntime
       enable_mkldnn: false
       # Model deteksi bawaan adalah versi `server` yang berat. Terukur 02-10 pada
       # kecapasin: server 10,9 s (800 px) / 18,5 s (1200 px); mobile 2,5 s pada kedua
@@ -326,7 +334,10 @@ vision:
       # Model PENGENALAN. Biaya PaddleOCR pada dokumen padat teks ada di sini, bukan
       # di deteksi: 41,8 detik/halaman (02-10), dan memperkecil gambar hampir tidak
       # menolong karena biayanya per BARIS. Kosongkan untuk memakai bawaan.
-      text_recognition_model_name:
+      # mobile_rec dipilih 24-11: CER 9,0% pada 2,16 s, lawan rec bawaan
+      # (PP-OCRv6_medium_rec) 9,2% pada 4,32 s dengan ekor 18,23 s.
+      # JANGAN disamakan dengan modul kedaluwarsa - lihat vision.expiry.paddle.
+      text_recognition_model_name: PP-OCRv5_mobile_rec
       text_recognition_batch_size:
       # Pengklasifikasi orientasi BARIS: menegakkan teks terbalik sebelum dikenali.
       use_textline_orientation: false
@@ -482,6 +493,14 @@ vision:
     # proses sudah diuji dan aman dengan mobile_det (crash 01-10 disebabkan
     # server_det pada foto 3024x4032, bukan oleh koeksistensi mesin).
     engine: paddleocr
+    # Menimpa vision.document.paddle UNTUK MODUL INI SAJA. Mesinnya sama
+    # (paddleocr) tetapi setelannya tidak boleh sama, jadi pembacanya sengaja
+    # TIDAK dipakai bersama - lihat Pipeline._ocr_untuk_kedaluwarsa.
+    # Terukur 24-11 pada 16 kemasan: rec bawaan (PP-OCRv6_medium_rec) 81%,
+    # PP-OCRv5_mobile_rec hanya 62% (tolakangin1, kecapasin, merica jadi DIAM).
+    # Cetakan dot-matrix kemasan butuh pengenal yang lebih besar; kertas A4 tidak.
+    paddle:
+      text_recognition_model_name:      # kosong = PP-OCRv6_medium_rec
     zone_weights: models/best_zone.pt
     device: cpu
     imgsz: 640
