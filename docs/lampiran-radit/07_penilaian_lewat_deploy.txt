@@ -1,3 +1,8 @@
+=== DIGANTIKAN oleh 12_penilaian_deploy_onnx.txt (24 Nov, backend ONNX) ===
+Akurasinya SAMA (12 BENAR / 2 SALAH / 2 KOSONG = 75%), tetapi seluruh
+angka WAKTU di bawah ini dari backend lama. Berkas ini ditahan sebagai
+jejak, bukan untuk dikutip. Lihat 11_PERUBAHAN_KEDALUWARSA_24NOV.md.
+
 48 percobaan, 16 gambar unik, hari ini = 2026-11-24
 
 gambar                                acuan   nilai  median s   maks s  jawaban

@@ -117,7 +117,11 @@ def main() -> int:
         tally[nilai] += 1
         sebab_per[nama] = sebab
 
-        tot = [float(r["total_s"]) for r in rows if r["total_s"]]
+        # Lampiran lama memakai `total_s_BACKEND_LAMA`: kolom waktunya sengaja
+        # diberi nama itu supaya pembaca manusia tahu angkanya dari backend
+        # sebelum ONNX. Diterima di sini agar berkas lama tetap bisa dinilai.
+        kol = "total_s" if "total_s" in rows[0] else "total_s_BACKEND_LAMA"
+        tot = [float(r[kol]) for r in rows if r.get(kol)]
         semua_total += tot
         med = statistics.median(tot) if tot else 0.0
         mx = max(tot) if tot else 0.0

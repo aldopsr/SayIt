@@ -1,4 +1,4 @@
-gambar,pengulangan,foto_s,tanya_s,total_s,diterima,intent,status,jawaban
+gambar,pengulangan,foto_s_BACKEND_LAMA,tanya_s_BACKEND_LAMA,total_s_BACKEND_LAMA,diterima,intent,status,jawaban
 20260411_ajinomoto.JPG,1,2.4,8.07,10.47,True,KEDALUWARSA,200/200,"Saya kurang yakin, tetapi tanggal yang terbaca adalah sebelas April dua ribu dua puluh enam. Produk sudah melewati tanggal kedaluwarsa sejak sekitar delapan bul"
 20261008.JPG,1,1.17,16.96,18.13,True,KEDALUWARSA,200/200,"Saya kurang yakin, tetapi tanggal yang terbaca adalah delapan Oktober dua ribu dua puluh enam. Produk sudah melewati tanggal kedaluwarsa sejak sekitar tujuh min"
 20270120_miesedap.JPG,1,1.36,2.17,3.53,True,KEDALUWARSA,200/200,"Tanggal kedaluwarsa dua puluh Januari dua ribu dua puluh tujuh. Produk masih berlaku, sisa sekitar delapan minggu."

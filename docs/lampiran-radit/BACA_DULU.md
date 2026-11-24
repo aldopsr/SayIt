@@ -1,5 +1,35 @@
 # Lampiran jurnal kedaluwarsa — lima permintaan Radit
 
+> # ⚠ SEBAGIAN BERKAS INI SUDAH USANG (per 24 November 2026)
+>
+> Modul kedaluwarsa dipindah ke backend **ONNX Runtime** pada 24 November.
+> **Baca `11_PERUBAHAN_KEDALUWARSA_24NOV.md` sebelum mengutip apa pun dari
+> berkas ini.**
+>
+> **Yang MASIH BERLAKU di berkas ini: seluruh angka AKURASI.** Akurasi tidak
+> berubah sama sekali — 81% (13 BENAR / 2 SALAH / 1 KOSONG), dan jawabannya
+> identik pada keenam belas berkas. Begitu pula seluruh pembahasan model zona
+> 4 kelas, tanggal acuan, komposisi set uji, dan resubstitusi.
+>
+> **Yang SUDAH TIDAK BERLAKU: seluruh angka LATENSI, dan seluruh pembahasan
+> batas 120 detik.**
+>
+> | di berkas ini | ganti dengan |
+> |---|---|
+> | median modul **7,82 s** (bagian 2, 3) | **2,39 s** |
+> | terburuk **90,0 s** (bagian 3, "Rerata atau median?") | **9,74 s** |
+> | total **262,1 s** (bagian 3) | **42,7 s** |
+> | median lewat deploy **12,38 s** (bagian 5) | **4,73 s** |
+> | "4 kelas median 20,2 s" (bagian 2) | diukur pada backend lama; rasionya masih sah, angka detiknya tidak |
+> | **seluruh** pembahasan proksi Vercel 502 dan batas 120 detik | sudah tidak terjadi: 48 dari 48 percobaan berhasil, maksimum 38,32 s |
+> | "modul ini menyimpang dari NFR-01" (bagian 2) | **NFR-01 TERPENUHI**, median 3,0 s |
+>
+> Alasan membaginya begini: perubahan 24 November **murni optimasi runtime** —
+> model, bobot, dan parameter pasca-pemrosesan tidak disentuh. Jadi semua yang
+> berbicara tentang *apa yang dikenali* tetap sah, dan hanya yang berbicara
+> tentang *berapa lama* yang perlu diganti.
+
+
 Disusun 23 November 2026, repo pada commit `b988ada`.
 
 **Bingung buka yang mana? Lihat `00_PETA_BERKAS.md`.**

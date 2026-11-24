@@ -1,4 +1,4 @@
-kondisi,bobot,jumlah_kelas,zone_score_min,kelas_ditolak,BENAR,SALAH,KOSONG,akurasi_persen,median_detik,terburuk_detik,total_detik,zona_ketemu_dari_16,mAP50_split_test,AP50_kelas_date
+kondisi,bobot,jumlah_kelas,zone_score_min,kelas_ditolak,BENAR,SALAH,KOSONG,akurasi_persen,median_detik_BACKEND_LAMA,terburuk_detik_BACKEND_LAMA,total_detik_BACKEND_LAMA,zona_ketemu_dari_16,mAP50_split_test,AP50_kelas_date
 DIPAKAI PRODUKSI,best_zone.pt,1,0.40,(tidak berlaku),13,2,1,81,7.82,90.0,262.1,7,tidak tercatat,tidak berlaku
 4 kelas satu dataset,best_zone_4kelas_zone_4kelas_v1_20261119_1837.pt,4,0.40,"code,prod",13,0,3,81,20.23,,,2,0.8643,0.9384
 4 kelas gabungan,best_zone_gabungan_20261120_0325.pt,4,0.40,"code,prod",13,0,3,81,20.18,,,3,0.7813,0.6305
