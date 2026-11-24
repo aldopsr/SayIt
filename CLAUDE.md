@@ -280,6 +280,16 @@ yang ditolak quality gate. Empat tempat pernah menyimpulkannya dari intent dan
 keempatnya salah; akibatnya pengguna diminta bertanya tentang foto yang tidak pernah
 tersimpan. Ada tesnya di `tests/test_pipeline.py`.
 
+**RANA SEBELUM FRAME PERTAMA (diperbaiki 24-11).** `CAMERA_READY` disetel begitu
+`getUserMedia` **resolve**, bukan saat frame pertama terdekode - dan `ucapkanSambutan()`
+berbunyi di detik yang sama mengajak pengguna mengetuk layar. Dulu `ambilFoto()` hanya
+memeriksa `if (videoRef.current)`, sehingga pada `videoWidth === 0` seluruh aritmetikanya
+jadi `NaN`, kanvasnya **0x0**, dan `toDataURL` mengembalikan `"data:,"`. Gambar 0 bita itu
+**diterima** `fetch` (200, `text/plain`), dikirim ke `/foto`, dibalas **500**, lalu gagal di
+`r.json()` - sehingga pengguna mendengar "Tidak bisa terhubung ke SayIt" padahal
+koneksinya sehat. **Setiap `toDataURL` wajib didahului penjaga `videoWidth > 0`**, dan
+penjaga di sekitar `fetch` TIDAK menolong: `fetch("data:,")` tidak pernah melempar.
+
 Sudah di-push: https://github.com/aldopsr/SayIt
 
 **Hosting backend: laptop sendiri + `ngrok http 8000`, BUKAN Hugging Face Spaces.**
@@ -900,12 +910,26 @@ perlu ditinjau ulang. Terlemah per proporsi: **1000 (3/4, hanya 4 kotak latih),
 
 Bobot yang DIPASANG di `models/best_money.pt` masih **v2** (MD5
 `bc09a6fc2c9fedbb38c39aa8aba44672`; model lama di `models/best_money_SEBELUM_v2.pt`).
-`money_kfold_v3_final/weights/best.pt` sudah ada di Drive (6.515.946 bita, optimizer
-dibuang = latihan selesai normal) tetapi **belum diunduh dan belum dipasang** - keputusan
-pengguna. Angka laporan dan model yang dipakai sebaiknya dari dataset yang sama;
-ketidakcocokan latih-pakai adalah persis jebakan CLAHE 28-10.
-`score_min` tetap **0,30** sampai diputuskan lain; sapuan v3 menunjukkan **0,25 lebih baik
-di dua sisi sekaligus** (+1 benar, diam 1 -> 0, salah tetap 11).
+**KEPUTUSAN 24-11: TETAP v2, dan v3 TIDAK dipasang.** Bukan karena belum sempat -
+karena diukur. Perbandingan BERPASANGAN pada 78 berkas yang ada di kedua k-fold, tiap
+prediksi held-out di lipatannya sendiri: **v2 71 BENAR / 7 SALAH / 0 DIAM = 91,0%** lawan
+**v3 67 / 10 / 1 = 85,9%**. Ketidaksepakatannya **5 lawan 1** (v2 benar & v3 salah:
+`01210`, `01215`, `01227`, `01241`, `01261`; sebaliknya hanya `01208`), McNemar tepat
+**p = 0,219**.
+**Kecepatannya IDENTIK dan itu bukan taksiran**: keduanya `yolov8n.pt`, `imgsz 640`,
+100 epoch, batch 16 - yang berbeda hanya data latih. Jadi tidak ada pertukaran
+cepat-lawan-akurat untuk dipilih; satu-satunya sumbu adalah akurasi, dan di situ tidak ada
+satu pun bukti yang mendukung v3. Mengeluarkan satu label cacat memperbaiki **kebersihan
+dataset**, bukan modelnya.
+p = 0,219 berarti **belum signifikan** pada n=78, jadi jangan mengklaim v2 terbukti lebih
+baik - yang terbukti hanya bahwa tidak ada alasan menukar. Dua kesalahan BARU v3 adalah
+salah hitung lembar (`01210` 10000->30000, `01241` 2000->4000), keduanya BENAR pada v2.
+**Jangan ulangi sapuan ini dengan menjalankan kedua bobot pada `data/uji_sendiri/`**:
+seluruh 80 foto ikut melatih KEDUA model, jadi itu resubstitusi untuk dua-duanya dan hanya
+bisa mendeteksi kerusakan total. Bobot v3 ada di Drive sebagai
+`best_money_kfold_20261110_0244.pt` (6.515.946 bita) bila kelak diperlukan.
+`score_min` tetap **0,30**; sapuan v3 yang menunjukkan 0,25 lebih baik di dua sisi berlaku
+untuk bobot v3, yang tidak dipakai.
 
 **CLAHE SUDAH DIBUANG dari rangkaian `uang` (28-10): `[resize, clahe]` -> `[resize]`.**
 Sebabnya ketidakcocokan latih-pakai - notebook melatih pada gambar ASLI, aplikasi dulu

@@ -1685,8 +1685,26 @@ export default function SayItPage() {
   const ambilFoto = () => {
     aktifRef.current = performance.now();
     if (appState === 'CAMERA_READY') {
+      /* `videoWidth` nol berarti elemennya belum mendekode satu frame pun.
+         Itu BUKAN kasus pinggiran: CAMERA_READY disetel begitu getUserMedia
+         resolve, dan di detik yang sama sambutan mengajak pengguna mengetuk
+         layar - jadi jendela rawannya jatuh tepat saat pengguna tunanetra
+         paling mungkin menekan rana.
+
+         Tanpa penjaga ini `scale` jadi Infinity, cropW/cropH jadi NaN,
+         kanvasnya 0x0, dan toDataURL mengembalikan string "data:," - gambar
+         0 bita yang DITERIMA fetch (200, text/plain), dikirim ke /foto,
+         dibalas 500, lalu gagal di r.json() sehingga pengguna mendengar
+         "Tidak bisa terhubung ke SayIt" padahal koneksinya sehat.
+         Terverifikasi di deploy 24-11. */
+      const siap = videoRef.current?.videoWidth > 0;
+      if (!siap && !DEMO) {
+        peringatkan('Kamera belum siap',
+                    'Tunggu sebentar sampai berbunyi, lalu ketuk layar lagi.');
+        return;
+      }
       let imageUrl = null;
-      if (videoRef.current) {
+      if (siap) {
         const video = videoRef.current;
         const vw = video.videoWidth;
         const vh = video.videoHeight;
