@@ -1,0 +1,29 @@
+48 percobaan, 16 gambar unik, hari ini = 2026-11-24
+
+gambar                                acuan   nilai  median s   maks s  jawaban
+----------------------------------------------------------------------------------------------------------------------
+20260411_ajinomoto.JPG           2026-04-11   BENAR     5.11s    7.50s  saya kurang yakin, tetapi tanggal yang ter
+20261008.JPG                     2026-10-08   BENAR     4.96s   10.71s  saya kurang yakin, tetapi tanggal yang ter
+20270120_miesedap.JPG            2027-01-20   BENAR     2.96s    4.08s  tanggal kedaluwarsa dua puluh januari dua 
+20270311_mentega.JPG             2027-03-11   BENAR     3.59s    7.79s  tanggal kedaluwarsa sebelas maret dua ribu
+20270321_chees.JPG               2027-03-21   SALAH     7.79s   17.48s  tanggal kedaluwarsa dua puluh satu mei dua
+20270602_indofood.JPG            2027-06-02   BENAR     4.36s    4.97s  tanggal kedaluwarsa dua juni dua ribu dua 
+20270906.JPG                     2027-09-06   BENAR     4.39s    8.93s  saya kurang yakin, tetapi tanggal yang ter
+20270927_ovaltine.JPG            2027-09-27   SALAH     2.55s    5.66s  berlaku sampai september dua ribu dua pulu
+202804_tolakangin1.HEIC             2028-04   BENAR     5.17s   15.63s  saya kurang yakin, tetapi tanggal yang ter
+202804_tolakangin2.PNG              2028-04  KOSONG    15.34s   38.32s  tulisan terbaca, bukan tanggal
+20290211_kecapasin.JPG           2029-02-11   BENAR     3.08s    4.54s  tanggal kedaluwarsa sebelas februari dua r
+20290306_merica.JPG              2029-03-06   BENAR     3.93s    4.78s  saya kurang yakin, tetapi tanggal yang ter
+20290821_tisu1.PNG               2029-08-21  KOSONG     1.91s    3.65s  DITOLAK quality gate
+20290821_tisu2.PNG               2029-08-21   BENAR     4.90s    5.36s  saya kurang yakin, tetapi tanggal yang ter
+tidakada_permen1.jpeg                kosong   BENAR     4.96s    4.99s  tulisan terbaca, bukan tanggal
+tidakada_permen2.jpeg                kosong   BENAR     3.71s    3.82s  tidak menemukan tanggal
+----------------------------------------------------------------------------------------------------------------------
+LEWAT DEPLOY: 12 BENAR / 2 SALAH / 2 KOSONG dari 16 = 75%
+Pembanding pengukuran LOKAL (ExpiryReader.read langsung): 13 / 2 / 1 = 81%
+
+TOTAL per giliran: median 4.73 s   rerata 6.22 s   maks 38.32 s   n=48
+DITOLAK quality gate sebelum OCR: 1 gambar
+  20290821_tisu1.PNG             DITOLAK quality gate
+
+Penilaian memakai fungsi ujaran proyek sendiri, bukan pencocokan kata tangan.

@@ -1,5 +1,15 @@
 # Peta berkas — buka yang mana untuk apa
 
+> **BACA INI DULU (diperbarui 24 November 2026).** Modul kedaluwarsa berubah
+> hari ini: mesin OCR-nya dipindah ke backend ONNX Runtime. **Akurasinya TIDAK
+> berubah** (81%, identik per berkas), tetapi **seluruh angka LATENSI di
+> berkas-berkas lama sudah usang.** Buka
+> **`11_PERUBAHAN_KEDALUWARSA_24NOV.md`** lebih dulu — di situ ada daftar
+> persis baris mana yang tidak boleh dikutip lagi, dan angka penggantinya.
+> Berkas baru: `09_waktu_respons_deploy_onnx.csv`,
+> `10_latensi_kedaluwarsa_sebelum_sesudah.csv`, `12_penilaian_deploy_onnx.txt`.
+
+
 Sembilan berkas. **Mulai dari `BACA_DULU.md`** — di situ seluruh penjelasannya;
 berkas lain adalah datanya.
 
@@ -68,6 +78,24 @@ sungguhan, jadi memuat jaringan dan antrean.
 ### `07_penilaian_lewat_deploy.txt`
 Keluaran penilai: benar/salah/kosong per gambar **berdasarkan jawaban yang
 benar-benar diucapkan sistem**, bukan pemanggilan fungsi lokal.
+
+### `09_waktu_respons_deploy_onnx.csv` — 48 baris
+Pengganti `06`. Satu baris per percobaan lewat deploy SESUDAH backend ONNX:
+16 gambar x 3 pengulangan, 48 dari 48 berhasil, median total 4,73 s.
+
+### `10_latensi_kedaluwarsa_sebelum_sesudah.csv` — 16 baris
+Per kemasan: jawaban sebelum dan sesudah (kolom `jawaban_identik` seluruhnya
+`ya`), waktu sebelum dan sesudah, dan rasio percepatannya.
+
+### `11_PERUBAHAN_KEDALUWARSA_24NOV.md` — **mulai dari sini untuk yang baru**
+Penjelasan lengkap perubahan 24 November: apa yang diubah, hasilnya, kenapa
+pengenalnya harus terpisah per modul, status NFR-01, daftar angka lama yang
+usang, daftar hal yang TIDAK boleh diklaim, cara mereproduksi tiap angka, dan
+kalimat siap pakai.
+
+### `12_penilaian_deploy_onnx.txt`
+Pengganti `07`. Penilaian benar/salah/kosong dari jawaban yang benar-benar
+diucapkan sistem sesudah ONNX: 12 / 2 / 2 = 75%, sama seperti sebelumnya.
 
 ### `08_subset_foto_kamera.txt`
 Akurasi pada seluruh 16 berkas lawan subset 13 foto kamera, untuk lokal dan

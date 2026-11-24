@@ -98,6 +98,15 @@ def main() -> int:
         cfg["vision"]["expiry"]["engine"] = args.mesin
     mesin = cfg["vision"]["expiry"].get("engine")
     cfg = cfg_ocr_kedaluwarsa(cfg)
+    # Flag CLI diterapkan SESUDAH cfg_ocr_kedaluwarsa, supaya ia menang atas
+    # timpaan config. Urutannya sempat terbalik 24-11 dan akibatnya `--engine`
+    # diabaikan DIAM-DIAM: barisnya tetap tercetak, angkanya tetap keluar, dan
+    # yang terukur adalah kondisi yang sama sekali lain.
+    pdl_ = cfg["vision"]["document"].setdefault("paddle", {})
+    if args.engine is not None:
+        pdl_["engine"] = args.engine or None      # --engine "" = backend Paddle bawaan
+    if args.rec_model is not None:
+        pdl_["text_recognition_model_name"] = args.rec_model or None
     if mesin:
         print(f"Mesin OCR modul kedaluwarsa: {mesin!r}.")
     # Aturan 20-11: cetak NILAI saklar tiap kondisi. Baris inilah yang menangkap

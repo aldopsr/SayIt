@@ -1,12 +1,24 @@
-# Konfigurasi modul kedaluwarsa SayIt, 24 November 2026.
+# Konfigurasi modul kedaluwarsa SayIt, 24 November 2026 (DIPERBARUI sesudah ONNX).
 # Diekstrak dari config yang DIMUAT aplikasi, bukan disalin tangan.
+#
+# BERUBAH hari ini - lihat 11_PERUBAHAN_KEDALUWARSA_24NOV.md:
+#   document.engine         easyocr -> paddleocr
+#   document.paddle.engine  null -> onnxruntime      <- sumber percepatan 3,1x
+#   document.paddle.text_recognition_model_name  -> PP-OCRv5_mobile_rec
+#   expiry.paddle           BARU: menimpa pengenal KHUSUS modul kedaluwarsa
+#                           kembali ke bawaan (PP-OCRv6_medium_rec), karena
+#                           mobile_rec menjatuhkan akurasi 81% -> 62%.
 #
 # Yang menentukan perilaku modul ini:
 #   expiry.preprocess_chain menunjuk ke salah satu kunci preprocess_chains
-#   expiry.budget_s         anggaran waktu, menutup batas 120 detik proksi Vercel
+#   expiry.budget_s         anggaran waktu; sesudah ONNX terburuk 9,74 s, jadi
+#                           anggaran 90 s tidak pernah tersentuh lagi
 #   quality_gate            DILEWATI oleh scripts/ukur_kedaluwarsa.py, TIDAK dilewati aplikasi
+#   document.paddle         dipakai modul ini juga, KECUALI yang ditimpa expiry.paddle
 expiry:
   engine: paddleocr
+  paddle:
+    text_recognition_model_name: null
   zone_weights: models/best_zone.pt
   device: cpu
   imgsz: 640
@@ -63,18 +75,28 @@ date_parser:
   - baik digunakan sebelum
   - sebaiknya digunakan sebelum
 document:
-  engine: easyocr
+  engine: paddleocr
+  paddle:
+    lang: id
+    ocr_version: PP-OCRv5
+    engine: onnxruntime
+    enable_mkldnn: false
+    text_detection_model_name: PP-OCRv5_mobile_det
+    text_recognition_model_name: PP-OCRv5_mobile_rec
+    text_recognition_batch_size: null
+    use_textline_orientation: false
   rotate_retry:
   - 180
   - 90
   - 270
   rotate_trigger_score: 0.75
   text_score_min: 0.4
+  line_tolerance_ratio: 0.6
   line_grouping: rantai
   line_slope_correct: true
   line_slope_max: 0.35
+  max_words_per_chunk: 40
   bands: 1
-  band_pad_ratio: 0.04
   layout_mode: tersebar
   unclear_score_min: 0.75
 quality_gate:
