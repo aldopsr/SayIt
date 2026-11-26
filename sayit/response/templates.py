@@ -71,9 +71,15 @@ FIXED_PHRASES: dict[str, str] = {
     "tidak_ada_uang": "Saya tidak menemukan uang kertas di foto. Pastikan uang berada di tengah dan tidak tertutup jari.",
     "tidak_yakin_uang": "Saya tidak yakin dengan nominal uang ini. Coba foto ulang dengan uang terbuka penuh.",
     # Uangnya menempel tepi bingkai, jadi sebagiannya ada di luar foto. Arahnya
-    # tidak disebut dengan sengaja: kamera bawaan adalah kamera depan dan
-    # pratinjaunya dicerminkan, jadi "kanan" pada gambar bukan "kanan" bagi
-    # pengguna. "Mundurkan kamera" benar untuk semua sisi.
+    # tidak disebut dengan sengaja, dan alasannya BERUBAH 27-11 tanpa mengubah
+    # kesimpulannya: bawaannya kini kamera BELAKANG, yang pratinjaunya TIDAK
+    # dicerminkan, jadi di jalur bawaan "kanan" pada gambar memang kanan bagi
+    # pengguna. Tetapi pengguna masih bisa membalik ke kamera depan, dan klien
+    # TIDAK mengirim `facingMode` - jadi sisi server tidak punya cara tahu foto
+    # ini dicerminkan atau tidak. Arah yang salah lebih berbahaya daripada tanpa
+    # arah, dan "mundurkan kamera" benar untuk semua sisi.
+    # Prasyarat untuk memberi arah: klien mengirim `facingMode`, dan sisi cermin
+    # dipastikan dengan foto uji dari kedua kamera.
     "uang_terpotong": ("Sebagian uang terpotong di tepi foto. Mundurkan kamera sedikit "
                        "supaya seluruh uang masuk, lalu foto ulang."),
     "tidak_ada_tulisan": "Saya tidak menemukan tulisan yang bisa dibaca. Coba foto ulang lebih dekat dan lebih terang.",

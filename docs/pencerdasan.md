@@ -376,6 +376,9 @@ angka presisi. Alasannya ada di bagian 5.
 
 | Berkas | Isinya |
 | :--- | :--- |
+| `docs/pencerdasan-modul-uang.md` | **Modul uang, sampai ke dalam.** YOLO, pasca-pemrosesan, k-fold, kenapa bobot v3 tidak dipasang. Ada bagian "kalau ditanya". |
+| `docs/pencerdasan-modul-kedaluwarsa.md` | **Modul kedaluwarsa, sampai ke dalam.** Dua jalur, urutan eskalasi, parser tanggal, anggaran 90 detik, percobaan 4 kelas yang gagal. |
+| `docs/pencerdasan-modul-dokumen.md` | **Modul dokumen, sampai ke dalam.** PaddleOCR+ONNX, pengelompokan baris, rotasi, dan empat tuas latensi yang sudah dicoba dan gagal. |
 | `README.md` | Cara menjalankan sistem |
 | `docs/status-proyek.md` | Laporan status untuk tim — **per 28 Oktober, angkanya sudah usang.** Pakai halaman ini atau `keputusan-teknis.md`. |
 | `docs/keputusan-teknis.md` | **Setiap keputusan beserta angka buktinya.** Ini sumber kebenaran angka. |

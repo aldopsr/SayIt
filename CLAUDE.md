@@ -646,8 +646,10 @@ dibuat ulang karena teksnya berubah.
 **SENTER (torch) 19-11 - jalan di Android, kemungkinan TIDAK di iPhone:**
 `SENTER_NYALA` / `SENTER_MATI` (dua intent, bukan toggle) + tombol `.btn-cam` 56 px di
 **kanan atas**. Klien memakai `track.applyConstraints({advanced:[{torch}]})`.
-- **Torch web hanya ada di kamera BELAKANG, sedangkan bawaan aplikasi kamera DEPAN** -
-  jadi jalur gagal adalah jalur BAWAAN, bukan kasus pinggiran. Tiga cabang gagal punya
+- **Torch web hanya ada di kamera BELAKANG.** Dulu bawaan aplikasi kamera DEPAN, jadi
+  jalur gagal adalah jalur BAWAAN; **sejak 27-11 bawaannya kamera belakang**, jadi cabang
+  `senter_butuh_kamera_belakang` kini hanya kena pengguna yang sudah membalik kamera
+  sendiri. Tiga cabang gagal punya
   klipnya sendiri: `senter_butuh_kamera_belakang`, `senter_tidak_ada` (dua kali: `caps.torch`
   kosong, dan `applyConstraints` dilempar). **Tidak ada bukti Safari iOS mendukung `torch`** -
   di sana `getCapabilities` tidak ada, jadi `caps` jatuh ke `{}`. **Uji di Android dulu.**
@@ -670,10 +672,35 @@ terpotong. Modul uang menghitungnya dari deteksi MENTAH dan `money_utterance` me
 Itu menangkap persis kasus lapangan 12-11: dua lembar jadi tiga kotak SEUKURAN BINGKAI.
 `foto_gelap` juga diubah menyebut **"nyalakan senter di ponselmu"** - pengguna tunanetra bisa
 menyalakan senter sendiri, belum tentu bisa mencari lampu.
-**ARAH (kiri/kanan) SENGAJA TIDAK diberikan.** `web/app/page.js:465` menyetel `facingMode`
-bawaan `'user'` (kamera DEPAN) dan pratinjaunya dicerminkan CSS, sedangkan gambar ke server
-tidak - jadi kanan GAMBAR adalah kiri PENGGUNA. Arah yang salah lebih berbahaya daripada tanpa
-arah. Prasyarat untuk arah: klien mengirim `facingMode`, dan sisi cermin dipastikan dengan foto uji.
+**ARAH (kiri/kanan) SENGAJA TIDAK diberikan**, dan alasannya BERUBAH 27-11 tanpa mengubah
+kesimpulannya. Dulu: `facingMode` bawaan `'user'` (kamera DEPAN), pratinjaunya dicerminkan CSS
+sedangkan gambar ke server tidak, jadi kanan GAMBAR adalah kiri PENGGUNA. Sekarang bawaannya
+kamera BELAKANG yang TIDAK dicerminkan, jadi di jalur bawaan arahnya sudah sahih - **tetapi
+pengguna masih bisa membalik ke kamera depan dan klien TIDAK mengirim `facingMode`**, sehingga
+sisi server tetap tidak bisa tahu foto itu dicerminkan atau tidak. Arah yang salah lebih
+berbahaya daripada tanpa arah. Prasyarat untuk arah tinggal satu: klien mengirim `facingMode`,
+dan sisi cermin dipastikan dengan foto uji dari kedua kamera.
+
+**KAMERA BAWAAN = BELAKANG (27-11).** `facingMode`/`facingRef` awal `'environment'`,
+`capturedMirror` awal `false`. Yang difoto selalu benda di depan pengguna, dan kamera depan
+memaksa pengguna tunanetra memutar HP tanpa bisa memeriksa hasilnya; kamera belakang juga
+beresolusi lebih tinggi untuk cetakan kecil.
+- Panggilan pertama tetap `{ ideal: 'environment' }`, **bukan `exact`** - laptop tanpa kamera
+  belakang harus tetap bisa dipakai demo. `exact` hanya dipakai `putarKamera`.
+- Karena `ideal` boleh memberi kamera lain, `startStream` kini **menyelaraskan `facingRef`
+  dengan `getSettings().facingMode` yang sungguh didapat**, dan hanya bila peramban
+  melaporkannya (Chrome desktop sering mengosongkannya untuk webcam USB; menimpanya dengan
+  kosong akan merusak penjaga senter). Tanpa ini pratinjau laptop tidak dicerminkan padahal
+  yang terbuka kamera depan.
+- `pantauPratinjau(stream, facing)` sekarang menerima `minta` sebagai ARGUMEN. Membacanya dari
+  `facingRef` saat timer berbunyi akan membuat `minta` dan `dapat` selalu sama setelah
+  penyelarasan di atas - dan justru perbandingan itu alat diagnosis kamera yang salah buka.
+- **Tidak ada klip TTS baru**, jadi `build_tts_cache.py` tidak perlu dijalankan.
+- Diverifikasi pada aplikasi berjalan dengan kamera palsu (canvas `captureStream` +
+  `Object.defineProperty` pada `getUserMedia`, remount lewat HMR dengan menambah satu hook
+  sementara - menambah KOMENTAR saja tidak cukup, Fast Refresh tidak menjalankan ulang
+  efeknya): permintaan pertama `{"ideal":"environment"}` dengan pratinjau `transform: none`,
+  sesudah tombol balik `{"exact":"user"}` dengan `transform: scaleX(-1)`.
 **Klip `uang_terpotong` belum punya berkas suara** sampai `python scriptsuild_tts_cache.py`
 dijalankan (butuh internet).
 
@@ -991,6 +1018,14 @@ latensi untuk foto HP 3024x4032.
 
 Laporan status untuk tim: `docs/status-proyek.md` (28-10), memuat daftar angka USANG
 (65,7% / 68,8% / 87,5% / 84,0%) supaya tidak beredar lagi di draf laporan.
+
+**PENCERDASAN PER MODUL (26-11):** `docs/pencerdasan-modul-uang.md`,
+`docs/pencerdasan-modul-kedaluwarsa.md`, `docs/pencerdasan-modul-dokumen.md` - untuk
+anggota kelompok yang takut ditanya teknis, tiap berkas punya bagian **"kalau ditanya -
+jawaban siap pakai"** dan bagian **"yang masih kurang, jujur"**. Isinya hanya angka yang
+sudah terukur beserta tanggalnya; tiap keputusan disertai kondisi pembandingnya, termasuk
+yang hasilnya negatif. Kalau ada angka di berkas ini yang berubah, **ketiganya ikut usang**
+- rujukan silangnya ada di tabel penutup `docs/pencerdasan.md`.
 
 **LAPORAN AKHIR: `docs/Laporan_Akhir_SayIt.docx` (26-11, 27 halaman, 26 tabel).**
 Dibangkitkan lewat docx-js, bukan diketik - skripnya TIDAK disimpan, jadi perubahan

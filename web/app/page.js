@@ -489,9 +489,15 @@ export default function SayItPage() {
   const [resultText, setResultText] = useState('');
   const [capturedImage, setCapturedImage] = useState(null);
   const [isSpeaking, setIsSpeaking] = useState(false); // sistem sedang berbicara (TTS)
-  const [facingMode, setFacingMode] = useState('user'); // 'user' = kamera depan, 'environment' = kamera belakang
+  // BAWAANNYA KAMERA BELAKANG (diubah 27-11). Yang difoto selalu benda di depan
+  // pengguna - uang, surat, kemasan - dan kamera belakang yang mengarah ke situ.
+  // Kamera depan membuat pengguna tunanetra harus memutar HP tanpa bisa memeriksa
+  // hasilnya. Dua akibat lain yang ikut benar: torch web HANYA ada di kamera
+  // belakang (jadi jalur BAWAAN tidak lagi jalur gagalnya), dan kamera belakang
+  // biasanya beresolusi lebih tinggi sehingga cetakan kecil lebih terbaca.
+  const [facingMode, setFacingMode] = useState('environment'); // 'user' = kamera depan, 'environment' = kamera belakang
   const [senterNyala, setSenterNyala] = useState(false);
-  const [capturedMirror, setCapturedMirror] = useState(true); // foto dari kamera depan ditampilkan mirror, kamera belakang & upload tidak
+  const [capturedMirror, setCapturedMirror] = useState(false); // foto dari kamera depan ditampilkan mirror, kamera belakang & upload tidak
   const [orbSlot, setOrbSlot] = useState({ top: null, scale: 0.9 }); // posisi orb di layar hasil
   const [demo, setDemo] = useState(false);     // DEMO, tetapi lewat state supaya hydrate tetap cocok
   // Cara memasang ke layar utama: null = jangan tawarkan, 'prompt' = peramban
@@ -504,7 +510,7 @@ export default function SayItPage() {
   const promptPasangRef = useRef(null);        // event beforeinstallprompt yang ditahan
   const pantauRef = useRef(null);              // timer pemantau pratinjau kosong
   const streamRef = useRef(null);
-  const facingRef = useRef('user');
+  const facingRef = useRef('environment');
   const isFlipping = useRef(false);
   const fileInputRef = useRef(null);
   const isSpeechSynthesisSpeaking = useRef(false);
@@ -1077,7 +1083,7 @@ export default function SayItPage() {
    *  berhenti mengirim. 3 detik dipilih supaya kamera lambat tidak dituduh
    *  rusak - normalnya frame pertama datang jauh di bawah 1 detik setelah
    *  getUserMedia selesai. */
-  const pantauPratinjau = (stream) => {
+  const pantauPratinjau = (stream, minta) => {
     clearTimeout(pantauRef.current);
     pantauRef.current = setTimeout(() => {
       const v = videoRef.current;
@@ -1091,7 +1097,12 @@ export default function SayItPage() {
       const s = t?.getSettings?.() || {};
       const jejak = {
         apa: 'pratinjau', mati,
-        minta: facingRef.current,
+        // `minta` dioper sebagai argumen, BUKAN dibaca dari `facingRef` saat
+        // timer berbunyi: sejak 27-11 `startStream` menyelaraskan `facingRef`
+        // dengan kamera yang sungguh didapat, jadi membacanya di sini 3 detik
+        // kemudian akan membuat minta dan dapat selalu sama - dan justru
+        // perbandingan itu yang dipakai mendiagnosis kamera yang salah buka.
+        minta,
         dapat: s.facingMode ?? null,
         ukuran: `${v?.videoWidth ?? 0}x${v?.videoHeight ?? 0}`,
         trekUkuran: `${s.width ?? 0}x${s.height ?? 0}`,
@@ -1148,7 +1159,20 @@ export default function SayItPage() {
       if (videoRef.current.paused) videoRef.current.play().catch(() => {});
     }
     aturFokus(stream);
-    pantauPratinjau(stream);
+    pantauPratinjau(stream, facing);
+    /* Arah kamera DISELARASKAN dengan yang sungguh didapat, bukan yang diminta.
+       Panggilan pertama memakai `{ ideal: ... }` supaya laptop tanpa kamera
+       belakang tetap bisa dipakai demo - tetapi `ideal` berarti peramban boleh
+       memberi kamera lain, dan kalau penandanya tetap 'environment' maka
+       pratinjaunya tidak dicerminkan padahal yang terbuka kamera depan.
+       Hanya disetel bila peramban memang melaporkan `facingMode`: di Chrome
+       desktop nilainya sering kosong untuk webcam USB, dan menimpanya dengan
+       kosong akan merusak penjaga senter yang membandingkannya. */
+    const arahAsli = stream.getVideoTracks?.()[0]?.getSettings?.().facingMode;
+    if (arahAsli && arahAsli !== facingRef.current) {
+      facingRef.current = arahAsli;
+      setFacingMode(arahAsli);
+    }
     // Torch itu milik TRACK, bukan milik aplikasi. Stream baru = track baru =
     // senter padam, dan kalau penandanya tidak direset maka tombolnya akan
     // berkata "matikan senter" untuk senter yang sudah mati - dan pengguna
