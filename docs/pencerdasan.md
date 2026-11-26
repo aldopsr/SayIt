@@ -1,6 +1,8 @@
 # Pencerdasan SayIt
 
-**Untuk anggota kelompok.** Dibuat 5 November 2026.
+**Untuk anggota kelompok.** Dibuat 5 November 2026, **diperbarui 26 November 2026**.
+Yang berubah paling besar sejak versi pertama: mesin OCR-nya diganti, dan target
+kecepatan PRD yang dulu dilanggar sekarang terpenuhi. Lihat Tahap 6 dan bagian 5.
 Tujuannya satu: setelah baca ini kamu paham **kita bikin apa, pakai apa, dan sekarang sudah sampai mana** —
 tanpa perlu buka kode.
 
@@ -133,34 +135,56 @@ Ini dua langkah, dan **penting untuk tidak tertukar**:
    Ia **tidak membaca apa pun** — cuma menunjuk lokasinya.
 2. **PaddleOCR** lalu **MEMBACA** angka di lokasi itu.
 
-Kenapa dipisah? Karena membaca seluruh permukaan kemasan itu lambat. Dengan ditunjuk
-dulu: **0,82 detik**. Tanpa ditunjuk, harus baca semuanya: **3,74 detik** — 4,6 kali lebih lambat.
+Kenapa dipisah? Karena membaca seluruh permukaan kemasan itu lambat. Diukur pada 16
+kemasan sungguhan: mematikan jalur zona membuat waktunya **lebih dari dua kali lipat**.
 
 > **Jadi YOLO kedua itu demi KECEPATAN, bukan akurasi.** Akurasinya sama saja dengan atau
 > tanpa dia (81% dua-duanya). Yang berubah cuma waktunya.
 
+> Zonanya ketemu pada **9 dari 14** kemasan bertanggal. Lima sisanya jatuh ke jalur
+> cadangan: baca seluruh gambar. Jadi jalur cadangan itu bukan kasus langka — ia dipakai
+> sepertiga waktu, dan harus tetap benar.
+
 Setelah dibaca, hasilnya diurai oleh **parser tanggal** kita sendiri, karena format
 tanggal kemasan di Indonesia kacau: `29/08/25`, `29 AGT 2025`, `210829`, `AGT 2025`…
 
-### Tahap 6 — Membaca dokumen: **EasyOCR**
+### Tahap 6 — Membaca dokumen: **PaddleOCR di atas ONNX Runtime**
 
 **OCR** = *Optical Character Recognition*, mengubah gambar tulisan jadi teks yang bisa
 dibaca komputer.
 
-EasyOCR mengembalikan kotak **per baris**, bukan per kata. Kotak-kotak itu lalu kita
+OCR mengembalikan kotak **per baris**, bukan per kata. Kotak-kotak itu lalu kita
 kelompokkan jadi baris dan paragraf, supaya urutan bacaannya masuk akal.
 
-> **Kenapa OCR-nya DUA, beda per modul?** Ini keputusan dari pengukuran, bukan selera:
+> **BERUBAH 24 November, dan ini perbaikan terbesar proyek ini.** Sampai tanggal itu
+> modul dokumen memakai **EasyOCR**. Sekarang **kedua modul memakai PaddleOCR**, tetapi
+> dijalankan oleh mesin yang berbeda di belakangnya: **ONNX Runtime**, bukan PaddlePaddle.
 >
-> | | EasyOCR | PaddleOCR |
+> **ONNX Runtime** itu bukan model baru — modelnya sama persis, bobotnya sama persis.
+> Yang berganti hanya *program yang menjalankan* model itu. Analoginya: lagu yang sama,
+> pemutar yang berbeda.
+>
+> | Modul dokumen | sebelum (EasyOCR) | sesudah (ONNX) |
 > | :--- | :--- | :--- |
-> | Cetakan kemasan (dot-matrix) | 19% benar | **44% benar** |
-> | Detik per foto | **3,5** | 24,9 |
+> | Salah baca (CER) | 14,9% | **9,0%** |
+> | Detik per halaman | 8,04 | **2,08** |
 >
-> PaddleOCR jauh lebih jago baca cetakan kemasan yang samar, tapi **7 kali lebih lambat.**
-> Jadi: PaddleOCR untuk kemasan (yang susah), EasyOCR untuk dokumen (yang sudah cukup).
+> Menang di **dua-duanya sekaligus** — lebih akurat *dan* 4 kali lebih cepat. Itu jarang
+> terjadi; biasanya satu harus dikorbankan. Dan tidak ada pustaka baru yang dipasang:
+> `onnxruntime` ternyata sudah ikut terpasang sejak lama.
+
+> **Tapi modelnya tetap beda per modul, dan itu terukur.** Model pembaca yang paling
+> bagus untuk dokumen (`PP-OCRv5_mobile_rec`) justru **menjatuhkan akurasi kemasan dari
+> 81% ke 62%**. Sebabnya masuk akal: cetakan *dot-matrix* di kemasan jauh lebih samar
+> daripada tulisan cetak di kertas A4, jadi ia butuh model pembaca yang lebih besar.
 >
-> ⚠️ **Keduanya tidak boleh jalan di satu proses — programnya langsung mati (*crash*).**
+> Jadi: **mesin sama, pembaca beda.** Dokumen pakai yang kecil dan cepat, kemasan pakai
+> yang besar dan teliti.
+
+> ⚠️ **Catatan lama yang sudah DIRALAT:** dulu di sini tertulis "dua mesin OCR dalam satu
+> proses membuat program langsung mati". Itu **salah, dan versi yang benar lebih
+> berbahaya**: ia tidak mati, ia **memberi angka yang keliru tanpa tanda apa pun.**
+> Sejak kedua modul memakai PaddleOCR, masalah ini hilang dengan sendirinya.
 
 ### Tahap 7 — Menjawab dengan suara: **edge-tts**
 
@@ -171,34 +195,60 @@ suara `id-ID-GadisNeural` (suara neural Microsoft). Sebelumnya gTTS (Google), di
 Desainnya **hibrida**, dan ini trik yang cukup penting:
 
 - **Kalimat yang sudah bisa ditebak** — semua nominal uang, semua tanggal, semua pesan
-  galat — **sudah disintesis sejak awal** dan disimpan sebagai 89 berkas MP3 di
+  galat — **sudah disintesis sejak awal** dan disimpan sebagai 95 berkas MP3 di
   `assets/tts/`. Jadi saat dipakai, tinggal diputar. **Nol detik, dan tidak butuh internet.**
 - **Isi dokumen** tidak bisa ditebak (tulisannya apa saja), jadi **disintesis saat itu juga**
   dan butuh internet.
+
+> Sintesis langsung itu normalnya **0,77 detik**. Tetapi sekitar **2 dari 20 panggilan
+> melonjak ke 5–7 detik**, acak, dan **sebabnya belum ketemu** — empat dugaan sudah diuji
+> dan semuanya meleset. Kemungkinan terbesar variasi di sisi layanan Microsoft, di luar
+> kendali kita. Disebut di sini supaya kalau kamu merasa "kok kadang lama", itu bukan
+> perasaanmu saja.
 
 ---
 
 ## 5. Sekarang sudah sampai mana
 
-**Keempat target akurasi di PRD sudah tercapai.**
+**Semua target akurasi DAN kecepatan di PRD sudah tercapai** — yang terakhir baru
+24 November.
 
 | Yang diukur | Hasil | Target | |
 | :--- | :--- | :--- | :--- |
-| Nominal uang | **90,1%** | ≥ 85% | tercapai |
+| Nominal uang | **85–90%** | ≥ 85% | tercapai, tepat di garis |
 | Tanggal kedaluwarsa | **81%** | ≥ 70% | tercapai |
-| Ketepatan baca dokumen (CER) | **14,89%** salah | ≤ 15% | tercapai |
+| Ketepatan baca dokumen (CER) | **9,0%** salah | ≤ 15% | tercapai |
 | Kecepatan uang / perintah | 1,4 s / 1,3 s | ≤ 8 s | lolos |
-| Kecepatan dokumen / kedaluwarsa | 11,5 s / 11,4 s | ≤ 8 s | **melewati batas** |
-| Tes otomatis | **685 lulus** | semua lulus | lolos |
+| Kecepatan dokumen / kedaluwarsa | **5,0 s / 3,0 s** | ≤ 8 s | **lolos** |
+| Tes otomatis | **769 lulus** | semua lulus | lolos |
 
 **CER** artinya *Character Error Rate* — dari 100 huruf, berapa yang salah. Jadi
 **semakin kecil semakin bagus**, kebalikan dari persentase lainnya di tabel itu.
+
+> **Kenapa uang ditulis sebagai rentang 85–90%, bukan satu angka?** Karena dua pengukuran
+> yang sah memberi 90,0% dan 85,0%, dan selisihnya bukan karena modelnya memburuk —
+> melainkan karena satu foto cacat dikeluarkan, dan itu mengubah pembagian data ujinya
+> sepenuhnya. Dengan 80 foto dan sekitar 10 kesalahan, selisih 5 poin masih di dalam
+> variasi wajar. **Menulis satu angka presisi di situ akan menyesatkan.**
+
+> **Kecepatan dokumen dan kedaluwarsa dulu 11,5 dan 11,4 detik — melewati batas 8 detik,
+> dan itu sempat dicatat sebagai penyimpangan yang disadari.** Pindah ke ONNX Runtime
+> (lihat Tahap 6) menghapusnya. **Penyimpangan itu sudah dicabut.**
+>
+> Tapi sebutkan juga ekornya kalau ditanya: yang lolos itu nilai **tengah**. Foto
+> terburuk masih 9,5 detik (dokumen) dan 11,9 detik (kedaluwarsa).
+
+> ⚠️ **Satu keterbatasan yang wajib disebut di laporan, jangan dilewat.** Semua angka
+> akurasi di atas adalah **estimasi resubstitusi** — artinya data yang dipakai mengukur
+> adalah data yang juga dipakai *menyetel* sistemnya. Untuk kedaluwarsa, 16 foto yang
+> sama dipakai memilih tujuh keputusan konfigurasi. Angka pada data yang benar-benar baru
+> kemungkinan **lebih rendah**, dan seberapa rendah belum diketahui karena belum diukur.
 
 ### Cara kita melaporkan akurasi — tolong ikuti ini di laporan
 
 Kita **tidak pernah** menulis satu persentase saja. Selalu **benar / salah / diam**.
 
-Contoh: akurasi uang 90,1% itu = **73 benar, 8 salah, 0 diam** dari 81 foto.
+Contoh: akurasi uang 90,0% itu = **72 benar, 8 salah, 0 diam** dari 80 foto.
 
 Kenapa penting? Karena bagi pengguna tunanetra, jawaban yang **salah** jauh lebih
 berbahaya daripada sistem yang **diam**. Kalau diam, ia foto ulang. Kalau salah, ia
@@ -217,7 +267,7 @@ sudah terbukti tiga kali.
 | `server/` | API FastAPI — pembungkus `sayit/` supaya bisa dipanggil dari web. |
 | `web/` | Tampilan PWA (Next.js). **Kalau kamu pegang UI, cuma folder ini yang kamu sentuh.** |
 | `config/settings.yaml` | **Semua angka pengaturan ada di sini**, bukan di kode. |
-| `tests/` | 685 tes otomatis. |
+| `tests/` | 769 tes otomatis. |
 | `notebooks/` | Notebook Colab untuk melatih model. |
 | `docs/` | Dokumentasi, keputusan, dan angka-angkanya. |
 | `models/` | Bobot model hasil latih. **Tidak masuk Git** (file besar) — minta ke anggota. |
@@ -236,7 +286,7 @@ npm run dev
 ```
 
 Buka `http://localhost:3000`. Tanpa backend, tombolnya akan menjawab *"Tidak bisa
-menghubungi server SayIt"* — **itu normal.** Tata letak, warna, animasi, ukuran sentuh
+terhubung ke SayIt. Periksa koneksi internetmu"* — **itu normal.** Tata letak, warna, animasi, ukuran sentuh
 semuanya tetap bisa dikerjakan. Hampir semua yang perlu diubah ada di dua berkas:
 `web/app/page.js` dan `web/app/globals.css`.
 
@@ -275,33 +325,50 @@ Butuh Python 3.11 dan sekitar 2,5 GB dependensi.
 
 | Hal | Kondisi |
 | :--- | :--- |
-| **Kecepatan dokumen & kedaluwarsa** | 11,4–11,5 detik, target 8 detik. Tiga cara mempercepat sudah dicoba, semuanya malah menurunkan akurasi. Dicatat sebagai penyimpangan yang disadari. |
-| **Belum pernah diuji pengguna sungguhan** | Rencananya: teman bermata tertutup, 5 tugas, lalu kuesioner SUS. |
+| **Semua angka akurasi adalah estimasi resubstitusi** | Data yang dipakai mengukur juga dipakai menyetel sistem. **Ini keterbatasan paling serius di daftar ini**, dan paling mudah dilewatkan karena angkanya terlihat bagus. Butuh 20–30 kemasan baru yang belum pernah menyentuh penyetelan apa pun. |
+| **Belum pernah diuji pengguna sungguhan** | Rencananya: teman bermata tertutup, 5 tugas, lalu kuesioner SUS. Ini **satu-satunya target PRD bernomor yang belum pernah dijalankan sama sekali.** |
 | **Tangkapan layar & video demo** | **Belum ada.** Dibutuhkan untuk laporan. |
+| **Lisensi dataset detektor zona tidak tercantum** | Di Roboflow tertulis `license: null`. Untuk publikasi jurnal ini **risiko nyata**, bukan urusan administratif. |
 | **Suara pengguna baru 1 penutur** | Akurasi pengenalan suara diukur dari satu orang saja, jadi angkanya optimistis. |
+| **Dua tanggal masih salah dibaca** | `chees` membaca nomor produksi sebagai tanggal; `ovaltine` meleset tiga hari. Keduanya belum terpecahkan. |
 | **Urutan bacaan foto buku masih kacau** | Penyebabnya sudah ketemu: halaman buku **melengkung**, jadi satu angka kemiringan tidak cukup. |
-| **Hosting masih laptop sendiri** | Backend jalan di laptop + tunnel ngrok. Bukan hosting permanen — modelnya 2,5 GB, tidak muat di hosting gratis. |
+| **Lewat deploy sungguhan akurasinya 75%, bukan 81%** | Selisihnya satu berkas yang ditolak penjaga mutu. Angka 81% diukur dengan memanggil modulnya langsung, jadi ia **melewatkan penjaga mutu dan seluruh lapisan jaringan.** Dua angka itu mengukur cakupan yang berbeda, bukan saling bertentangan. |
+| **Hosting masih laptop sendiri** | Backend jalan di laptop + tunnel ngrok. Bukan hosting permanen — modelnya 2,5 GB, tidak muat di hosting gratis. **Kalau laptopnya mati, aplikasinya mati.** |
 
 ---
 
 ## 10. Tiga hal yang JANGAN ditulis di laporan
 
-**1. Jangan tulis "pra-pemrosesan meningkatkan akurasi".** Datanya tidak mendukung.
-Pada 13 dokumen hasilnya **netral**. Pada modul kedaluwarsa dengan PaddleOCR ia malah
-**merugikan 12%**.
+**1. Jangan tulis "pra-pemrosesan tidak berguna" — itu sudah tidak benar lagi sejak
+24 November.**
 
-Yang benar dan justru lebih menarik: **nilai pra-pemrosesan berbalik arah tergantung
-mesin OCR-nya** — EasyOCR dibantu +6%, PaddleOCR dirugikan −12%. Jadi pertanyaan
-"apakah pra-pemrosesan membantu" **tidak punya satu jawaban**. Itu temuan ablasi yang
-layak dibanggakan, bukan kegagalan.
+Versi lama halaman ini bilang pra-pemrosesan **netral**, dan waktu itu memang begitu.
+Setelah mesin OCR-nya diganti, ia **membantu 3,4 poin** pada modul dokumen (9,0% dengan,
+12,4% tanpa). Jadi Ablasi PRD nomor 1 yang dulu hasilnya negatif, sekarang **positif untuk
+mesin yang sekarang dipakai** — dan ini kabar bagus untuk nilai mata kuliah, karena yang
+dinilai justru teknik pengolahan citra klasiknya.
+
+Yang tetap benar, dan justru temuan paling menarik di proyek ini: **nilai pra-pemrosesan
+berbalik arah tergantung mesin OCR-nya.** Pernah membantu, pernah netral, pernah merugikan
+12% — semuanya terukur, pada sistem yang sama, hanya beda mesin pembacanya. Jadi pertanyaan
+"apakah pra-pemrosesan membantu" **tidak punya satu jawaban yang berlaku umum**, dan itulah
+yang layak ditulis.
+
+Kalau mengutip angkanya, **sebutkan mesin OCR-nya sekalian.** Angka tanpa mesin tidak
+bermakna apa-apa.
 
 **2. Jangan pakai angka-angka usang ini:**
-65,7% · 68,8% · 84,0% · 87,5% (akurasi uang) · 15,3% · 15,2% (CER) · 648 tes · 566 tes ·
+65,7% · 68,8% · 84,0% · 87,5% (akurasi uang) · 15,3% · 15,2% · **14,89%** (CER) ·
+648 · 566 · **685** (jumlah tes) · **11,4 / 11,5 detik** (kecepatan — sudah jadi 3,0 / 5,0) ·
 0,947 (dari dataset Roboflow yang labelnya tertukar — **angka ini tidak valid**).
+
+Dan jangan tulis **"modul dokumen memakai EasyOCR"** — itu benar sampai 24 November, tidak
+lagi sesudahnya.
 
 **3. Jangan klaim performa dunia nyata dari angka mAP notebook.** Data uji kami berasal
 dari sumber yang sama dengan data latih, jadi angka itu optimistis. Yang sah dikutip
-adalah **90,1% hasil validasi silang.**
+adalah hasil **validasi silang**, dan ditulis sebagai **rentang 85–90%** — bukan satu
+angka presisi. Alasannya ada di bagian 5.
 
 ---
 
@@ -310,8 +377,9 @@ adalah **90,1% hasil validasi silang.**
 | Berkas | Isinya |
 | :--- | :--- |
 | `README.md` | Cara menjalankan sistem |
-| `docs/status-proyek.md` | Laporan status lengkap untuk tim (per 28 Oktober) |
+| `docs/status-proyek.md` | Laporan status untuk tim — **per 28 Oktober, angkanya sudah usang.** Pakai halaman ini atau `keputusan-teknis.md`. |
 | `docs/keputusan-teknis.md` | **Setiap keputusan beserta angka buktinya.** Ini sumber kebenaran angka. |
+| `docs/lampiran-radit/` | Bahan jurnal modul kedaluwarsa. Mulai dari `11_PERUBAHAN_KEDALUWARSA_24NOV.md`. |
 | `docs/isi-ppt-progres.md` | Konten siap pakai untuk slide presentasi progres |
 | `docs/PRD_SayIt_v2_1.md` | Dokumen persyaratan — apa yang dijanjikan |
 | `docs/deploy.md` | Cara mengunggah aplikasinya |
