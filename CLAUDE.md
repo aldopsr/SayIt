@@ -992,6 +992,15 @@ latensi untuk foto HP 3024x4032.
 Laporan status untuk tim: `docs/status-proyek.md` (28-10), memuat daftar angka USANG
 (65,7% / 68,8% / 87,5% / 84,0%) supaya tidak beredar lagi di draf laporan.
 
+**LAPORAN AKHIR: `docs/Laporan_Akhir_SayIt.docx` (26-11, 27 halaman, 26 tabel).**
+Dibangkitkan lewat docx-js, bukan diketik - skripnya TIDAK disimpan, jadi perubahan
+berikutnya diedit langsung di Word. Memuat seluruh angka terukur beserta tanggalnya,
+ketiga ablasi PRD, Bagian 9 khusus temuan negatif, dan Bagian 12 sembilan ancaman
+validitas. **Nama dan NIM masih `(diisi)`**, dan daftar isinya perlu Update Field di Word.
+Posisi yang dinyatakan: 6 dari 9 metrik PRD tercapai, 1 belum pernah diukur (uji pengguna
+proksi + SUS), 2 tidak dapat diklaim (mAP uang split tercemar, mAP zona tanpa kotak acuan).
+Lampiran A-nya versi lebih lengkap dari daftar angka usang di `status-proyek.md`.
+
 **Kerja berikutnya, berurutan:**
 1. **Modul uang 68,8% lawan target 85%** (k-fold bersih, 48 foto, ambang 0,30).
    Model `money_kfold_v1_final` dipasang, `score_min` sudah disapu dan disetel 0,30.
