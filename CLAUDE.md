@@ -711,6 +711,31 @@ diputar on-demand. Artinya: track ada, arah `environment`, `caps.torch` benar,
   aplikasi lain. **Itu belum terjadi dan belum diuji di HP.**
 - Catatan 19-11 "senter jalan di Android" **tidak pernah dipastikan dengan melihat lampunya** -
   ia berdiri di atas log HTTP yang sama menyesatkannya. Jangan dikutip sebagai bukti.
+- **TERBUKTI DI HP 27-11: dengan `exact`, LAMPUNYA MENYALA.** Jadi `advanced` memang
+  penyebabnya, dan Android pun tidak menghormati constraint opsional itu. Senter sekarang
+  bekerja; risiko "peramban yang hanya mendukung `advanced`" tidak terjadi di HP ini.
+
+**LUBANG KEDUA YANG TERBUKA KARENA YANG PERTAMA DITUTUP (27-11): senternya menyala TANPA
+SUARA.** Begitu lampunya hidup, pengguna melapor tidak ada pengumuman apa pun - dan bagi
+pengguna tunanetra senter yang menyala tanpa umpan balik hampir sama tidak bergunanya dengan
+senter yang mati, sebab ia tidak punya cara lain mengetahuinya.
+- Sebabnya **bukan** perubahan `exact`, melainkan lubang sejak fitur senter dibuat 19-11:
+  **keempat klip senter tidak pernah didaftarkan di daftar prefetch klien.**
+- Mekanismenya: `klipSrc()` jatuh ke `api('/klip/<nama>.mp3')` bila namanya tidak ada di
+  daftar prefetch, yaitu URL telanjang yang diserahkan ke elemen `<audio>` - dan `<audio>`
+  **tidak bisa mengirim header pelewat ngrok**. Itu jebakan yang sudah tercatat saat klip
+  `sambutan` pernah bisu, lalu terulang persis pada senter.
+- Diperiksa menyeluruh, bukan hanya senter: dari 11 klip yang dipanggil `ucapkanKlip`,
+  tepat **4 yang hilang** dan semuanya klip senter. Keempatnya ditambahkan.
+- **Sebab keempatnya lolos pemeriksaan: dipanggil lewat TERNARY**
+  (`ucapkanKlip(nyala ? 'senter_nyala' : 'senter_mati')`), jadi grep atas pola
+  `ucapkanKlip('...')` tidak menemukannya. Kalau memeriksa daftar ini lagi, grep
+  `ucapkanKlip(` tanpa tanda kutip.
+- Terverifikasi terhadap backend sungguhan: 11 klip unik terunduh lewat jalur prefetch saat
+  halaman dibuka, keempat klip senter termasuk. **Berkasnya sudah ada** di `assets/tts/`
+  (95 klip), jadi `build_tts_cache.py` tidak perlu dijalankan.
+- **Aturan: setiap panggilan `ucapkanKlip` baru WAJIB ikut didaftarkan di daftar prefetch.**
+  Itu bukan optimasi - itu syarat supaya klipnya berbunyi sama sekali di balik ngrok.
 - **Jangan memakai `getSettings().torch` untuk memastikan lampunya menyala.** WebKit bug
   280970: nilainya basi, dan sejak iOS 18 selalu `false` walau applyConstraints berhasil.
   Di `setSenter` ia dibaca HANYA sebagai jejak.

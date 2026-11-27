@@ -842,11 +842,32 @@ export default function SayItPage() {
       })
       .catch(() => {});
 
-    // Hanya klip yang diputar KLIEN sendiri. Jawaban modul datang sebagai WAV
-    // di badan responsnya, jadi tidak pernah lewat cache.
+    /* Hanya klip yang diputar KLIEN sendiri. Jawaban modul datang sebagai WAV
+       di badan responsnya, jadi tidak pernah lewat cache.
+
+       DAFTAR INI WAJIB MEMUAT SETIAP KLIP YANG DIPANGGIL `ucapkanKlip`, dan itu
+       bukan optimasi - itu syarat supaya klipnya BERBUNYI sama sekali.
+       `klipSrc()` jatuh ke `api('/klip/<nama>.mp3')` bila namanya tidak ada di
+       sini, yaitu URL telanjang yang diserahkan ke elemen `<audio>` - dan
+       `<audio>` TIDAK BISA mengirim header pelewat ngrok. Itu jebakan yang
+       sudah tercatat sejak klip `sambutan` pernah bisu.
+
+       Keempat klip senter LUPA didaftarkan saat fitur senter dibuat 19-11, dan
+       akibatnya terbukti di HP 27-11: senternya menyala, tetapi tidak ada suara
+       yang memberi tahu - padahal pengguna tunanetra tidak punya cara lain
+       mengetahuinya. Jadi senternya menyala TANPA umpan balik, yang bagi
+       pengguna ini hampir sama tidak bergunanya dengan tidak menyala.
+
+       Kalau menambah panggilan `ucapkanKlip` baru, tambahkan namanya di sini
+       juga. Periksa dengan:
+         grep -o "ucapkanKlip(" web/app/page.js
+       dan bandingkan dengan daftar ini - termasuk yang dipanggil lewat ternary,
+       sebab itu yang membuat keempat klip senter lolos dari pemeriksaan. */
     const dibuat = [];
     for (const nama of ['sambutan', 'sedang_memproses', 'kamera_depan', 'kamera_belakang',
-                        'kamera_tunggal', 'sentuh_untuk_berkas', 'sampai_jumpa']) {
+                        'kamera_tunggal', 'sentuh_untuk_berkas', 'sampai_jumpa',
+                        'senter_nyala', 'senter_mati', 'senter_tidak_ada',
+                        'senter_butuh_kamera_belakang']) {
       fetch(api(`/klip/${nama}.mp3`), opsi)
         .then((r) => (r.ok ? r.blob() : null))
         .then((b) => {
