@@ -1067,6 +1067,28 @@ export default function SayItPage() {
     peringatkan('Tidak bisa terhubung ke SayIt',
                 'Periksa koneksi internetmu, lalu ketuk layar untuk mencoba lagi.');
 
+  /** Jejak diagnosis ke server, DAN ke console.
+   *
+   *  Dikirim juga ketika semuanya sehat: jejak yang hanya ada saat gagal tidak
+   *  bisa membedakan "rusak" dari "tidak pernah dicoba" - persis kekeliruan
+   *  membaca log 19-11.
+   *
+   *  Dipakai jalur yang TIDAK bisa disimpulkan dari log HTTP biasa.
+   *  `GET /klip/...` tidak memberi tahu cabang mana yang memanggilnya, jadi
+   *  cabangnya harus dikirim sendiri - itu pelajaran 19-11 yang terulang
+   *  27-11 pada senter. Di ponsel `console.info` tidak terjangkau, jadi
+   *  sisi server adalah satu-satunya tempat jejaknya bisa dibaca. */
+  const kirimJejak = (jejak) => {
+    console.info('[SayIt] jejak', jejak);
+    try {
+      fetch(api('/jejak'), {
+        method: 'POST',
+        headers: { ...kepalaApi(), 'Content-Type': 'application/json' },
+        body: JSON.stringify(jejak),
+      }).catch(() => {});
+    } catch {}
+  };
+
   // === KAMERA ===
   // Menyalakan kamera sesuai arah (depan/belakang). Stream lama dimatikan dulu,
   // karena banyak HP tidak bisa membuka dua kamera sekaligus.
@@ -1111,17 +1133,7 @@ export default function SayItPage() {
         trek: t?.readyState ?? null,
         bisu: t?.muted ?? null,
       };
-      console.info('[SayIt] jejak pratinjau', jejak);
-      /* Dikirim ke server JUGA saat kameranya sehat. Jejak yang hanya ada
-         ketika gagal tidak bisa membedakan "rusak" dari "tidak pernah
-         dicoba" - persis kekeliruan membaca log 19-11. */
-      try {
-        fetch(api('/jejak'), {
-          method: 'POST',
-          headers: { ...kepalaApi(), 'Content-Type': 'application/json' },
-          body: JSON.stringify(jejak),
-        }).catch(() => {});
-      } catch {}
+      kirimJejak(jejak);
       if (!mati) return;
       peringatkan('Kamera tidak menampilkan gambar',
         'Ketuk tombol balik kamera di kanan bawah untuk mencoba kamera satunya, atau muat ulang halaman.');
@@ -1524,17 +1536,73 @@ export default function SayItPage() {
   //      tidak ada, jadi caps jatuh ke {} dan cabang ini yang terpakai)
   //   3. applyConstraints dilempar perangkatnya
   // Tombol yang gagal dalam DIAM sama tidak bergunanya dengan tombol yang rusak.
+  /* Tiap cabang mengirim jejaknya, TERMASUK cabang yang berhasil.
+     Uji lapangan 27-11: pengguna melapor senternya tidak menyala, sedangkan log
+     server menunjukkan `GET /klip/senter_nyala.mp3` DAN `senter_mati.mp3` - jadi
+     cabang sukses yang jalan, `applyConstraints` tidak melempar, dan aplikasi
+     mengumumkan "senter nyala" untuk lampu yang tidak pernah menyala. Itu jenis
+     kegagalan terburuk bagi pengguna tunanetra: ia diberi tahu berhasil.
+     Dari log HTTP saja penyebabnya tidak bisa dipisahkan (caps kosong? ditolak?
+     diterima lalu diabaikan?), karena ketiga cabang gagal memutar klip yang
+     SAMA. Jejak ini yang memisahkannya. */
   const setSenter = async (nyala) => {
     const track = streamRef.current?.getVideoTracks?.()[0];
-    if (!track) { ucapkanKlip('senter_tidak_ada'); return; }
-    if (facingRef.current !== 'environment') { ucapkanKlip('senter_butuh_kamera_belakang'); return; }
+    // `ua` ikut karena dukungan torch adalah soal OS dan versinya, bukan soal
+    // kode kita - dan ini dikirim ke backend SENDIRI, bukan ke pihak ketiga.
+    const jejak = { apa: 'senter', minta: nyala, arah: facingRef.current, ua: navigator.userAgent };
+    if (!track) {
+      jejak.cabang = 'tanpa_track';
+      kirimJejak(jejak); ucapkanKlip('senter_tidak_ada'); return;
+    }
+    if (facingRef.current !== 'environment') {
+      jejak.cabang = 'bukan_kamera_belakang';
+      kirimJejak(jejak); ucapkanKlip('senter_butuh_kamera_belakang'); return;
+    }
     const caps = track.getCapabilities?.() || {};
-    if (!caps.torch) { ucapkanKlip('senter_tidak_ada'); return; }
+    jejak.adaGetCapabilities = typeof track.getCapabilities === 'function';
+    jejak.kunciCaps = Object.keys(caps);
+    jejak.capsTorch = caps.torch ?? null;
+    jejak.dukungTorch = navigator.mediaDevices.getSupportedConstraints?.().torch ?? null;
+    jejak.labelTrek = track.label || null;
+    if (!caps.torch) {
+      jejak.cabang = 'caps_tanpa_torch';
+      kirimJejak(jejak); ucapkanKlip('senter_tidak_ada'); return;
+    }
     try {
-      await track.applyConstraints({ advanced: [{ torch: nyala }] });
+      /* `{ torch: { exact } }`, BUKAN `{ advanced: [{ torch }] }` - dan ini
+         akar kegagalan 27-11, bukan soal Android lawan iOS.
+
+         Di spesifikasi Media Capture, isi `advanced` adalah **constraint
+         OPSIONAL**: yang tidak bisa dipenuhi akan DILEWATI tanpa galat, jadi
+         promisenya resolve dan kita mengumumkan "senter nyala" untuk lampu yang
+         tidak pernah menyala. Nilai telanjang (`{ torch: true }`) juga tidak
+         menolong - ia diperlakukan sebagai `ideal`, yang sama-sama best-effort.
+         Hanya `min`/`max`/`exact` yang WAJIB dipenuhi, dan hanya itu yang
+         menolak promisenya kalau perangkatnya tidak bisa.
+
+         JANGAN menambahkan fallback ke bentuk `advanced` saat `exact` ditolak:
+         itu mengembalikan persis false-success yang sedang diperbaiki di sini.
+         Penolakan dari `exact` adalah jawaban yang sahih - umumkan gagal.
+
+         Risiko yang disadari: kalau ada peramban yang mendukung torch HANYA
+         lewat `advanced` dan menolak `exact`, senternya akan jadi terbaca
+         "tidak ada" padahal bisa. Jejak `cabang: 'dilempar'` + `galat:
+         'OverconstrainedError'` pada HP yang senternya terbukti jalan di
+         aplikasi lain adalah tanda untuk meninjau ulang keputusan ini. */
+      await track.applyConstraints({ torch: { exact: nyala } });
+      jejak.cabang = 'diterima';
+      /* Dibaca HANYA sebagai jejak, JANGAN dijadikan penentu jawaban: WebKit
+         bug 280970 melaporkan `getSettings().torch` mengembalikan nilai basi
+         (dan sejak iOS 18 selalu `false`) walau applyConstraints berhasil.
+         Jadi nilai ini tidak bisa dipakai memastikan lampunya menyala. */
+      jejak.settingTorch = track.getSettings?.().torch ?? null;
+      kirimJejak(jejak);
       setSenterNyala(nyala);
       ucapkanKlip(nyala ? 'senter_nyala' : 'senter_mati');
-    } catch {
+    } catch (e) {
+      jejak.cabang = 'dilempar';
+      jejak.galat = String(e?.name || e);
+      kirimJejak(jejak);
       ucapkanKlip('senter_tidak_ada');
     }
   };

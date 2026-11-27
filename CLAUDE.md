@@ -643,7 +643,8 @@ dibuat ulang karena teksnya berubah.
    didaftarkan - router sudah memotong akhiran -nya, dan mendaftarkannya merusak kemenangan
    SENTER_MATI pada "tolong matikan senternya".
 
-**SENTER (torch) 19-11 - jalan di Android, kemungkinan TIDAK di iPhone:**
+**SENTER (torch) 19-11 - klaim "jalan di Android" DIRALAT 27-11, lihat blok uji lapangan
+27-11 di bawah: ia tidak pernah dipastikan dengan melihat lampunya:**
 `SENTER_NYALA` / `SENTER_MATI` (dua intent, bukan toggle) + tombol `.btn-cam` 56 px di
 **kanan atas**. Klien memakai `track.applyConstraints({advanced:[{torch}]})`.
 - **Torch web hanya ada di kamera BELAKANG.** Dulu bawaan aplikasi kamera DEPAN, jadi
@@ -681,6 +682,55 @@ sisi server tetap tidak bisa tahu foto itu dicerminkan atau tidak. Arah yang sal
 berbahaya daripada tanpa arah. Prasyarat untuk arah tinggal satu: klien mengirim `facingMode`,
 dan sisi cermin dipastikan dengan foto uji dari kedua kamera.
 
+**SENTER DI HP PENGGUNA: APLIKASI MENGUMUMKAN BERHASIL UNTUK LAMPU YANG TIDAK
+MENYALA (uji lapangan 27-11).** Pengguna melapor senternya tidak bisa dinyalakan atau
+dimatikan. Log server membuktikan cabang mana yang jalan:
+`GET /klip/senter_nyala.mp3` **dan** `senter_mati.mp3` keduanya terambil (206), sementara
+`senter_tidak_ada.mp3` dan `senter_butuh_kamera_belakang.mp3` **tidak pernah diminta**.
+Daftar prefetch klien hanya 7 klip dan senter tidak termasuk, jadi kedua klip itu memang
+diputar on-demand. Artinya: track ada, arah `environment`, `caps.torch` benar,
+`applyConstraints` **tidak melempar** - lalu lampunya tetap mati.
+- **Jadi ini accept-and-ignore, bukan penolakan.**
+- ~~Dugaan terkuat WebKit bug 243075 ("torch ignored on iOS")~~ **TERBANTAH: HP pengguna
+  ANDROID, bukan iPhone.** Jadi sebabnya harus yang berlaku di Android juga, dan memang ada.
+- **SEBAB YANG SESUNGGUHNYA ADA DI SPESIFIKASI, BUKAN DI OS: `advanced` itu constraint
+  OPSIONAL.** Isi `advanced` yang tidak bisa dipenuhi **DILEWATI tanpa galat**, jadi
+  promisenya resolve dan kita mengumumkan berhasil. Nilai telanjang (`{torch: true}`) juga
+  tidak menolong - ia diperlakukan `ideal`, sama-sama best-effort. **Hanya `min`/`max`/`exact`
+  yang wajib dipenuhi dan menolak promisenya.** Karena itu `setSenter` kini memakai
+  **`{ torch: { exact: nyala } }`**.
+  Terverifikasi lokal pada dua perangkat palsu: yang mendukung torch memberi
+  `{"torch":{"exact":true}}` + `cabang: "diterima"`; yang menolak memberi
+  `cabang: "dilempar"`, `galat: "OverconstrainedError"`, dan klip GAGAL - bukan klip sukses.
+- **JANGAN menambahkan fallback ke bentuk `advanced` saat `exact` ditolak** - itu
+  mengembalikan persis false-success yang baru diperbaiki. Penolakan `exact` adalah jawaban
+  yang sahih.
+- **Risiko yang disadari:** kalau ada peramban yang mendukung torch HANYA lewat `advanced`
+  dan menolak `exact`, senternya jadi terbaca "tidak ada" padahal bisa. Tandanya:
+  `cabang: 'dilempar'` + `OverconstrainedError` pada HP yang senternya terbukti jalan di
+  aplikasi lain. **Itu belum terjadi dan belum diuji di HP.**
+- Catatan 19-11 "senter jalan di Android" **tidak pernah dipastikan dengan melihat lampunya** -
+  ia berdiri di atas log HTTP yang sama menyesatkannya. Jangan dikutip sebagai bukti.
+- **Jangan memakai `getSettings().torch` untuk memastikan lampunya menyala.** WebKit bug
+  280970: nilainya basi, dan sejak iOS 18 selalu `false` walau applyConstraints berhasil.
+  Di `setSenter` ia dibaca HANYA sebagai jejak.
+- **Pelajaran 19-11 terulang:** ketiga cabang gagal memutar klip yang SAMA
+  (`senter_tidak_ada`), jadi log HTTP tidak bisa memisahkan "caps kosong" dari "ditolak
+  perangkat". Karena itu `setSenter` kini mengirim `/jejak` di **setiap** cabang, termasuk
+  yang berhasil, memuat `cabang`, `capsTorch`, `kunciCaps`, `settingTorch`, `galat`, dan
+  `ua`. Helper `kirimJejak()` dipakai bersama `pantauPratinjau`.
+  Terverifikasi lokal dengan track palsu yang berpura-pura mendukung torch lalu
+  mengabaikannya: `{cabang: "diterima", capsTorch: true, settingTorch: false}`.
+- **Perintah SUARA senter gagal karena sebab yang BERBEDA, dan itu terbaca di log yang
+  sama:** `[dengar] 'Yolahkan target' -> TIDAK_DIKENALI` dan `'nyalakan kamera' ->
+  TIDAK_DIKENALI`. Jadi jalur suara tidak pernah sampai ke `setSenter`. `target` adalah
+  salah dengar BARU (belum terdaftar, dan mendaftarkannya berisiko karena ia kata umum);
+  `center`/`sender` sudah terdaftar sejak 19-11. **Dua kegagalan terpisah, jangan
+  dicampur.**
+- Kegagalan diam yang masih terbuka: `handleSenter` keluar tanpa suara apa pun bila
+  `appState !== 'CAMERA_READY'`. Bukan penyebab kasus 27-11 (klip suksesnya berbunyi),
+  tetapi melanggar aturan "setiap peringatan wajib berbunyi".
+
 **KAMERA BAWAAN = BELAKANG (27-11).** `facingMode`/`facingRef` awal `'environment'`,
 `capturedMirror` awal `false`. Yang difoto selalu benda di depan pengguna, dan kamera depan
 memaksa pengguna tunanetra memutar HP tanpa bisa memeriksa hasilnya; kamera belakang juga
@@ -701,6 +751,10 @@ beresolusi lebih tinggi untuk cetakan kecil.
   sementara - menambah KOMENTAR saja tidak cukup, Fast Refresh tidak menjalankan ulang
   efeknya): permintaan pertama `{"ideal":"environment"}` dengan pratinjau `transform: none`,
   sesudah tombol balik `{"exact":"user"}` dengan `transform: scaleX(-1)`.
+- **TERBUKTI DI HP SUNGGUHAN 27-11**, dari log `[jejak]`:
+  `minta: 'environment', dapat: 'environment', ukuran: '1080x1920', trek: 'live'`.
+  Membalik kamera juga benar: `minta: 'user', dapat: 'user'`. Jadi penyelarasan di atas
+  bekerja, dan **keluhan senter BUKAN akibat perubahan ini** - arahnya sudah benar.
 **Klip `uang_terpotong` belum punya berkas suara** sampai `python scriptsuild_tts_cache.py`
 dijalankan (butuh internet).
 
